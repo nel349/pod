@@ -85,7 +85,7 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
       "sh", "-c", `cp -r /repo/. /work/ && cd /work && ${request.start}`,
     ]);
 
-    await waitUntilAnswering(network, artefactName, request.image, request.startSeconds ?? 30);
+    await waitUntilAnswering(artefactName, request.startSeconds ?? 90);
 
     const outcomes: CheckOutcome[] = [];
     for (const check of request.toRun) {
@@ -124,16 +124,23 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
   }
 }
 
-/** Give the artefact a moment to come up, and say so plainly if it never does. */
-async function waitUntilAnswering(network: string, target: string, image: string, seconds: number): Promise<void> {
+/**
+ * Give the artefact a moment to come up, and say why if it never does.
+ *
+ * The probe runs inside the artefact's own container rather than starting a new one for each
+ * attempt: on a cold machine, spawning a container per second was slower than the thing we were
+ * waiting for. When it does time out, the artefact's own log is the first thing anyone will want.
+ */
+async function waitUntilAnswering(target: string, seconds: number): Promise<void> {
   const deadline = Date.now() + seconds * 1000;
   while (Date.now() < deadline) {
     const probe = await docker([
-      "run", "--rm", "--network", network, "--cap-drop", "ALL", image,
-      "sh", "-c", `node -e "fetch('http://${target}:3000/').then(()=>process.exit(0)).catch(()=>process.exit(1))"`,
+      "exec", target, "node", "-e",
+      "fetch('http://127.0.0.1:3000/').then(()=>process.exit(0)).catch(()=>process.exit(1))",
     ]);
     if (probe.code === 0) return;
-    await Bun.sleep(1000);
+    await Bun.sleep(500);
   }
-  throw new Error("the artefact never answered");
+  const log = await docker(["logs", target]);
+  throw new Error(`the artefact never answered within ${seconds}s. Its log said: ${log.out.slice(0, 500) || "(nothing)"}`);
 }
