@@ -29,6 +29,18 @@ bun run typecheck
 
 The sandbox tests need Docker and skip themselves without it. They pull one image, pinned by digest.
 
+## The wall
+
+```
+POD_JOBS=./jobs bun run serve      # http://localhost:3000
+```
+
+`POD_JOBS` names the directory the runner writes graded jobs into, one directory per job. The server
+only reads it: the wall, one page per job, and the checks themselves, including the ones the pod was
+not allowed to see while it built. Those are published the moment a job has a verdict, because a
+stranger cannot repeat a run they cannot read. A wall with nothing on it says so rather than filling
+itself in.
+
 ## Where it runs
 
 Monad testnet, chain 10143, where the ERC-8004 identity and validation registries are both deployed

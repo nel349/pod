@@ -16,7 +16,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       # only the tests that need neither Docker nor a network
-      - run: bun test src/__tests__/verdict.test.ts src/__tests__/job.test.ts src/__tests__/receipt.test.ts src/__tests__/gallery.test.ts src/__tests__/jobpage.test.ts src/__tests__/registry.test.ts
+      - run: bun test src/__tests__/verdict.test.ts src/__tests__/job.test.ts src/__tests__/receipt.test.ts src/__tests__/gallery.test.ts src/__tests__/jobpage.test.ts src/__tests__/registry.test.ts src/__tests__/server.test.ts
 
   sandbox:
     name: the sealed run, against a real container

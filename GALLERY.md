@@ -83,11 +83,19 @@ bought.
 - **No hiding the failures**, or the wall stops being evidence.
 - **No fake liveness.** If nothing is running, the live page says so.
 - **No wallet to look.** Reading is open to everyone, always.
+- **No empty page pretending to be full.** A wall with nothing on it says so.
+- **The checks are fetchable.** Every check a job was graded against, including the ones the pod was
+  not allowed to see while it built, is published the moment that job has a verdict. Before the
+  verdict the request is refused and the refusal says why. A stranger cannot repeat a run they cannot
+  read, and that repetition is the only reason to believe us.
 
 ## Build order
 
-1. The wall and the job page, reading from the chain and the re-run records. This is the deliverable
-   that satisfies the cold-open requirement.
+1. ~~The wall and the job page~~ **built, 17 September.** `src/server.ts` serves the wall, one page
+   per job, and the checks themselves. It reads a directory the runner writes, one directory per
+   graded job; reading from the chain replaces that directory once the contracts are deployed. Every
+   path it answers is declared in `src/routes.ts`, so a page cannot link somewhere the server does
+   not serve.
 2. The agent and owner records, which is what turns role reputation into something people can see.
 3. The share card image.
 4. The live page with the countdown.

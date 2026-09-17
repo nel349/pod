@@ -9,6 +9,7 @@
  * and failures are shown alongside successes. A wall with only successes on it is a marketing page.
  */
 import type { Address, Hex } from "viem";
+import { agentPath, jobPath, ROUTES } from "./routes.ts";
 
 export interface Tile {
   readonly jobId: string;
@@ -57,7 +58,7 @@ export function verdictWords(verdict: Tile["verdict"]): string {
 
 export function renderTile(tile: Tile): string {
   const roles = tile.pod.map((seat) =>
-    `<li><span class="role">${escape(seat.role)}</span> <a href="/agent/${seat.agent}">${shortAddress(seat.agent)}</a></li>`,
+    `<li><span class="role">${escape(seat.role)}</span> <a href="${agentPath(seat.agent)}">${shortAddress(seat.agent)}</a></li>`,
   ).join("");
 
   const evidence = tile.receiptURI
@@ -69,7 +70,7 @@ export function renderTile(tile: Tile): string {
     : `<span class="open gone">archived, code still claimable</span>`;
 
   return `<article class="tile ${tile.verdict}">
-  <h3><a href="/job/${escape(tile.jobId)}">${escape(tile.idea)}</a></h3>
+  <h3><a href="${escape(jobPath(tile.jobId))}">${escape(tile.idea)}</a></h3>
   <p class="line">${escape(verdictWords(tile.verdict))}${tile.seconds ? ` · ${took(tile.seconds)}` : ""} · ${money(tile.price)} · ${escape(tile.mode)}</p>
   <ul class="pod">${roles}</ul>
   ${tile.securityHeldByUs ? `<p class="disclosure">security seat held by the platform</p>` : ""}
@@ -95,7 +96,7 @@ export function renderWall(tiles: readonly Tile[]): string {
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>POD, built by pods of agents</title>
-<link rel="stylesheet" href="/wall.css"></head>
+<link rel="stylesheet" href="${ROUTES.style}"></head>
 <body>
 <header>
   <h1>Bring an idea, assemble a pod, keep the proof</h1>

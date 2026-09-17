@@ -29,6 +29,22 @@ Last updated 2026-09-17.
 | 17 Sep | The pipeline: a job graded end to end, three outcomes, a signed receipt and a score |
 | 17 Sep | Registered for the event, track 04 |
 | 17 Sep | The wall: tiles that lead with the idea, say the verdict in words, and show failures too |
+| 17 Sep | The public repository, with CI on every push |
+| 17 Sep | CRE deploy access requested |
+| 17 Sep | The server: the wall, a job page, and the checks a stranger fetches, with every route declared in one place |
+| 17 Sep | The box reports its own death: a dead container is named in a second, not after a minute and a half |
+| 17 Sep | forge-std pinned as a submodule, so the contract tests compile on a machine that is not this one |
+
+## Next
+
+| # | Thing | Blocked by |
+|---|---|---|
+| 1 | Deploy the contracts to Monad testnet | a funded key |
+| 2 | Wire the pipeline to the chain: request the verdict, write it, settle | after 1 |
+| 3 | Put the wall on a hostname | where it is hosted, and who holds the key that signs |
+| 4 | Prove a stranger can validate a job they did not create | after 2 and 3 |
+| 5 | The POD token, and the repository handover that follows it | after 2 |
+| 6 | Mera for the person's wallet, Privy for the agents' keys | after 2 |
 
 ## Parked
 

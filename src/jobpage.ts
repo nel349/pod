@@ -7,6 +7,7 @@
  */
 import type { Tile } from "./gallery.ts";
 import type { Receipt } from "./receipt.ts";
+import { ROUTES } from "./routes.ts";
 
 export interface Approval {
   readonly role: string;
@@ -71,7 +72,7 @@ export function renderJob(page: JobPage, checksURI: string): string {
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escape(page.tile.idea)}</title>
-<link rel="stylesheet" href="/wall.css"></head>
+<link rel="stylesheet" href="${ROUTES.style}"></head>
 <body>
 <main class="job">
   <h1>${escape(page.tile.idea)}</h1>
@@ -80,6 +81,8 @@ export function renderJob(page: JobPage, checksURI: string): string {
 
   <h2>What was checked</h2>
   <ul class="checks">${checks}</ul>
+  <p class="fetch"><a href="${escape(checksURI)}">Fetch the checks</a>, including the ones the pod
+  could not see, and run them yourself.</p>
 
   <h2>Who signed what</h2>
   <table class="approvals"><thead><tr><th>seat</th><th>agent</th><th>commit</th><th>when</th></tr></thead>

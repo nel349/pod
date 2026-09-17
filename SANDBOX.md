@@ -183,6 +183,30 @@ paths that are not tests and not build configuration, and its result is marked a
 
 ---
 
+## What the box's own permissions cost us, 17 September
+
+The sealed box drops every capability, and one of the ones it drops is the capability that lets root
+ignore file modes. So the box can only read a directory whose modes let anybody read it. That is the
+right posture, and it bit us the first time CI ran the container tests: a fixture directory came from
+`mkdtemp`, which on Linux is readable only by its owner, the artefact could not read its own source,
+and it died on its first command. On a Mac the same test passed, because the file sharing layer there
+does not enforce modes at all.
+
+Two rules came out of it, and both are in the code.
+
+- **A job's directory arrives world-readable**, as a git checkout does. The box will not be given a
+  capability to work around a directory nobody could read anyway.
+- **A box that dies is reported at once.** The artefact container is not started with `--rm`, so it
+  outlives its own death long enough for its log to be read; the launch's exit code is checked; and
+  the wait loop asks whether the box is still running before it probes. A dead box now costs a second
+  and quotes its own last words, where it used to cost ninety seconds and say only that no such
+  container existed.
+
+The second one matters beyond this bug: the failure mode it replaced made every real startup failure
+look identical, which is the worst thing a grading system can do to the person reading the verdict.
+
+---
+
 ## What it costs
 
 The spike ran in about a second per run on a laptop, plus the image pull. Three runs per job is
@@ -193,7 +217,8 @@ decides the price floor. A managed sandbox, if we ever need one, is roughly a ce
 
 ## Still to do
 
-- Install dependencies in a separate phase, since the spike had none.
 - The diff filter, with its list of paths that never apply.
-- The receipt, in brigade's shape, signed by the runner.
 - Deployment of the built artefact, which is part of "done" and has not been sandboxed yet.
+
+Done since this was written: the separate install phase, which is the only phase with a route out,
+and the signed receipt.

@@ -5,7 +5,8 @@
   "scripts": {
     "test": "bun test",
     "test:sandbox": "bun test --test-name-pattern sandbox",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "serve": "bun run src/server.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.4.2",
