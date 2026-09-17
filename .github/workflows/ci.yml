@@ -36,7 +36,10 @@ jobs:
     name: contract tests
     runs-on: ubuntu-latest
     steps:
+      # forge-std is a pinned submodule, and without it the tests do not compile
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: foundry-rs/foundry-toolchain@v1
       - run: forge build
         working-directory: contracts

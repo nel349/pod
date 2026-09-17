@@ -1,11 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { privateKeyToAccount } from "viem/accounts";
 import { gradeJob, undeclaredCalls } from "../pipeline.ts";
 import { verifyReceipt } from "../receipt.ts";
 import type { CheckToRun } from "../blackbox.ts";
+import { checkout } from "./support/checkout.ts";
 
 const IMAGE = "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944";
 const ARTEFACT = new URL("../../fixtures/app-honest", import.meta.url).pathname;
@@ -59,9 +57,9 @@ describe.skipIf(!dockerAvailable)("a job, graded end to end", () => {
   }, 300_000);
 
   test("work that only looks right is failed, and still signed", async () => {
-    const lazy = await mkdtemp(join(tmpdir(), "pod-lazy-"));
-    await writeFile(join(lazy, "server.js"),
-      `require("http").createServer((_, res) => { res.setHeader("content-type","application/json"); res.end(JSON.stringify({score:5})); }).listen(3000, () => console.log("listening"));\n`);
+    const lazy = await checkout("pod-lazy-", {
+      "server.js": `require("http").createServer((_, res) => { res.setHeader("content-type","application/json"); res.end(JSON.stringify({score:5})); }).listen(3000, () => console.log("listening"));\n`,
+    });
 
     const report = await gradeJob({
       seal: SEAL, commit: "c0ffee2", artefact: lazy, start: "node server.js",
@@ -74,16 +72,16 @@ describe.skipIf(!dockerAvailable)("a job, graded end to end", () => {
   }, 300_000);
 
   test("an artefact that cannot make up its mind reaches no verdict at all", async () => {
-    const flaky = await mkdtemp(join(tmpdir(), "pod-flaky-"));
-    await writeFile(join(flaky, "server.js"),
-      `const weak = Math.random() < 0.5;
+    const flaky = await checkout("pod-flaky-", {
+      "server.js": `const weak = Math.random() < 0.5;
        require("http").createServer((req, res) => {
          const url = new URL(req.url, "http://x");
          const excuse = url.searchParams.get("excuse") ?? "";
          const score = weak ? 5 : Math.max(1, Math.min(10, Math.ceil(excuse.trim().length / 8)));
          res.setHeader("content-type","application/json");
          res.end(JSON.stringify({ excuse, score }));
-       }).listen(3000, () => console.log("listening"));\n`);
+       }).listen(3000, () => console.log("listening"));\n`,
+    });
 
     // ten rounds: a coin flip each time, so agreement across all ten is vanishingly unlikely
     const report = await gradeJob({

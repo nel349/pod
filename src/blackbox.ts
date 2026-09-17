@@ -73,8 +73,8 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
 
   await docker(["network", "create", "--internal", network]);
   try {
-    await docker([
-      "run", "-d", "--rm",
+    const launched = await docker([
+      "run", "-d",
       "--name", artefactName,
       "--network", network,
       "--memory", "512m", "--cpus", "1", "--pids-limit", "128",
@@ -84,6 +84,7 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
       request.image,
       "sh", "-c", `cp -r /repo/. /work/ && cd /work && ${request.start}`,
     ]);
+    if (launched.code !== 0) throw new Error(`the artefact's box would not start: ${launched.out}`);
 
     await waitUntilAnswering(artefactName, request.startSeconds ?? 90);
 
@@ -130,10 +131,22 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
  * The probe runs inside the artefact's own container rather than starting a new one for each
  * attempt: on a cold machine, spawning a container per second was slower than the thing we were
  * waiting for. When it does time out, the artefact's own log is the first thing anyone will want.
+ *
+ * An artefact that dies on its first breath is the common case, so it is checked first and reported
+ * at once. Waiting the full window for something that is already dead taught us nothing and cost a
+ * minute and a half per run; worse, the container had to survive its own death for us to read the
+ * log, which is why it is not started with --rm. The box takes it down in the caller's finally.
  */
 async function waitUntilAnswering(target: string, seconds: number): Promise<void> {
   const deadline = Date.now() + seconds * 1000;
   while (Date.now() < deadline) {
+    const state = await docker(["inspect", "-f", "{{.State.Running}} {{.State.ExitCode}}", target]);
+    if (state.code !== 0) throw new Error(`the artefact's box is gone: ${state.out}`);
+    if (!state.out.startsWith("true")) {
+      const log = await docker(["logs", target]);
+      const code = state.out.split(" ")[1] ?? "?";
+      throw new Error(`the artefact stopped before it answered, exit ${code}. Its log said: ${log.out.slice(0, 500) || "(nothing)"}`);
+    }
     const probe = await docker([
       "exec", target, "node", "-e",
       "fetch('http://127.0.0.1:3000/').then(()=>process.exit(0)).catch(()=>process.exit(1))",

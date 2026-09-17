@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { dockerArguments, runSealed } from "../sandbox.ts";
+import { checkout } from "./support/checkout.ts";
 
 /** Pinned by digest, not by tag: the same image in September and in October. */
 const IMAGE = "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944";
@@ -61,14 +62,16 @@ describe.skipIf(!dockerAvailable)("sandbox, against a real container", () => {
 
 describe.skipIf(!dockerAvailable)("the install phase", () => {
   test("it has a route out, and what it installs lands where the graded run will find it", async () => {
-    const { mkdtemp, writeFile, mkdir } = await import("node:fs/promises");
-    const { tmpdir } = await import("node:os");
+    const { chmod, mkdir, writeFile } = await import("node:fs/promises");
     const { join } = await import("node:path");
 
-    const source = await mkdtemp(join(tmpdir(), "pod-src-"));
-    const destination = await mkdtemp(join(tmpdir(), "pod-out-"));
+    const source = await checkout("pod-src-", {});
+    // the install writes here, so the box needs more than a read: 0777 is what a scratch dir is
+    const destination = await checkout("pod-out-", {});
+    await chmod(destination, 0o777);
     await mkdir(join(source, "app"), { recursive: true });
     await writeFile(join(source, "app", "index.js"), "console.log('hi')\n");
+    await chmod(join(source, "app"), 0o755);
 
     const { installDependencies } = await import("../sandbox.ts");
     const outcome = await installDependencies({
