@@ -34,6 +34,7 @@ Last updated 2026-09-17.
 | 17 Sep | The server: the wall, a job page, and the checks a stranger fetches, with every route declared in one place |
 | 17 Sep | The box reports its own death: a dead container is named in a second, not after a minute and a half |
 | 17 Sep | forge-std pinned as a submodule, so the contract tests compile on a machine that is not this one |
+| 17 Sep | CI green on all three jobs: 81 unit tests, the sealed container runs, and 14 contract tests |
 
 ## Next
 
