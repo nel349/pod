@@ -14,6 +14,7 @@ const receipt = (over: Partial<Receipt> = {}): Receipt => ({
   commit: "c0ffee1",
   tree: `0x${"cd".repeat(32)}`,
   image: "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944",
+  start: "node server.js",
   checks: [
     { says: "the page loads", command: "curl -fs $TARGET", exitCode: 0, seconds: 0.4, hidden: false },
     { says: "a weak excuse scores under 3", command: "node checks/weak.js", exitCode: 0, seconds: 1.1, hidden: true },

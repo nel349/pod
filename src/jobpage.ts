@@ -39,11 +39,11 @@ const escape = (text: string): string =>
  */
 export function repeatCommand(receipt: Receipt, checksURI: string): string {
   return [
-    `# fetch the code at the commit that was graded, then:`,
+    `# fetch the code at commit ${receipt.commit}, then:`,
     `docker run --rm --network none \\`,
     `  --cap-drop ALL --security-opt no-new-privileges --read-only \\`,
     `  -v "$PWD":/repo:ro ${receipt.image} \\`,
-    `  sh -c 'cp -r /repo/. /work/ && cd /work && <start the artefact>'`,
+    `  sh -c 'cp -r /repo/. /work/ && cd /work && ${receipt.start}'`,
     `# the checks are published at ${checksURI}`,
     `# tree fingerprint to compare against: ${receipt.tree}`,
   ].join("\n");
@@ -62,6 +62,14 @@ export function renderJob(page: JobPage, checksURI: string): string {
     ? `<h2>Check it yourself</h2>
 <p>This is the run we did. Nothing about it is private.</p>
 <pre class="repeat">${escape(repeatCommand(page.receipt, checksURI))}</pre>`
+    : "";
+
+  // The third outcome is the one a reader will not have a word for, so the page says it in full.
+  const disagreed = page.tile.verdict === "not-reproducible"
+    ? `<h2>The runs disagreed</h2>
+<p>The same code, the same checks, run more than once, did not give the same answer both times. That
+is not a finding about the work, so nothing was settled: the pod was not paid and the money was not
+taken back. It returns to the person who posted the job when the job's window closes.</p>`
     : "";
 
   const ownership = page.repository
@@ -89,6 +97,7 @@ export function renderJob(page: JobPage, checksURI: string): string {
   <tbody>${approvals}</tbody></table>
   ${page.tile.securityHeldByUs ? `<p class="disclosure">The security seat was held by the platform, not by an independent agent.</p>` : ""}
 
+  ${disagreed}
   ${repeat}
   ${ownership}
 </main>

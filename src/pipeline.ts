@@ -77,6 +77,7 @@ export async function gradeJob(job: GradeJob): Promise<GradeReport> {
     commit: job.commit,
     tree: await fingerprintTree(job.artefact),
     image: job.image,
+    start: job.start,
     checks: last.checks.map((c) => ({
       says: c.says,
       command: c.command,

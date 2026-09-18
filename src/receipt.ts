@@ -33,6 +33,8 @@ export interface Receipt {
   readonly tree: Hex;
   /** the container image, pinned by digest */
   readonly image: string;
+  /** how the artefact was started inside its box, so the run can be repeated rather than guessed at */
+  readonly start: string;
   /** every check, in the order it ran */
   readonly checks: readonly CheckRun[];
   /** how many times the whole set was run, and whether they all agreed */
