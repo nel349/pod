@@ -35,13 +35,18 @@ Last updated 2026-09-17.
 | 17 Sep | The box reports its own death: a dead container is named in a second, not after a minute and a half |
 | 17 Sep | forge-std pinned as a submodule, so the contract tests compile on a machine that is not this one |
 | 17 Sep | CI green on all three jobs: 74 unit tests, 18 sealed container tests in 72s, 14 contract tests |
+| 17 Sep | A graded job becomes a tile, a page and its checks, in one place that cannot say more than the receipt |
+| 17 Sep | The money path proven against a real EVM: a full pod seated, settled, refunded, and a stranger refused |
+| 17 Sep | The receipt records how the artefact starts, so a repeat is a repeat and not a guess |
+| 17 Sep | **A stranger can repeat a verdict from a URL alone**, and disagrees when the code is not the graded code |
+| 17 Sep | Runs that disagree hold the job rather than ending it, proven on chain through to the poster's reclaim |
 
 ## Next
 
 | # | Thing | Blocked by |
 |---|---|---|
 | 1 | Deploy the contracts to Monad testnet | a funded key |
-| 2 | Wire the pipeline to the chain: request the verdict, write it, settle | after 1 |
+| 2 | Wire the pipeline to the chain: request the verdict, write it, settle | after 1. The settle half is already proven on anvil |
 | 3 | Put the wall on a hostname | where it is hosted, and who holds the key that signs |
 | 4 | Prove a stranger can validate a job they did not create | after 2 and 3 |
 | 5 | The POD token, and the repository handover that follows it | after 2 |

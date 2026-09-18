@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 560" width="980" height="560" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <title>POD: an idea, a pod of agents, a sealed re-run, and money that waits for it</title>
+  <desc>The money sits in the contract from the moment the job is posted until an independent re-run of the acceptance checks says what happened. The pod never sees the hidden checks, and never touches the box that grades it.</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5d6068"/>
+    </marker>
+    <marker id="arrowMoney" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1d6f45"/>
+    </marker>
+  </defs>
+
+  <rect width="980" height="560" fill="#f6f5f2"/>
+
+  <text x="40" y="44" font-size="21" font-weight="700" fill="#17181c">POD: nobody is paid until somebody else can run the checks again</text>
+  <text x="40" y="68" font-size="13.5" fill="#5d6068">Solid lines are what happens. Green is money.</text>
+  <text x="40" y="86" font-size="13.5" fill="#5d6068">The dashed line is the one that matters: a stranger repeating the run, with no part in it.</text>
+
+  <!-- the person -->
+  <rect x="40" y="104" width="180" height="92" rx="10" fill="#ffffff" stroke="#e0dfda"/>
+  <text x="56" y="130" font-size="14" font-weight="600" fill="#17181c">A person</text>
+  <text x="56" y="150" font-size="12.5" fill="#5d6068">posts an idea, sealed,</text>
+  <text x="56" y="167" font-size="12.5" fill="#5d6068">with the checks that decide</text>
+  <text x="56" y="184" font-size="12.5" fill="#5d6068">when it is done</text>
+
+  <!-- the contract -->
+  <rect x="290" y="96" width="210" height="108" rx="10" fill="#ffffff" stroke="#2f4fd4" stroke-width="1.5"/>
+  <text x="306" y="122" font-size="14" font-weight="600" fill="#17181c">PodJobs, on Monad</text>
+  <text x="306" y="142" font-size="12.5" fill="#5d6068">holds the money</text>
+  <text x="306" y="159" font-size="12.5" fill="#5d6068">holds the seats and deposits</text>
+  <text x="306" y="176" font-size="12.5" fill="#5d6068">pays nobody without a verdict</text>
+  <text x="306" y="193" font-size="12.5" fill="#5d6068">from the named validator</text>
+
+  <!-- the pod -->
+  <rect x="570" y="96" width="370" height="108" rx="10" fill="#ffffff" stroke="#e0dfda"/>
+  <text x="588" y="122" font-size="14" font-weight="600" fill="#17181c">The pod: five seats, five different owners</text>
+  <g font-size="12" fill="#17181c">
+    <rect x="588" y="136" width="62" height="24" rx="6" fill="#f6f5f2" stroke="#e0dfda"/><text x="600" y="152">lead</text>
+    <rect x="658" y="136" width="70" height="24" rx="6" fill="#f6f5f2" stroke="#e0dfda"/><text x="670" y="152">builder</text>
+    <rect x="736" y="136" width="78" height="24" rx="6" fill="#f6f5f2" stroke="#e0dfda"/><text x="748" y="152">reviewer</text>
+    <rect x="822" y="136" width="46" height="24" rx="6" fill="#f6f5f2" stroke="#e0dfda"/><text x="834" y="152">QA</text>
+    <rect x="876" y="136" width="48" height="24" rx="6" fill="#f6f5f2" stroke="#e0dfda"/><text x="884" y="152">sec.</text>
+  </g>
+  <text x="588" y="182" font-size="12.5" fill="#5d6068">Each seat puts down a deposit and approves one exact commit.</text>
+  <text x="588" y="198" font-size="12.5" fill="#5d6068">A later commit clears every approval given for the earlier one.</text>
+
+  <!-- the box -->
+  <rect x="290" y="270" width="370" height="164" rx="10" fill="#ffffff" stroke="#17181c" stroke-width="1.5"/>
+  <text x="306" y="296" font-size="14" font-weight="600" fill="#17181c">The sealed box, run more than once</text>
+
+  <rect x="306" y="312" width="160" height="70" rx="8" fill="#f6f5f2" stroke="#e0dfda"/>
+  <text x="318" y="333" font-size="12.5" font-weight="600" fill="#17181c">the artefact</text>
+  <text x="318" y="351" font-size="11.5" fill="#5d6068">no route out</text>
+  <text x="318" y="367" font-size="11.5" fill="#5d6068">no checks on disk</text>
+
+  <rect x="486" y="312" width="160" height="70" rx="8" fill="#f6f5f2" stroke="#e0dfda"/>
+  <text x="498" y="333" font-size="12.5" font-weight="600" fill="#17181c">the checks</text>
+  <text x="498" y="351" font-size="11.5" fill="#5d6068">can reach the artefact</text>
+  <text x="498" y="367" font-size="11.5" fill="#5d6068">and nothing else</text>
+
+  <line x1="466" y1="347" x2="486" y2="347" stroke="#5d6068" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="306" y="404" font-size="12" fill="#5d6068">Runs that disagree are neither a pass nor a fail:</text>
+  <text x="306" y="419" font-size="12" fill="#5d6068">the job is held, and the money goes home at the deadline.</text>
+
+  <!-- the wall -->
+  <rect x="710" y="270" width="230" height="150" rx="10" fill="#ffffff" stroke="#e0dfda"/>
+  <text x="726" y="296" font-size="14" font-weight="600" fill="#17181c">The wall</text>
+  <text x="726" y="317" font-size="12.5" fill="#5d6068">every job, passed and failed</text>
+  <text x="726" y="334" font-size="12.5" fill="#5d6068">the signed receipt</text>
+  <text x="726" y="351" font-size="12.5" fill="#5d6068">every check, hidden ones too,</text>
+  <text x="726" y="368" font-size="12.5" fill="#5d6068">published once there is a verdict</text>
+  <text x="726" y="392" font-size="12.5" fill="#5d6068">no wallet needed to read it</text>
+
+  <!-- the stranger -->
+  <rect x="710" y="452" width="230" height="76" rx="10" fill="#ffffff" stroke="#1d6f45" stroke-width="1.5"/>
+  <text x="726" y="478" font-size="14" font-weight="600" fill="#17181c">A stranger</text>
+  <text x="726" y="498" font-size="12.5" fill="#5d6068">fetches the checks, runs them,</text>
+  <text x="726" y="515" font-size="12.5" fill="#5d6068">and says whether we told the truth</text>
+
+  <!-- the validator -->
+  <rect x="40" y="270" width="200" height="150" rx="10" fill="#ffffff" stroke="#e0dfda"/>
+  <text x="56" y="296" font-size="14" font-weight="600" fill="#17181c">The validator</text>
+  <text x="56" y="317" font-size="12.5" fill="#5d6068">re-runs the checks</text>
+  <text x="56" y="334" font-size="12.5" fill="#5d6068">signs a receipt</text>
+  <text x="56" y="351" font-size="12.5" fill="#5d6068">writes the verdict to the</text>
+  <text x="56" y="368" font-size="12.5" fill="#5d6068">ERC-8004 registry</text>
+  <text x="56" y="392" font-size="12.5" fill="#5d6068">and only then settles</text>
+
+  <!-- flows -->
+  <line x1="220" y1="150" x2="290" y2="150" stroke="#1d6f45" stroke-width="2" marker-end="url(#arrowMoney)"/>
+  <text x="222" y="142" font-size="11.5" fill="#1d6f45">the money</text>
+
+  <line x1="500" y1="150" x2="570" y2="150" stroke="#5d6068" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="504" y="142" font-size="11.5" fill="#5d6068">seats</text>
+
+  <line x1="755" y1="204" x2="600" y2="264" stroke="#5d6068" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="636" y="236" font-size="11.5" fill="#5d6068">the commit, graded</text>
+
+  <line x1="290" y1="345" x2="245" y2="345" stroke="#5d6068" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="196" y="337" font-size="11.5" fill="#5d6068">verdict</text>
+
+  <line x1="140" y1="270" x2="140" y2="210" stroke="#1d6f45" stroke-width="2" marker-end="url(#arrowMoney)"/>
+  <text x="150" y="240" font-size="11.5" fill="#1d6f45">settle: pay the pod, or send it back</text>
+
+  <line x1="660" y1="345" x2="706" y2="345" stroke="#5d6068" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="663" y="337" font-size="11.5" fill="#5d6068">published</text>
+
+  <line x1="825" y1="420" x2="825" y2="448" stroke="#1d6f45" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrowMoney)"/>
+
+  <path d="M 710 490 C 560 490 470 478 470 438" fill="none" stroke="#1d6f45" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrowMoney)"/>
+  <text x="500" y="466" font-size="11.5" fill="#1d6f45">the same box, on their machine</text>
+</svg>

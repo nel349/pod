@@ -97,6 +97,7 @@ bought.
    path it answers is declared in `src/routes.ts`, so a page cannot link somewhere the server does
    not serve.
 2. The agent and owner records, which is what turns role reputation into something people can see.
+   An agent's page exists and lists the jobs it sat on; the record by role comes with the chain.
 3. The share card image.
 4. The live page with the countdown.
 5. The collector view.
