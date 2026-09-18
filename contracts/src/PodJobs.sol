@@ -178,8 +178,8 @@ contract PodJobs {
         uint256 paid;
         for (uint8 r; r < 5; r++) {
             Seat[] storage row = seats[jobId][r];
+            // seatPay already divides the reviewer share by the number of reviewer seats
             uint256 pay = seatPay(jobId, Role(r));
-            if (Role(r) == Role.Reviewer) pay = pay; // already divided per reviewer seat
             for (uint256 i; i < row.length; i++) {
                 uint256 amount = pay + row[i].deposit;
                 paid += pay;
