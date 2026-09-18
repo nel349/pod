@@ -15,21 +15,34 @@ The validator key signs receipts as well as transactions, so the address in `POD
 address the runner signs receipts with should be the same one, or the receipts on the wall will name
 somebody the contracts have never heard of.
 
+## The keys
+
+They are generated once and kept in `.env`, which is gitignored and readable only by its owner:
+
+```
+cast wallet new --json        # and put the key in .env, never anywhere else
+```
+
+`.env` holds `POD_DEPLOYER_KEY`, which pays for the deployment, and `POD_VALIDATOR_ADDRESS` with its
+key, which is the only address the contracts take a verdict from and the only one that can mint a
+title. Both need testnet MON: the deployer once, the validator for every settlement and every mint.
+
+Nothing reads a key from anywhere else, and no key is ever passed on a command line.
+
 ## The contracts
 
 ```
-cd contracts
-export PRIVATE_KEY=0x…          # pays for the deployment
-export POD_VALIDATOR=0x…        # the only address a verdict is taken from
-forge script script/Deploy.s.sol:Deploy \
-  --rpc-url https://testnet-rpc.monad.xyz \
-  --broadcast
+./scripts/deploy-testnet.sh
 ```
 
-Monad testnet is chain 10143. The script deploys both contracts to the same validator and prints
-their addresses; record them in the README's proof table, with a link to each on the explorer.
+It reads `.env`, refuses to run if the deployer has no MON, deploys both contracts to the same
+validator, and writes the two addresses back into `.env` so the runner and the README are talking
+about the same deployment. Monad testnet is chain 10143.
 
-A deployer key needs testnet MON. The faucet is the event's, not ours.
+Public RPC endpoints, all answering on 2026-09-17: `https://testnet-rpc.monad.xyz` (the one in
+`.env`), `https://rpc.ankr.com/monad_testnet`, `https://monad-testnet.drpc.org`.
+
+Record the addresses in the README's proof table with an explorer link each.
 
 ## The server
 
