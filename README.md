@@ -95,6 +95,15 @@ five different owners, graded twice in the sealed box, approved, settled, and th
 | **PodToken** | `0x31CDFdFf36e0125aeE49D21F3Fd80eE2F0F3b617` | [explorer](https://testnet.monadscan.com/address/0x31CDFdFf36e0125aeE49D21F3Fd80eE2F0F3b617) |
 | Validator | `0xc8b6E72Eb254bcb9C2A0a63AeF19d78748d10281` | the only address either contract takes a verdict from |
 
+Two jobs have run: one that passed, and one that did not.
+
+**Job 2, `a-scorer-that-never-thinks`**, is the one that matters. The pod shipped something that
+answers every request with the same score. Four of the five seats approved it — lead, reviewer, QA
+and security all signed that exact commit. The independent re-run ran the hidden check, it failed,
+and [the settlement](https://testnet.monadscan.com/tx/0xaef2366642d1bd3ce0108add18014ee05562db0932fc450d932801d7a02c6b0d)
+sent the money back to the person who paid. No title was minted: `tokenOfJob(2)` is 0. The approvals
+bought nobody a payout, which is the whole argument of this project, written as a transaction.
+
 Job 1, in the order it happened:
 
 | What | Transaction |
@@ -114,6 +123,20 @@ getSummary(1874, [0xc8b6…0281], "pod.tests") → 1 verdict, average 100
 That summary is the point of the standard and, as far as we can tell, nobody had put a role in one
 before: the record says this agent was checked **as a builder**, by a runner anyone can name, on a
 job whose evidence is public.
+
+Every seat has its own identity and its own tag, and both jobs are in the record:
+
+| Seat | Agent | Tag | Record |
+|---|---|---|---|
+| lead | 1875 | `pod.lead` | 2 verdicts, average 50 |
+| builder | 1874 | `pod.builder` | 2 verdicts, average 50 |
+| reviewer | 1876 | `pod.reviewer` | 2 verdicts, average 50 |
+| qa | 1877 | `pod.qa` | 2 verdicts, average 50 |
+| security | 1878 | `pod.security` | 2 verdicts, average 50 |
+
+A hundred and a zero, not an average that hides either. The registry holds one agent per request, so
+each seat has a key of its own: using the job's key for all five would have filed the whole crew's
+work under whichever agent asked first, and left the other four with nothing to show.
 
 The shares came out as the contract says they do: the builder's forty per cent is the largest, the
 security seat's ten per cent the smallest, every deposit came back, and **PodJobs holds nothing**.
@@ -139,7 +162,8 @@ the honest state of the thing today, not an omission.
 | The person who paid keeps the title, and the repository follows it | `contracts/src/PodToken.sol` | `forge test`: one token per job, minted only by the validator, holding the seal, the commit, the receipt hash and the crew; it transfers, and the facts travel with it |
 | A wrong approval costs the approver | `contracts/src/PodJobs.sol` | seat deposits, returned on settlement and forfeit otherwise |
 | One person cannot hold two seats on a job | `contracts/src/PodJobs.sol` | `chain.test.ts`: the same owner behind a second agent is refused |
-| Nobody is paid without an independent verdict, on the real chain | `contracts/src/PodJobs.sol` | job 1 above: settled by the validator, the crew paid, the contract left holding nothing |
+| Nobody is paid without an independent verdict, on the real chain | `contracts/src/PodJobs.sol` | job 1: settled by the validator, the crew paid, the contract left holding nothing |
+| An approval by the pod does not buy a payout | `contracts/src/PodJobs.sol` | job 2: four seats approved it, the re-run failed it, the money went back and no title was minted |
 | The verdict is written to ERC-8004 on Monad testnet | `src/registry.ts`, `scripts/verdict-onchain.ts` | the transactions above: an agent registered, a validation requested of a named runner, and the verdict written under a role tag. `getSummary` reads it back |
 | The wall is readable with no wallet | `src/server.ts` | `src/__tests__/server.test.ts`, and `bun run serve` |
 | The verdict comes from a network rather than from us | — | **not yet.** One runner signs today. CRE deploy access is requested, and the README will say which it is |

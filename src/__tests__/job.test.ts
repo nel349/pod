@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  MODES, SHARES, deadlines, publicSpec, sealSpec, shareOf, specMatchesSeal, verdictKey,
+  MODES, SHARES, deadlines, publicSpec, sealSpec, seatVerdictKey, shareOf, specMatchesSeal, verdictKey,
   type Spec,
 } from "../job.ts";
 
@@ -81,6 +81,15 @@ describe("the key a verdict is filed under", () => {
 
   test("a different commit is a different verdict", async () => {
     expect(await verdictKey(base)).not.toBe(await verdictKey({ ...base, commit: "deadbee" }));
+  });
+
+  test("every seat gets a key of its own, because the registry holds one agent per request", async () => {
+    const lead = { ...base, agent: "0x1111111111111111111111111111111111111111" };
+    const builder = { ...base, agent: "0x2222222222222222222222222222222222222222" };
+    expect(await seatVerdictKey(lead)).not.toBe(await seatVerdictKey(builder));
+    // and a seat's key is not the job's key, so neither can overwrite the other
+    expect(await seatVerdictKey(lead)).not.toBe(await verdictKey(base));
+    expect(await seatVerdictKey(lead)).toBe(await seatVerdictKey({ ...lead, agent: lead.agent.toUpperCase().replace("0X", "0x") }));
   });
 });
 

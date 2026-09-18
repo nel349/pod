@@ -109,6 +109,25 @@ export function verdictKey(input: {
   return sha256(`pod.verdict.v1|${input.seal}|${input.commit}|${input.runner.toLowerCase()}`);
 }
 
+/**
+ * The key for one seat's verdict.
+ *
+ * The validation registry holds one agent per request, so a crew of five needs five: the same job,
+ * the same commit, the same runner, but a record each. Using the job's key for all of them would
+ * file the whole pod's work under whichever agent asked first, and the other four would have nothing
+ * to show for it.
+ */
+export function seatVerdictKey(input: {
+  readonly seal: `0x${string}`;
+  readonly commit: string;
+  readonly runner: string;
+  readonly agent: string;
+}): Promise<`0x${string}`> {
+  return sha256(
+    `pod.verdict.v1|${input.seal}|${input.commit}|${input.runner.toLowerCase()}|${input.agent.toLowerCase()}`,
+  );
+}
+
 /** When a job must be finished by, and when a quiet seat is forfeited. */
 export function deadlines(spec: Spec, startedAt: Date): { readonly endsAt: Date; readonly idleBy: Date } {
   const { windowMinutes, idleMinutes } = MODES[spec.mode];

@@ -21,9 +21,17 @@ import { sealSpec, type Role, type Spec } from "../src/job.ts";
 import type { CheckToRun } from "../src/blackbox.ts";
 
 const IMAGE = "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944";
-const ARTEFACT = new URL("../fixtures/app-honest", import.meta.url).pathname;
 const CHECKS = new URL("../fixtures/checks", import.meta.url).pathname;
 const PRICE = parseEther("0.1");
+
+/**
+ * Which job this run is.
+ *
+ * The same script runs the job that passes and the job that does not, because they are the same
+ * job: the only difference is what the pod shipped. A wall with one of each on it is evidence; a
+ * wall with only the first is a shop window.
+ */
+const artefact = new URL(`../fixtures/${process.env.POD_DEMO_ARTEFACT ?? "app-honest"}`, import.meta.url).pathname;
 
 const need = (name: string): string => {
   const value = process.env[name];
@@ -32,7 +40,7 @@ const need = (name: string): string => {
 };
 
 const spec: Spec = {
-  idea: "A page that scores an excuse, and scores a thin one lower than a real one",
+  idea: process.env.POD_DEMO_IDEA ?? "A page that scores an excuse, and scores a thin one lower than a real one",
   mode: "flash",
   price: PRICE,
   checks: [
@@ -40,7 +48,7 @@ const spec: Spec = {
     { says: "a weak excuse scores lower than a strong one", run: "node weak.mjs", hidden: true },
   ],
   allowed: [],
-  salt: need("POD_DEMO_SALT"),
+  salt: process.env.POD_DEMO_SALT ?? need("POD_DEMO_SALT"),
 };
 
 const toRun: CheckToRun[] = spec.checks.map((check) => ({
@@ -97,7 +105,7 @@ for (const seat of seats) {
 // 4. the work is graded in the sealed box, twice, before anybody approves anything
 const commit = process.env.POD_DEMO_COMMIT ?? "d15d0cb";
 const report = await gradeJob({
-  seal, commit, artefact: ARTEFACT, start: "node server.js",
+  seal, commit, artefact, start: "node server.js",
   checks: CHECKS, toRun, image: IMAGE, times: 2,
   runner: contracts.validator, runnerKey: need("POD_VALIDATOR_KEY") as Hex,
 });
@@ -122,16 +130,21 @@ const record = await publish(store, {
   approvals: seats.filter((s) => s.role !== "builder").map((seat) => ({
     role: seat.role, agent: seat.address, commit, at: report.signed.receipt.finishedAt,
   })),
-  open: `${site}/job/${jobId}`,
+  open: report.verdict.kind === "passed" ? `${site}/job/${jobId}` : undefined,
 });
 
-const minted = await mintPod(contracts.token, {
-  jobs: contracts.jobs, jobId: onChainId, seal, commit: commitHash,
-  receiptHash: record.signed!.hash, crew: seats.map((s) => ({ role: s.role, agent: s.address })),
-  uri: `${site}/job/${jobId}`,
-});
-const tokenId = await tokenOfJob({ address: contracts.token.address, publicClient }, onChainId);
-console.log(`minted   POD #${tokenId} to the person who paid  ${minted}`);
+// a title is minted for work that passed, and for nothing else
+if (report.verdict.kind === "passed") {
+  const minted = await mintPod(contracts.token, {
+    jobs: contracts.jobs, jobId: onChainId, seal, commit: commitHash,
+    receiptHash: record.signed!.hash, crew: seats.map((s) => ({ role: s.role, agent: s.address })),
+    uri: `${site}/job/${jobId}`,
+  });
+  const tokenId = await tokenOfJob({ address: contracts.token.address, publicClient }, onChainId);
+  console.log(`minted   POD #${tokenId} to the person who paid  ${minted}`);
+} else {
+  console.log(`no title: the checks said ${report.verdict.kind}, so the money went back to the poster`);
+}
 
 const after = await readJob({ address: jobsAt, publicClient }, onChainId);
 console.log(`\njob ${onChainId} is ${after.state}. The wall has it at ${site}/job/${jobId}`);

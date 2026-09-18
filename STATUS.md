@@ -46,20 +46,19 @@ Last updated 2026-09-17.
 | 17 Sep | The POD token: one per job, minted by the validator, holding the commit, the crew and the receipt |
 | 17 Sep | The mint wired into the runner, and proven on a real EVM: the title lands with the person who paid |
 | 17 Sep | The card a shared job carries, drawn per job, failures included |
-
 | 17 Sep | **Deployed to Monad testnet**, and one job ran the whole way through: seats, grading, settlement, mint |
 | 17 Sep | **The verdict is on ERC-8004**: agent 1874 registered, validation requested, 100 written under the tag `pod.tests` |
+| 17 Sep | **A job that failed**: four seats approved it, the re-run did not, the money went back and no title was minted |
+| 17 Sep | All five seats have an identity of their own, and a role-tagged record holding a pass and a failure |
 
 ## Next
 
 | # | Thing | Blocked by |
 |---|---|---|
-| 1 | A second job that **fails**, so the wall carries a failure beside the pass | nothing |
-| 2 | Put the wall on a hostname | where it is hosted, and who holds the key that signs |
-| 3 | Prove a stranger can validate a job they did not create, on a public URL | after 2 |
-| 4 | An identity for the other four seats, so every agent has a record of its own | nothing |
-| 5 | The repository handover that follows the POD | an account that owns the repositories |
-| 6 | Mera for the person's wallet, Privy for the agents' keys | the vendors' answers |
+| 1 | Put the wall on a hostname | where it is hosted, and under what name |
+| 2 | Prove a stranger can validate a job they did not create, on a public URL | after 1 |
+| 3 | The repository handover that follows the POD | an account that owns the repositories |
+| 4 | Mera for the person's wallet, Privy for the agents' keys | the vendors' answers |
 
 ## Parked
 
