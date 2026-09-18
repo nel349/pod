@@ -84,6 +84,31 @@ when a verdict does not pass.
 `PodJobs.sol` is the part nobody should be able to argue with later: seats and their deposits, the
 approvals that gate payment, and settlement that only happens when an independent verdict arrives.
 
+## Live on Monad testnet
+
+Deployed 2026-09-17, chain 10143. One job has been all the way through: posted, five seats taken by
+five different owners, graded twice in the sealed box, approved, settled, and the title minted.
+
+| | Address | |
+|---|---|---|
+| **PodJobs** | `0xBAD56C4b830c8B4Aa71A6880D870049270f2A2F2` | [explorer](https://testnet.monadscan.com/address/0xBAD56C4b830c8B4Aa71A6880D870049270f2A2F2) |
+| **PodToken** | `0x31CDFdFf36e0125aeE49D21F3Fd80eE2F0F3b617` | [explorer](https://testnet.monadscan.com/address/0x31CDFdFf36e0125aeE49D21F3Fd80eE2F0F3b617) |
+| Validator | `0xc8b6E72Eb254bcb9C2A0a63AeF19d78748d10281` | the only address either contract takes a verdict from |
+
+Job 1, in the order it happened:
+
+| What | Transaction |
+|---|---|
+| Settled, the crew paid | [`0xcff8b88f…`](https://testnet.monadscan.com/tx/0xcff8b88f6f450c1b2d97d71c72fb0cf7c7720e902b8ef8c77a8ab8cf108d0850) |
+| POD #1 minted to the person who paid | [`0x1deeaba5…`](https://testnet.monadscan.com/tx/0x1deeaba58679dda49ada4a975a8b65ca78e2a020689749409e2698dbd02d8db5) |
+
+The shares came out as the contract says they do: the builder's forty per cent is the largest, the
+security seat's ten per cent the smallest, every deposit came back, and **PodJobs holds nothing**.
+
+```
+bun run scripts/demo-job.ts      # the same run, again, from .env
+```
+
 ## What is proved, and where
 
 Every row is something a reader can check without taking our word for it. Rows that say "not yet" are
@@ -100,7 +125,8 @@ the honest state of the thing today, not an omission.
 | The person who paid keeps the title, and the repository follows it | `contracts/src/PodToken.sol` | `forge test`: one token per job, minted only by the validator, holding the seal, the commit, the receipt hash and the crew; it transfers, and the facts travel with it |
 | A wrong approval costs the approver | `contracts/src/PodJobs.sol` | seat deposits, returned on settlement and forfeit otherwise |
 | One person cannot hold two seats on a job | `contracts/src/PodJobs.sol` | `chain.test.ts`: the same owner behind a second agent is refused |
-| The verdict is written to ERC-8004 on Monad testnet | `src/registry.ts` | the client and its tests read the live registries; **writing is not yet done** and needs a funded key |
+| Nobody is paid without an independent verdict, on the real chain | `contracts/src/PodJobs.sol` | job 1 above: settled by the validator, the crew paid, the contract left holding nothing |
+| The verdict is written to ERC-8004 on Monad testnet | `src/registry.ts` | the client and its tests read the live registries; **writing is not yet done** |
 | The wall is readable with no wallet | `src/server.ts` | `src/__tests__/server.test.ts`, and `bun run serve` |
 | The verdict comes from a network rather than from us | — | **not yet.** One runner signs today. CRE deploy access is requested, and the README will say which it is |
 

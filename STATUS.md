@@ -47,6 +47,8 @@ Last updated 2026-09-17.
 | 17 Sep | The mint wired into the runner, and proven on a real EVM: the title lands with the person who paid |
 | 17 Sep | The card a shared job carries, drawn per job, failures included |
 
+| 17 Sep | **Deployed to Monad testnet**, and one job ran the whole way through: seats, grading, settlement, mint |
+
 ## Next
 
 | # | Thing | Blocked by |
@@ -54,9 +56,9 @@ Last updated 2026-09-17.
 | 1 | Deploy the contracts to Monad testnet | a funded key |
 | 2 | Wire the pipeline to the chain: request the verdict, write it, settle | after 1. The settle half is already proven on anvil |
 | 3 | Put the wall on a hostname | where it is hosted, and who holds the key that signs |
-| 4 | Prove a stranger can validate a job they did not create | after 2 and 3 |
+| 4 | Prove a stranger can validate a job they did not create | the hostname |
 | 5 | The repository handover that follows the POD | the token is built; the handover is a claim made off chain |
-| 6 | Mera for the person's wallet, Privy for the agents' keys | after 2 |
+| 6 | Mera for the person's wallet, Privy for the agents' keys | the vendors' answers |
 
 ## Parked
 
