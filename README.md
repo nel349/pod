@@ -21,6 +21,7 @@ Built for Monad Metropolis, track 04. Work starts 16 September 2026; every commi
 | `REGISTRY-FIT.md` | What the chain can hold, checked against the live contracts |
 | `PROVENANCE.md` | What is carried over and what is new |
 | `JUDGE-PATH.md` | What a judge sees, in order, and what each step proves |
+| `TESTING.md` | How this project tests, and the one rule that separates a test from decoration |
 | `DEPLOY.md` | Putting it on a host: two commands, and the three things that have to be decided first |
 
 ## Running it
