@@ -9,10 +9,13 @@
  *
  * It prints every transaction hash, and writes the job into POD_JOBS so the wall can show it.
  */
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import { createPublicClient, createWalletClient, http, parseEther, type Address, type Hex, type PublicClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { approve, post, readJob, seatDeposit, settle, takeSeat, type Contract } from "../src/jobs.ts";
-import { gradeJob } from "../src/pipeline.ts";
+import { gradeCommit } from "../src/pipeline.ts";
+import { bundle, commitToBytes32, commitWork, head, openRepository } from "../src/repo.ts";
 import { openJob, publish } from "../src/publish.ts";
 import { JobStore } from "../src/store.ts";
 import { mintPod, tokenOfJob } from "../src/token.ts";
@@ -102,27 +105,43 @@ for (const seat of seats) {
   console.log(`seat     ${seat.role.padEnd(8)} ${seat.address} deposit ${deposit} wei  ${hash}`);
 }
 
-// 4. the work is graded in the sealed box, twice, before anybody approves anything
-const commit = process.env.POD_DEMO_COMMIT ?? "d15d0cb";
-const report = await gradeJob({
-  seal, commit, artefact, start: "node server.js",
+// 4. the pod's work lands in the job's own repository, and the commit is whatever git says it is
+const repo = await openRepository(need("POD_REPOS"), jobId);
+const commit = await commitWork(repo, {
+  workspace: artefact,
+  message: `what the pod shipped for ${jobId}`,
+  agent: seats[1]!.role,
+  email: `${seats[1]!.address.toLowerCase()}@pod.invalid`,
+});
+console.log(`commit   ${commit}`);
+if ((await head(repo)) !== commit) throw new Error("the branch does not point at what we just committed");
+
+// the copy anybody can clone, written before the verdict so it covers exactly what was graded
+const bundled = join(need("POD_JOBS"), jobId, "history.bundle");
+await mkdir(join(bundled, ".."), { recursive: true });
+await bundle(repo, bundled);
+
+// 5. that exact commit is graded in the sealed box, twice, before anybody approves anything
+const report = await gradeCommit({
+  seal, commit, repo, start: "node server.js",
+  repository: `${site}/bundle/${jobId}`,
   checks: CHECKS, toRun, image: IMAGE, times: 2,
   runner: contracts.validator, runnerKey: need("POD_VALIDATOR_KEY") as Hex,
 });
 console.log(`graded   ${report.verdict.kind}, score ${report.score}, tag ${report.tag}`);
 
-// 5. the seats that carry liability approve the exact commit
-const commitHash = `0x${commit.padEnd(64, "0")}` as Hex;
+// 6. the seats that carry liability approve the exact commit
+const commitHash = commitToBytes32(commit);
 for (const seat of seats.filter((s) => s.role !== "builder")) {
   const hash = await approve(as(seat.key, jobsAt), onChainId, seat.role, commitHash);
   console.log(`approved ${seat.role.padEnd(8)} ${hash}`);
 }
 
-// 6. the verdict reaches the money, and only the validator can carry it
+// 7. the verdict reaches the money, and only the validator can carry it
 const settled = await settle(contracts.jobs, onChainId, commitHash, report.verdict.kind === "passed");
 console.log(`settled  ${settled}`);
 
-// 7. the evidence is published before the title is minted
+// 8. the evidence is published before the title is minted
 const record = await publish(store, {
   jobId, seal, idea: spec.idea, mode: spec.mode, price: PRICE, report,
   pod: seats.map((seat) => ({ role: seat.role, agent: seat.address, owner: seat.address })),

@@ -55,6 +55,7 @@ export interface JobRecord {
 
 const RECORD = "job.json";
 const CHECKS = "checks";
+const HISTORY = "history.bundle";
 
 /** A verdict is what makes the checks publishable: before that, they are the sealed part of the job. */
 export function checksArePublished(record: JobRecord): boolean {
@@ -163,6 +164,17 @@ export class JobStore {
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * The job's history as one file, if it has one.
+   *
+   * Written when the job is graded, so it holds exactly what was graded and the attempts before it.
+   */
+  async bundle(jobId: string): Promise<Blob | undefined> {
+    if (!isSafeName(jobId)) return undefined;
+    const file = Bun.file(join(this.root, jobId, HISTORY));
+    return (await file.exists()) ? file : undefined;
   }
 
   /** Every job an agent sat on, whichever seat it held. */

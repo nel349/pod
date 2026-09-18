@@ -27,8 +27,10 @@ export interface Receipt {
   readonly version: "pod.receipt.v1";
   /** the job, by the hash its idea was sealed under */
   readonly seal: Hex;
-  /** the commit that was graded */
+  /** the commit that was graded: a real object id, in a repository anybody can fetch */
   readonly commit: string;
+  /** where that commit can be fetched from. A verdict nobody can clone is a verdict nobody can check */
+  readonly repository: string;
   /** a fingerprint of the tree that was actually run, in case the commit is not reachable later */
   readonly tree: Hex;
   /** the container image, pinned by digest */

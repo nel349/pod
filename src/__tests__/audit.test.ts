@@ -39,6 +39,7 @@ async function receipt(over: Partial<Receipt> = {}): Promise<NonNullable<JobReco
     version: "pod.receipt.v1",
     seal: SEAL,
     commit: "c0ffee1234",
+    repository: "/repos/a-weather-page.git",
     tree: `0x${"11".repeat(32)}`,
     image: "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944",
     start: "node server.js",

@@ -20,6 +20,7 @@ const HTML = { "content-type": "text/html; charset=utf-8" } as const;
 const JSON_TYPE = { "content-type": "application/json; charset=utf-8" } as const;
 const CSS = { "content-type": "text/css; charset=utf-8" } as const;
 const SVG = { "content-type": "image/svg+xml; charset=utf-8" } as const;
+const BUNDLE = { "content-type": "application/x-git-bundle" } as const;
 
 const style = new URL("../public/wall.css", import.meta.url);
 
@@ -79,6 +80,22 @@ export async function handle(request: Request, store: JobStore): Promise<Respons
     const record = await store.read(jobId);
     if (!record) return notFound(`no job called ${jobId}`);
     return new Response(renderCard(record.tile), { headers: SVG });
+  }
+
+  /**
+   * The job's history, as one file.
+   *
+   * `git clone` against this URL gives somebody the whole repository, including the attempts that
+   * failed, with no account and no server of ours in the way. It is the answer to "what if you
+   * disappear", and the receipt carries its hash so a copy can be proved identical later.
+   */
+  if (pathname.startsWith(ROUTES.bundle)) {
+    const jobId = pathname.slice(ROUTES.bundle.length);
+    const record = await store.read(jobId);
+    if (!record) return notFound(`no job called ${jobId}`);
+    const file = await store.bundle(jobId);
+    if (!file) return notFound(`job ${jobId} has no history to hand over`);
+    return new Response(file, { headers: BUNDLE });
   }
 
   if (pathname.startsWith(ROUTES.receipt)) {

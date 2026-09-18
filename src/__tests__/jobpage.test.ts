@@ -5,7 +5,8 @@ import type { Receipt } from "../receipt.ts";
 const receipt: Receipt = {
   version: "pod.receipt.v1",
   seal: `0x${"ab".repeat(32)}`,
-  commit: "c0ffee1",
+  commit: "c0ffee1234abcdef0123456789abcdef01234567",
+  repository: "https://pod.example/bundle/one",
   tree: `0x${"cd".repeat(32)}`,
   image: "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944",
   start: "node server.js",

@@ -43,7 +43,9 @@ const escape = (text: string): string =>
  */
 export function repeatCommand(receipt: Receipt, checksURI: string): string {
   return [
-    `# fetch the code at commit ${receipt.commit}, then:`,
+    ...(receipt.repository
+      ? [`git clone ${receipt.repository} work && cd work && git checkout ${receipt.commit}`]
+      : [`# fetch the code at commit ${receipt.commit}, then:`]),
     `docker run --rm --network none \\`,
     `  --cap-drop ALL --security-opt no-new-privileges --read-only \\`,
     `  -v "$PWD":/repo:ro ${receipt.image} \\`,
