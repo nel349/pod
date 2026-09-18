@@ -48,6 +48,7 @@ Last updated 2026-09-17.
 | 17 Sep | The card a shared job carries, drawn per job, failures included |
 
 | 17 Sep | **Deployed to Monad testnet**, and one job ran the whole way through: seats, grading, settlement, mint |
+| 17 Sep | **The verdict is on ERC-8004**: agent 1874 registered, validation requested, 100 written under the tag `pod.tests` |
 
 ## Next
 

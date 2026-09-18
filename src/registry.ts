@@ -15,7 +15,7 @@
  */
 import {
   createPublicClient, encodeFunctionData, http, parseAbi,
-  type Address, type Hex, type PublicClient,
+  type Address, type Hex, type PublicClient, type WalletClient,
 } from "viem";
 
 /** Monad testnet, checked on chain 2026-09-16. */
@@ -124,4 +124,80 @@ export async function identityRegistryOf(client: PublicClient): Promise<Address>
     abi: validationAbi,
     functionName: "getIdentityRegistry",
   });
+}
+
+/**
+ * Sending, rather than building.
+ *
+ * Everything above makes calldata and reads. These three put it on the chain, and they are separate
+ * on purpose: a call that can be inspected before it is sent is a call somebody can check, and the
+ * simulation is what turns a revert into a sentence instead of a receipt with status 0.
+ */
+export interface Sender {
+  readonly publicClient: PublicClient;
+  readonly wallet: WalletClient;
+}
+
+async function send(by: Sender, to: Address, data: Hex): Promise<Hex> {
+  const account = by.wallet.account;
+  if (!account) throw new Error("that wallet has no account to sign with");
+  // simulate first: the registries revert with reasons worth reading
+  await by.publicClient.call({ account, to, data });
+  const hash = await by.wallet.sendTransaction({ account, chain: by.wallet.chain, to, data });
+  const receipt = await by.publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") throw new Error(`the chain rejected ${hash}`);
+  return hash;
+}
+
+/**
+ * Give an agent an identity, and hand back the id the registry gave it.
+ *
+ * Registering is permissionless: whoever sends this owns the agent that comes out of it, which is
+ * what makes "the agent is owned by a person" a fact on the chain rather than a claim on a page.
+ */
+export async function registerAgent(by: Sender): Promise<{ readonly agentId: bigint; readonly hash: Hex }> {
+  const account = by.wallet.account;
+  if (!account) throw new Error("that wallet has no account to sign with");
+  const { request, result } = await by.publicClient.simulateContract({
+    address: MONAD_TESTNET.identityRegistry,
+    abi: identityAbi,
+    functionName: "register",
+    account,
+  });
+  const hash = await by.wallet.writeContract(request);
+  const receipt = await by.publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") throw new Error(`the chain rejected the registration ${hash}`);
+  return { agentId: result, hash };
+}
+
+/** Let an address speak for an agent, which a seat has to do before its work can be checked. */
+export function approvePlatform(by: Sender, platform: Address): Promise<Hex> {
+  return send(by, MONAD_TESTNET.identityRegistry, approvePlatformCall(platform));
+}
+
+/** Ask a named runner to check one job at one commit. Sent by the agent's owner, or by its operator. */
+export function requestValidation(by: Sender, input: Parameters<typeof requestCall>[0]): Promise<Hex> {
+  return send(by, MONAD_TESTNET.validationRegistry, requestCall(input));
+}
+
+/** The verdict itself, which only the runner the request named may send. */
+export function writeVerdict(by: Sender, input: Parameters<typeof verdictCall>[0]): Promise<Hex> {
+  return send(by, MONAD_TESTNET.validationRegistry, verdictCall(input));
+}
+
+/** What the registry says about one request: who answered, with what, and under which tag. */
+export async function verdictOnChain(client: PublicClient, key: Hex): Promise<{
+  readonly validator: Address;
+  readonly agentId: bigint;
+  readonly response: number;
+  readonly tag: string;
+  readonly lastUpdate: bigint;
+}> {
+  const [validator, agentId, response, , tag, lastUpdate] = await client.readContract({
+    address: MONAD_TESTNET.validationRegistry,
+    abi: validationAbi,
+    functionName: "getValidationStatus",
+    args: [key],
+  });
+  return { validator, agentId, response, tag, lastUpdate };
 }

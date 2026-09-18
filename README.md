@@ -101,12 +101,26 @@ Job 1, in the order it happened:
 |---|---|
 | Settled, the crew paid | [`0xcff8b88f…`](https://testnet.monadscan.com/tx/0xcff8b88f6f450c1b2d97d71c72fb0cf7c7720e902b8ef8c77a8ab8cf108d0850) |
 | POD #1 minted to the person who paid | [`0x1deeaba5…`](https://testnet.monadscan.com/tx/0x1deeaba58679dda49ada4a975a8b65ca78e2a020689749409e2698dbd02d8db5) |
+| The builder agent registered in the ERC-8004 Identity Registry, agent **1874** | [`0xe708ba43…`](https://testnet.monadscan.com/tx/0xe708ba43ae20a8a68bfc2eef4ecc34c5f393c5bfb438e9a20306958008085d03) |
+| Validation requested of the named runner | [`0xb43a1f6c…`](https://testnet.monadscan.com/tx/0xb43a1f6c7c6cb3495feb5dc75316ce416ee51ea24a0c6450601766982cc46300) |
+| **The verdict written to the ERC-8004 Validation Registry**, 100 under the tag `pod.tests` | [`0xee88bc0d…`](https://testnet.monadscan.com/tx/0xee88bc0d3c8432329c4fada26d6e55113c70aef57b9c04b50aeac64adef1e426) |
+
+Read it back the way anybody else's system would:
+
+```
+getSummary(1874, [0xc8b6…0281], "pod.tests") → 1 verdict, average 100
+```
+
+That summary is the point of the standard and, as far as we can tell, nobody had put a role in one
+before: the record says this agent was checked **as a builder**, by a runner anyone can name, on a
+job whose evidence is public.
 
 The shares came out as the contract says they do: the builder's forty per cent is the largest, the
 security seat's ten per cent the smallest, every deposit came back, and **PodJobs holds nothing**.
 
 ```
-bun run scripts/demo-job.ts      # the same run, again, from .env
+bun run scripts/demo-job.ts       # post, seat, grade, approve, settle, mint
+bun run scripts/verdict-onchain.ts # register, request, and write the verdict to ERC-8004
 ```
 
 ## What is proved, and where
@@ -126,7 +140,7 @@ the honest state of the thing today, not an omission.
 | A wrong approval costs the approver | `contracts/src/PodJobs.sol` | seat deposits, returned on settlement and forfeit otherwise |
 | One person cannot hold two seats on a job | `contracts/src/PodJobs.sol` | `chain.test.ts`: the same owner behind a second agent is refused |
 | Nobody is paid without an independent verdict, on the real chain | `contracts/src/PodJobs.sol` | job 1 above: settled by the validator, the crew paid, the contract left holding nothing |
-| The verdict is written to ERC-8004 on Monad testnet | `src/registry.ts` | the client and its tests read the live registries; **writing is not yet done** |
+| The verdict is written to ERC-8004 on Monad testnet | `src/registry.ts`, `scripts/verdict-onchain.ts` | the transactions above: an agent registered, a validation requested of a named runner, and the verdict written under a role tag. `getSummary` reads it back |
 | The wall is readable with no wallet | `src/server.ts` | `src/__tests__/server.test.ts`, and `bun run serve` |
 | The verdict comes from a network rather than from us | — | **not yet.** One runner signs today. CRE deploy access is requested, and the README will say which it is |
 
