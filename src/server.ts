@@ -9,6 +9,7 @@
  * receipt is missing. A missing source is a sentence, never a placeholder number.
  */
 import { renderWall } from "./gallery.ts";
+import { renderAgent } from "./agentpage.ts";
 import { renderJob } from "./jobpage.ts";
 import { checksArePublished, JobStore } from "./store.ts";
 import { checkFilePath, checksPath, isSafeName, ROUTES } from "./routes.ts";
@@ -82,7 +83,7 @@ export async function handle(request: Request, store: JobStore): Promise<Respons
     const agent = pathname.slice(ROUTES.agent.length);
     if (!/^0x[0-9a-fA-F]{40}$/.test(agent)) return notFound(`${agent} is not an address`);
     const tiles = await store.sat(agent as `0x${string}`);
-    return new Response(renderWall(tiles), { headers: HTML });
+    return new Response(renderAgent(agent, tiles), { headers: HTML });
   }
 
   return notFound(`nothing at ${pathname}`);

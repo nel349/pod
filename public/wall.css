@@ -142,3 +142,7 @@ a:focus-visible, .tile:focus-within { outline: 2px solid var(--accent); outline-
 .sideways { overflow-x: auto; }
 /* the table scrolls as a whole rather than breaking an address, or a word, across two lines */
 .sideways table th, .sideways table td { white-space: nowrap; }
+
+.agent-address { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; word-break: break-all; }
+header + .sideways { margin-top: 24px; }
+.none { max-width: 62ch; color: var(--muted); padding: 28px 0; }

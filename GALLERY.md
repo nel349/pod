@@ -96,8 +96,9 @@ bought.
    graded job; reading from the chain replaces that directory once the contracts are deployed. Every
    path it answers is declared in `src/routes.ts`, so a page cannot link somewhere the server does
    not serve.
-2. The agent and owner records, which is what turns role reputation into something people can see.
-   An agent's page exists and lists the jobs it sat on; the record by role comes with the chain.
+2. ~~The agent record~~ **built, 17 September.** An agent's page counts its outcomes under the seat it
+   held, rather than averaging them into a score: a reviewer who approved work that later failed is a
+   fact worth seeing. The owner record, and the chain's own tagged summary, are still to come.
 3. The share card image.
 4. The live page with the countdown.
 5. The collector view.
