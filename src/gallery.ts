@@ -43,9 +43,13 @@ const shortAddress = (address: string): string => `${address.slice(0, 6)}…${ad
 
 const took = (seconds?: number): string => {
   if (seconds === undefined) return "";
-  if (seconds < 90) return `${Math.round(seconds)} seconds`;
+  if (seconds < 90) {
+    const whole = Math.max(1, Math.round(seconds));
+    return `${whole} ${whole === 1 ? "second" : "seconds"}`;
+  }
   const minutes = Math.round(seconds / 60);
-  return minutes < 90 ? `${minutes} minutes` : `${(minutes / 60).toFixed(1)} hours`;
+  if (minutes < 90) return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+  return `${(minutes / 60).toFixed(1)} hours`;
 };
 
 /** What a verdict says on a tile, in words rather than a colour alone. */
@@ -69,13 +73,23 @@ export function renderTile(tile: Tile): string {
     ? `<a class="evidence" href="${escape(tile.receiptURI)}">${tile.receiptHash ? `receipt ${escape(tile.receiptHash.slice(0, 10))}…` : "receipt"}</a>`
     : `<span class="evidence none">no receipt yet</span>`;
 
+  // Why there is nothing to open is not one answer. Work that failed never shipped; work that
+  // passed and went unclaimed was taken down; work still running has not got there yet.
+  const nothingToOpen = {
+    failed: "nothing shipped: the checks failed",
+    "not-reproducible": "nothing shipped: the runs disagreed",
+    running: "not finished yet",
+    passed: "archived, code still claimable",
+  }[tile.verdict];
+
   const openIt = tile.open
     ? `<a class="open" href="${escape(tile.open)}">Open it</a>`
-    : `<span class="open gone">archived, code still claimable</span>`;
+    : `<span class="open gone">${escape(nothingToOpen)}</span>`;
 
   return `<article class="tile ${tile.verdict}">
   <h3><a href="${escape(jobPath(tile.jobId))}">${escape(tile.idea)}</a></h3>
   <p class="line">${escape(verdictWords(tile.verdict))}${tile.seconds ? ` · ${took(tile.seconds)}` : ""} · ${money(tile.price)} · ${escape(tile.mode)}</p>
+  ${tile.commit ? `<p class="at">at <code>${escape(tile.commit.slice(0, 10))}</code></p>` : ""}
   <ul class="pod">${roles}</ul>
   ${tile.securityHeldByUs ? `<p class="disclosure">security seat held by the platform</p>` : ""}
   <p class="links">${openIt} ${evidence}</p>

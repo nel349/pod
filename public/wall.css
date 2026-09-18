@@ -154,3 +154,6 @@ ul.seats li { border: 1px solid var(--line); border-radius: 999px; padding: 4px 
 ul.seats li.open { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 
 ul.checks li.todo::before { content: "·"; color: var(--muted); }
+
+.tile .at { margin: -4px 0 0; font-size: 12.5px; color: var(--muted); }
+.tile .at code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }

@@ -22,6 +22,26 @@ const tile = (over: Partial<Tile> = {}): Tile => ({
 });
 
 describe("a tile never shows a reader a hole", () => {
+  test("one second is not 1 seconds", () => {
+    expect(renderTile(tile({ seconds: 1 }))).toContain("1 second ·");
+    expect(renderTile(tile({ seconds: 2 }))).toContain("2 seconds");
+    expect(renderTile(tile({ seconds: 60 }))).toContain("60 seconds");
+    expect(renderTile(tile({ seconds: 3600 }))).toContain("60 minutes");
+  });
+
+  test("why there is nothing to open depends on what happened", () => {
+    expect(renderTile(tile({ verdict: "failed", open: undefined }))).toContain("nothing shipped: the checks failed");
+    expect(renderTile(tile({ verdict: "passed", open: undefined }))).toContain("archived, code still claimable");
+    expect(renderTile(tile({ verdict: "running", open: undefined }))).toContain("not finished yet");
+  });
+
+  test("two attempts at one idea are told apart by the commit each was graded at", () => {
+    const first = renderTile(tile({ jobId: "a", commit: "c0ffee1234" }));
+    const second = renderTile(tile({ jobId: "b", commit: "7ae91bb000" }));
+    expect(first).toContain("c0ffee1234");
+    expect(second).toContain("7ae91bb000");
+  });
+
   test("a price carries the name of what it is paid in", () => {
     expect(renderTile(tile({ price: 25_000_000_000_000_000_000n }))).toContain("25.00 MON");
   });
