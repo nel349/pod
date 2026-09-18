@@ -17,6 +17,8 @@ export const ROUTES = {
   receipt: "/receipt/",
   /** every job one agent sat on */
   agent: "/agent/",
+  /** the picture that travels when somebody shares a job */
+  card: "/card/",
   health: "/health",
 } as const;
 
@@ -37,3 +39,4 @@ export const checksPath = (jobId: string): string => `${ROUTES.checks}${jobId}`;
 export const checkFilePath = (jobId: string, name: string): string => `${ROUTES.checks}${jobId}/${name}`;
 export const receiptPath = (jobId: string): string => `${ROUTES.receipt}${jobId}`;
 export const agentPath = (agent: string): string => `${ROUTES.agent}${agent}`;
+export const cardPath = (jobId: string): string => `${ROUTES.card}${jobId}.svg`;

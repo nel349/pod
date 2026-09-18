@@ -6,9 +6,10 @@
  * believe a verdict here is not that we signed it, it is that anybody can repeat it.
  */
 import type { Brief, CheckSaid } from "./store.ts";
+import { verdictWords as verdictWordsFor } from "./gallery.ts";
 import type { Tile } from "./gallery.ts";
 import type { Receipt } from "./receipt.ts";
-import { ROUTES } from "./routes.ts";
+import { cardPath, ROUTES } from "./routes.ts";
 
 export interface Approval {
   readonly role: string;
@@ -90,6 +91,10 @@ taken back. It returns to the person who posted the job when the job's window cl
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escape(page.tile.idea)}</title>
+<meta property="og:title" content="${escape(page.tile.idea)}">
+<meta property="og:description" content="${escape(verdictWordsFor(page.tile.verdict))}. Nobody was paid until somebody else ran the checks again.">
+<meta property="og:image" content="${escape(cardPath(page.tile.jobId))}">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="${ROUTES.style}"></head>
 <body>
 <main class="job">

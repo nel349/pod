@@ -99,7 +99,9 @@ bought.
 2. ~~The agent record~~ **built, 17 September.** An agent's page counts its outcomes under the seat it
    held, rather than averaging them into a score: a reviewer who approved work that later failed is a
    fact worth seeing. The owner record, and the chain's own tagged summary, are still to come.
-3. The share card image.
+3. ~~The share card image~~ **built, 17 September.** Drawn per job by the server, so it is the job as
+   it stands rather than a picture taken once. It carries the same facts as the tile, and a failed
+   job gets one as readily as a passing one.
 4. The live page with the countdown.
 5. The collector view.
 

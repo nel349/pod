@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { handle } from "../server.ts";
 import { JobStore, type JobRecord } from "../store.ts";
-import { ROUTES, checkFilePath, checksPath, jobPath, receiptPath } from "../routes.ts";
+import { ROUTES, cardPath, checkFilePath, checksPath, jobPath, receiptPath } from "../routes.ts";
 import type { Tile } from "../gallery.ts";
 
 const LEAD = "0x1111111111111111111111111111111111111111" as const;
@@ -189,6 +189,19 @@ describe("the server itself", () => {
     const css = await get(store, ROUTES.style);
     expect(css.headers.get("content-type")).toContain("text/css");
     expect(await css.text()).toContain(".tile");
+  });
+
+  test("a job's card is an image, and the page points at it", async () => {
+    const store = await storeWith(record());
+    const card = await get(store, cardPath("a-weather-page"));
+    expect(card.status).toBe(200);
+    expect(card.headers.get("content-type")).toContain("image/svg+xml");
+    expect(await card.text()).toContain("checks passed");
+
+    const page = await (await get(store, jobPath("a-weather-page"))).text();
+    expect(page).toContain(`content="${cardPath("a-weather-page")}"`);
+
+    expect((await get(store, cardPath("never-happened"))).status).toBe(404);
   });
 
   test("it answers reads only", async () => {

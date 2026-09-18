@@ -44,6 +44,8 @@ Last updated 2026-09-17.
 | 17 Sep | The judge path walked on the real pages at desktop and phone width, with the two things it found fixed |
 | 17 Sep | An open job says what is asked, which seats are free, and how many checks are sealed |
 | 17 Sep | The POD token: one per job, minted by the validator, holding the commit, the crew and the receipt |
+| 17 Sep | The mint wired into the runner, and proven on a real EVM: the title lands with the person who paid |
+| 17 Sep | The card a shared job carries, drawn per job, failures included |
 
 ## Next
 

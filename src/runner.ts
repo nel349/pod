@@ -93,6 +93,7 @@ export async function runJob(job: RunJob): Promise<RunOutcome> {
   const paid = move === "pay";
   const hash = await settle(job.chain.contract, job.chain.jobId, job.chain.commit, paid);
   if (!paid || !job.chain.token) return { record, verdict, settlement: { hash, paid } };
+  if (!record.signed) throw new Error("a job that passed has a signed receipt, and this one does not");
 
   // the crew has been paid; the title goes to whoever paid for the job, read from the job itself
   const mint = await mintPod(job.chain.token, {
@@ -100,7 +101,7 @@ export async function runJob(job: RunJob): Promise<RunOutcome> {
     jobId: job.chain.jobId,
     seal: record.seal,
     commit: job.chain.commit,
-    receiptHash: record.signed!.hash,
+    receiptHash: record.signed.hash,
     crew: record.tile.pod.map((seat) => ({ role: seat.role as Role, agent: seat.agent })),
     uri: job.chain.uri ?? "",
   });

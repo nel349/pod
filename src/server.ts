@@ -10,6 +10,7 @@
  */
 import { renderWall } from "./gallery.ts";
 import { renderAgent } from "./agentpage.ts";
+import { renderCard } from "./card.ts";
 import { renderJob } from "./jobpage.ts";
 import { checksArePublished, JobStore } from "./store.ts";
 import { checkFilePath, checksPath, isSafeName, ROUTES } from "./routes.ts";
@@ -18,6 +19,7 @@ const TEXT = { "content-type": "text/plain; charset=utf-8" } as const;
 const HTML = { "content-type": "text/html; charset=utf-8" } as const;
 const JSON_TYPE = { "content-type": "application/json; charset=utf-8" } as const;
 const CSS = { "content-type": "text/css; charset=utf-8" } as const;
+const SVG = { "content-type": "image/svg+xml; charset=utf-8" } as const;
 
 const style = new URL("../public/wall.css", import.meta.url);
 
@@ -70,6 +72,13 @@ export async function handle(request: Request, store: JobStore): Promise<Respons
     const jobId = slash === -1 ? rest : rest.slice(0, slash);
     const name = slash === -1 ? "" : rest.slice(slash + 1);
     return name === "" ? await checkIndex(store, jobId) : await oneCheck(store, jobId, name);
+  }
+
+  if (pathname.startsWith(ROUTES.card)) {
+    const jobId = pathname.slice(ROUTES.card.length).replace(/\.svg$/, "");
+    const record = await store.read(jobId);
+    if (!record) return notFound(`no job called ${jobId}`);
+    return new Response(renderCard(record.tile), { headers: SVG });
   }
 
   if (pathname.startsWith(ROUTES.receipt)) {

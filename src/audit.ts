@@ -7,7 +7,7 @@
  *
  * Every assertion is something that would embarrass us if it were false on the day.
  */
-import { checksPath, jobPath, receiptPath, ROUTES } from "./routes.ts";
+import { cardPath, checksPath, jobPath, receiptPath, ROUTES } from "./routes.ts";
 
 export interface Finding {
   readonly what: string;
@@ -74,6 +74,11 @@ export async function audit(base: string, get: typeof globalThis.fetch = globalT
       if (body.includes(hole)) {
         findings.push({ what: `job ${jobId} has no holes in it`, where: jobPath(jobId), detail: `the page contains "${hole}"` });
       }
+    }
+
+    const card = await look(cardPath(jobId), `the card for ${jobId} exists`);
+    if (card?.ok && !(card.headers.get("content-type") ?? "").includes("svg")) {
+      findings.push({ what: `the card for ${jobId} is an image`, where: cardPath(jobId), detail: "it was served as something else" });
     }
 
     const index = await look(checksPath(jobId), `the checks for ${jobId} can be fetched`);
