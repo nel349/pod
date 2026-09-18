@@ -1,0 +1,109 @@
+/**
+ * From a graded job to something a stranger can read.
+ *
+ * The grading produces a verdict and a signed receipt; the wall needs a tile, a page and the checks
+ * themselves. This is the one place that turns the first into the second, so the page can never say
+ * something the receipt does not.
+ *
+ * Every field here is copied, never computed from a guess: the verdict is the receipt's verdict, the
+ * commit is the receipt's commit, the time is the time the rounds actually took. If the pod has no
+ * security seat, the tile says the platform held it, because that is a disclosure and not a detail.
+ */
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import type { Address, Hex } from "viem";
+import type { Tile } from "./gallery.ts";
+import type { Approval } from "./jobpage.ts";
+import type { Mode } from "./job.ts";
+import type { GradeReport } from "./pipeline.ts";
+import { isSafeName, receiptPath } from "./routes.ts";
+import { JobStore, type JobRecord } from "./store.ts";
+
+export interface Seat {
+  readonly role: string;
+  readonly agent: Address;
+  readonly owner: Address;
+}
+
+export interface PublishJob {
+  /** the id the job is known by on the wall, and the name of its directory */
+  readonly jobId: string;
+  readonly seal: Hex;
+  readonly idea: string;
+  readonly mode: Mode;
+  readonly price: bigint;
+  readonly report: GradeReport;
+  readonly pod: readonly Seat[];
+  /** the directory the checks were run from. Its files are published with the job */
+  readonly checksDirectory: string;
+  readonly approvals: readonly Approval[];
+  /** where the thing itself lives, while it lives */
+  readonly open?: string;
+  readonly repository?: string;
+  readonly podHolder?: string;
+}
+
+/** Nobody but the platform in the security seat is a disclosure the tile has to carry. */
+function securityHeldByUs(pod: readonly Seat[]): boolean {
+  return !pod.some((seat) => seat.role === "security");
+}
+
+export function tileFor(job: PublishJob): Tile {
+  const { receipt } = job.report.signed;
+  const seconds = job.report.rounds.reduce((total, round) => total + round.seconds, 0);
+  return {
+    jobId: job.jobId,
+    idea: job.idea,
+    mode: job.mode,
+    verdict: receipt.verdict,
+    open: job.open,
+    commit: receipt.commit,
+    seconds,
+    price: job.price,
+    pod: job.pod,
+    receiptURI: receiptPath(job.jobId),
+    receiptHash: job.report.signed.hash,
+    securityHeldByUs: securityHeldByUs(job.pod),
+    finishedAt: receipt.finishedAt,
+  };
+}
+
+export function recordFor(job: PublishJob): JobRecord {
+  const { receipt } = job.report.signed;
+  return {
+    jobId: job.jobId,
+    seal: job.seal,
+    tile: tileFor(job),
+    checksSaid: receipt.checks.map((check) => ({
+      says: check.says,
+      hidden: check.hidden,
+      exitCode: check.exitCode,
+    })),
+    approvals: job.approvals,
+    signed: job.report.signed,
+    repository: job.repository,
+    podHolder: job.podHolder,
+  };
+}
+
+/**
+ * The checks, as files, so a stranger gets the same ones we ran.
+ *
+ * Flat directory only: the checks box runs each command from one directory, and a check that needs a
+ * tree of its own is a check that needs its own container, which is a different conversation.
+ */
+async function checkFiles(directory: string): Promise<Record<string, string>> {
+  const files: Record<string, string> = {};
+  for (const name of await readdir(directory)) {
+    if (!isSafeName(name)) throw new Error(`a check's filename cannot be published as it stands: ${name}`);
+    files[name] = await readFile(join(directory, name), "utf8");
+  }
+  return files;
+}
+
+/** Write the job where the server reads it, checks and all, and hand back what was written. */
+export async function publish(store: JobStore, job: PublishJob): Promise<JobRecord> {
+  const record = recordFor(job);
+  await store.save(record, await checkFiles(job.checksDirectory));
+  return record;
+}
