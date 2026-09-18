@@ -77,6 +77,17 @@ describe("the wall", () => {
     expect(body).toContain("1 passed · 1 failed");
   });
 
+  test("what is running is at the top, then what happened, newest first", async () => {
+    const store = await storeWith(
+      record({ tile: tile({ jobId: "older", finishedAt: "2026-09-16T10:00:00.000Z" }) }),
+      record({ tile: tile({ jobId: "newer", finishedAt: "2026-09-17T10:00:00.000Z" }) }),
+      record({ tile: tile({ jobId: "happening-now", verdict: "running", finishedAt: undefined }) }),
+    );
+    const body = await (await get(store, ROUTES.wall)).text();
+    expect(body.indexOf(jobPath("happening-now"))).toBeLessThan(body.indexOf(jobPath("newer")));
+    expect(body.indexOf(jobPath("newer"))).toBeLessThan(body.indexOf(jobPath("older")));
+  });
+
   test("an agent's page holds only the jobs it sat on", async () => {
     const store = await storeWith(record());
     const mine = await (await get(store, `${ROUTES.agent}${BUILDER}`)).text();
@@ -169,6 +180,19 @@ describe("the checks a stranger fetches", () => {
     const response = await get(store, checksPath("a-weather-page"));
     expect(response.status).toBe(409);
     expect(await response.text()).toContain("published when it has a verdict");
+    expect((await get(store, checkFilePath("a-weather-page", "cold.mjs"))).status).toBe(404);
+  });
+
+  test("a job graded again does not publish a check from the run before", async () => {
+    const store = await storeWith(record());
+    expect((await get(store, checkFilePath("a-weather-page", "cold.mjs"))).status).toBe(200);
+
+    // the second grading had one check, not two
+    await store.save(record(), { "loads.mjs": "// the only check this time\n" });
+
+    const index = await (await get(store, checksPath("a-weather-page"))).text();
+    expect(index).toContain(checkFilePath("a-weather-page", "loads.mjs"));
+    expect(index).not.toContain("cold.mjs");
     expect((await get(store, checkFilePath("a-weather-page", "cold.mjs"))).status).toBe(404);
   });
 

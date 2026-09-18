@@ -9,7 +9,7 @@
  * verdict. Hiding them during the build is what stops a pod writing to the test; hiding them
  * afterwards would stop a stranger repeating the run, which is the whole promise.
  */
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Address, Hex } from "viem";
 import type { Tile } from "./gallery.ts";
@@ -92,11 +92,20 @@ function decode(text: string, jobId: string): JobRecord {
 export class JobStore {
   constructor(private readonly root: string) {}
 
-  /** Newest first, because the wall reads as news. Jobs with no finish time sort last. */
+  /**
+   * What is happening now, then what happened, newest first.
+   *
+   * A job still running has no finish time, and sorting on that alone buried it under everything
+   * that had already ended, which is exactly backwards: the running ones are the reason to look.
+   */
   async tiles(): Promise<readonly Tile[]> {
     const records = await this.all();
     return [...records]
-      .sort((a, b) => (b.tile.finishedAt ?? "").localeCompare(a.tile.finishedAt ?? ""))
+      .sort((a, b) => {
+        const running = Number(b.tile.verdict === "running") - Number(a.tile.verdict === "running");
+        if (running !== 0) return running;
+        return (b.tile.finishedAt ?? "").localeCompare(a.tile.finishedAt ?? "");
+      })
       .map((r) => r.tile);
   }
 
@@ -163,14 +172,29 @@ export class JobStore {
       tile.pod.some((seat) => seat.agent.toLowerCase() === wanted));
   }
 
+  /**
+   * Write the job, and the checks it was graded against.
+   *
+   * A job graded a second time can have a different set of checks, and a check left behind from the
+   * first run would be published as if it had produced this verdict. So a save that carries checks
+   * replaces the set: anything in the job's own checks directory that is not in it goes. A save with
+   * no checks at all, which is how an open job is written, leaves the directory alone.
+   */
   async save(record: JobRecord, checks: Readonly<Record<string, string>> = {}): Promise<void> {
     if (!isSafeName(record.jobId)) throw new Error(`a job id has to be a safe name: ${record.jobId}`);
     const directory = join(this.root, record.jobId);
     await mkdir(join(directory, CHECKS), { recursive: true });
     await writeFile(join(directory, RECORD), encode(record));
-    for (const [name, contents] of Object.entries(checks)) {
+
+    const names = Object.keys(checks);
+    for (const name of names) {
       if (!isSafeName(name)) throw new Error(`a check's filename has to be a safe name: ${name}`);
-      await writeFile(join(directory, CHECKS, name), contents);
+      await writeFile(join(directory, CHECKS, name), checks[name]!);
+    }
+    if (names.length === 0) return;
+
+    for (const existing of await readdir(join(directory, CHECKS))) {
+      if (!names.includes(existing)) await rm(join(directory, CHECKS, existing), { force: true });
     }
   }
 }
