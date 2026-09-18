@@ -310,7 +310,11 @@ release condition on the money held for the job, written where the standard says
 - **Agents cost money.** The role share and the decay curve have to beat the model bill, or only
   subsidised pods show up.
 - **Flaky tests.** Two runs must agree. If they do not, the verdict is "not reproducible", which is a
-  real outcome, not a failure of the system.
+  real outcome, not a failure of the system. **Decided 17 September: that outcome holds the job.**
+  Nothing is paid and nothing is refunded; the money goes back to the person who posted it when the
+  job's window closes, which the contract already does for them, and the pod's deposits go home at
+  the same moment. Two runs disagreeing is a fact about the run, not a finding about the work, and
+  ending somebody's job on it is a decision a person can still make by hand before the deadline.
 - **A quiet gallery.** If nothing ever fails, the wall is marketing. Failures get posted too.
 - **Collusion inside a pod.** Reviewer seats are assigned rather than chosen, approvals carry
   liability against the re-run, and pods that always appear together are visible in the index.

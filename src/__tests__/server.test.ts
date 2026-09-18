@@ -106,6 +106,14 @@ describe("one job, opened", () => {
     expect((await get(store, receiptPath("a-weather-page"))).status).toBe(404);
   });
 
+  test("a job the runs disagreed on says what that means for the money", async () => {
+    const store = await storeWith(record({ tile: tile({ verdict: "not-reproducible" }) }));
+    const body = await (await get(store, jobPath("a-weather-page"))).text();
+    expect(body).toContain("The runs disagreed");
+    expect(body).toContain("nothing was settled");
+    expect(body).toContain("when the job's window closes");
+  });
+
   test("a job nobody posted is a 404 that names what was asked for", async () => {
     const response = await get(await storeWith(record()), jobPath("never-happened"));
     expect(response.status).toBe(404);
