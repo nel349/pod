@@ -54,11 +54,11 @@ Last updated 2026-09-17.
 
 | # | Thing | Blocked by |
 |---|---|---|
-| 1 | Deploy the contracts to Monad testnet | a funded key |
-| 2 | Wire the pipeline to the chain: request the verdict, write it, settle | after 1. The settle half is already proven on anvil |
-| 3 | Put the wall on a hostname | where it is hosted, and who holds the key that signs |
-| 4 | Prove a stranger can validate a job they did not create | the hostname |
-| 5 | The repository handover that follows the POD | the token is built; the handover is a claim made off chain |
+| 1 | A second job that **fails**, so the wall carries a failure beside the pass | nothing |
+| 2 | Put the wall on a hostname | where it is hosted, and who holds the key that signs |
+| 3 | Prove a stranger can validate a job they did not create, on a public URL | after 2 |
+| 4 | An identity for the other four seats, so every agent has a record of its own | nothing |
+| 5 | The repository handover that follows the POD | an account that owns the repositories |
 | 6 | Mera for the person's wallet, Privy for the agents' keys | the vendors' answers |
 
 ## Parked
