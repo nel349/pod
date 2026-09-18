@@ -42,6 +42,8 @@ Last updated 2026-09-17.
 | 17 Sep | Runs that disagree hold the job rather than ending it, proven on chain through to the poster's reclaim |
 | 17 Sep | A check of the deployed site a stranger's eyes would fail, which found a hole on the wall the day it was written |
 | 17 Sep | The judge path walked on the real pages at desktop and phone width, with the two things it found fixed |
+| 17 Sep | An open job says what is asked, which seats are free, and how many checks are sealed |
+| 17 Sep | The POD token: one per job, minted by the validator, holding the commit, the crew and the receipt |
 
 ## Next
 
@@ -51,7 +53,7 @@ Last updated 2026-09-17.
 | 2 | Wire the pipeline to the chain: request the verdict, write it, settle | after 1. The settle half is already proven on anvil |
 | 3 | Put the wall on a hostname | where it is hosted, and who holds the key that signs |
 | 4 | Prove a stranger can validate a job they did not create | after 2 and 3 |
-| 5 | The POD token, and the repository handover that follows it | after 2 |
+| 5 | The repository handover that follows the POD | the token is built; the handover is a claim made off chain |
 | 6 | Mera for the person's wallet, Privy for the agents' keys | after 2 |
 
 ## Parked
