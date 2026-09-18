@@ -1,6 +1,7 @@
-import { chmod, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { readableToTheBox } from "../../sandbox.ts";
 
 /**
  * A directory shaped like a checkout: readable by whoever runs the box.
@@ -13,11 +14,8 @@ import { join } from "node:path";
  */
 export async function checkout(prefix: string, files: Record<string, string>): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), prefix));
-  await chmod(directory, 0o755);
   for (const [name, contents] of Object.entries(files)) {
-    const path = join(directory, name);
-    await writeFile(path, contents);
-    await chmod(path, 0o644);
+    await writeFile(join(directory, name), contents);
   }
-  return directory;
+  return readableToTheBox(directory);
 }

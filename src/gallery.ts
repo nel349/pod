@@ -61,8 +61,10 @@ export function renderTile(tile: Tile): string {
     `<li><span class="role">${escape(seat.role)}</span> <a href="${agentPath(seat.agent)}">${shortAddress(seat.agent)}</a></li>`,
   ).join("");
 
+  // the hash names which receipt this is, so a tile that has one shows it and a tile that does not
+  // says "receipt" and nothing more. Neither of them prints the word undefined at a reader.
   const evidence = tile.receiptURI
-    ? `<a class="evidence" href="${escape(tile.receiptURI)}">receipt ${tile.receiptHash?.slice(0, 10)}…</a>`
+    ? `<a class="evidence" href="${escape(tile.receiptURI)}">${tile.receiptHash ? `receipt ${escape(tile.receiptHash.slice(0, 10))}…` : "receipt"}</a>`
     : `<span class="evidence none">no receipt yet</span>`;
 
   const openIt = tile.open

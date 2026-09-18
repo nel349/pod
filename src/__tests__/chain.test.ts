@@ -82,13 +82,19 @@ async function post1Hour(): Promise<bigint> {
 
 describe.skipIf(!anvilAvailable)("the money, on a chain that behaves like the real one", () => {
   beforeAll(async () => {
-    port = 8545 + Math.floor(Math.random() * 900);
-    node = Bun.spawn(["anvil", "--port", `${port}`, "--silent"], { stdout: "ignore", stderr: "ignore" });
+    // a high port, so a runner with something already listening on the usual one is not a coin toss
+    port = 20000 + Math.floor(Math.random() * 20000);
+    node = Bun.spawn(["anvil", "--port", `${port}`, "--silent"], { stdout: "pipe", stderr: "pipe" });
     publicClient = createPublicClient({ chain: anvilChain(port), transport: http() }) as PublicClient;
 
-    // wait for the node, then deploy the contract the tests were just built from
-    for (let i = 0; i < 100; i++) {
-      try { await publicClient.getBlockNumber(); break; } catch { await Bun.sleep(100); }
+    // wait for the node, and say what it said if it never comes up rather than failing on every call
+    let up = false;
+    for (let i = 0; i < 300 && !up; i++) {
+      try { await publicClient.getBlockNumber(); up = true; } catch { await Bun.sleep(100); }
+    }
+    if (!up) {
+      const said = await new Response(node.stderr as ReadableStream).text();
+      throw new Error(`anvil never answered on ${port}. It said: ${said.slice(0, 500) || "(nothing)"}`);
     }
 
     const artefact = await Bun.file(new URL("../../contracts/out/PodJobs.sol/PodJobs.json", import.meta.url)).json();
@@ -102,7 +108,7 @@ describe.skipIf(!anvilAvailable)("the money, on a chain that behaves like the re
     } as Parameters<typeof deployer.deployContract>[0]);
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
     address = receipt.contractAddress!;
-  });
+  }, 120_000);
 
   afterAll(() => { node?.kill(); });
 
@@ -112,7 +118,7 @@ describe.skipIf(!anvilAvailable)("the money, on a chain that behaves like the re
     expect(job.price).toBe(PRICE);
     expect(job.state).toBe("open");
     expect(await publicClient.getBalance({ address })).toBeGreaterThanOrEqual(PRICE);
-  });
+  }, 60_000);
 
   test("a pod cannot be packed: one owner, one seat", async () => {
     const jobId = await post1Hour();
@@ -120,7 +126,7 @@ describe.skipIf(!anvilAvailable)("the money, on a chain that behaves like the re
     await takeSeat(at(KEYS[1]!), jobId, "lead", owner);
     // the same owner behind a different agent is still the same owner
     expect(takeSeat(at(KEYS[2]!), jobId, "builder", owner)).rejects.toThrow();
-  });
+  }, 60_000);
 
   test("nobody is paid until the verdict arrives, and then everybody is", async () => {
     const jobId = await post1Hour();
@@ -143,7 +149,7 @@ describe.skipIf(!anvilAvailable)("the money, on a chain that behaves like the re
     const after = await publicClient.getBalance({ address: builder });
     // the seat's share, plus the deposit it put down to hold the seat
     expect(after - before).toBe(pay + pay / 10n);
-  });
+  }, 60_000);
 
   test("a verdict that did not pass refunds the person who paid", async () => {
     const jobId = await post1Hour();
@@ -155,7 +161,7 @@ describe.skipIf(!anvilAvailable)("the money, on a chain that behaves like the re
 
     expect((await readJob({ address, publicClient }, jobId)).state).toBe("refunded");
     expect(await publicClient.getBalance({ address: poster })).toBe(before + PRICE);
-  });
+  }, 60_000);
 
   test("a job nobody could reproduce is held, and the poster takes the money back when time runs out", async () => {
     const jobId = await post1Hour();
@@ -178,13 +184,13 @@ describe.skipIf(!anvilAvailable)("the money, on a chain that behaves like the re
     expect((await readJob({ address, publicClient }, jobId)).state).toBe("refunded");
     const spent = receipt.gasUsed * receipt.effectiveGasPrice;
     expect(await publicClient.getBalance({ address: poster })).toBe(before + PRICE - spent);
-  });
+  }, 60_000);
 
   test("a stranger cannot report a verdict, however good it is", async () => {
     const jobId = await post1Hour();
     await fullPod(jobId);
     expect(settle(at(KEYS[5]!), jobId, COMMIT, true)).rejects.toThrow();
-  });
+  }, 60_000);
 
   test("a later commit clears the approvals that were given for the earlier one", async () => {
     const jobId = await post1Hour();
@@ -197,5 +203,5 @@ describe.skipIf(!anvilAvailable)("the money, on a chain that behaves like the re
 
     expect(await policyMet({ address, publicClient }, jobId, COMMIT)).toBe(false);
     expect(await policyMet({ address, publicClient }, jobId, moved)).toBe(false);
-  });
+  }, 60_000);
 });

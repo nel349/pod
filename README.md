@@ -53,6 +53,16 @@ It fetches the receipt and every check that produced it, checks the receipt's si
 runner it names, runs the checks here in the same sealed box, and prints whether this machine agrees.
 It exits non-zero when it does not. Nothing in it trusts the server it is talking to.
 
+## Checking the deployed site
+
+```
+bun run src/audit.ts https://<host>
+```
+
+It opens the wall as a stranger would, follows every job link, fetches every published check and
+every receipt, and fails if a page shows a hole, a link is dead, or a receipt cannot be repeated. It
+runs against a laptop or the real host, and its output is what we save on submission day.
+
 ## Where it runs
 
 Monad testnet, chain 10143, where the ERC-8004 identity and validation registries are both deployed

@@ -14,6 +14,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { grade, type CheckToRun } from "./blackbox.ts";
+import { readableToTheBox } from "./sandbox.ts";
 import { verifyReceipt, type SignedReceipt } from "./receipt.ts";
 import { reachVerdict, type Verdict } from "./verdict.ts";
 import { checksPath, receiptPath } from "./routes.ts";
@@ -67,6 +68,8 @@ export async function repeat(request: RepeatRequest): Promise<RepeatOutcome> {
 
   const directory = await mkdtemp(join(tmpdir(), "pod-repeat-"));
   for (const check of checks) await writeFile(join(directory, check.name), check.contents);
+  // a temporary directory is readable only by its owner, and the checks box is not its owner
+  await readableToTheBox(directory);
 
   // the checks the receipt says ran, in the order it says they ran, with the files just fetched
   const toRun: CheckToRun[] = signed.receipt.checks.map((check) => ({

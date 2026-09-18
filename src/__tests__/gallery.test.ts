@@ -21,6 +21,14 @@ const tile = (over: Partial<Tile> = {}): Tile => ({
   ...over,
 });
 
+describe("a tile never shows a reader a hole", () => {
+  test("a receipt with no hash is still a link, and says only what it knows", () => {
+    const html = renderTile({ ...tile(), receiptURI: "/receipt/one", receiptHash: undefined });
+    expect(html).toContain('href="/receipt/one"');
+    expect(html).not.toContain("undefined");
+  });
+});
+
 describe("a tile", () => {
   test("leads with the idea in the words it was posted in", () => {
     expect(renderTile(tile())).toContain("a site that rates my excuses");

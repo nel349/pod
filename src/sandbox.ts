@@ -118,6 +118,28 @@ export interface InstallPhase {
   readonly timeoutSeconds?: number;
 }
 
+/**
+ * Make a directory the sealed box can actually read.
+ *
+ * The box drops every capability, including the one that lets root ignore file modes, so a directory
+ * only its owner can read is a directory the box cannot open. Anything we create for a run has to be
+ * opened up deliberately: a temporary directory is 0700 on Linux, which is exactly the shape that
+ * fails, and it fails by the artefact dying on its first command rather than by anything obvious.
+ *
+ * A real job arrives from a git checkout, which is already world readable. This is for the
+ * directories we build ourselves.
+ */
+export async function readableToTheBox(directory: string): Promise<string> {
+  const { chmod, readdir, stat } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  await chmod(directory, 0o755);
+  for (const name of await readdir(directory)) {
+    const path = join(directory, name);
+    await chmod(path, (await stat(path)).isDirectory() ? 0o755 : 0o644);
+  }
+  return directory;
+}
+
 export async function installDependencies(phase: InstallPhase): Promise<SealedRunOutcome> {
   const timeoutSeconds = phase.timeoutSeconds ?? 600;
   const name = `pod-install-${crypto.randomUUID().slice(0, 12)}`;
