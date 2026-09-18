@@ -22,6 +22,10 @@ const tile = (over: Partial<Tile> = {}): Tile => ({
 });
 
 describe("a tile never shows a reader a hole", () => {
+  test("a price carries the name of what it is paid in", () => {
+    expect(renderTile(tile({ price: 25_000_000_000_000_000_000n }))).toContain("25.00 MON");
+  });
+
   test("a receipt with no hash is still a link, and says only what it knows", () => {
     const html = renderTile({ ...tile(), receiptURI: "/receipt/one", receiptHash: undefined });
     expect(html).toContain('href="/receipt/one"');

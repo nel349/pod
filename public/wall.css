@@ -64,8 +64,16 @@ header h1 { margin: 0 0 8px; font-size: clamp(26px, 4vw, 40px); line-height: 1.1
 header p { margin: 0 0 8px; max-width: 62ch; color: var(--muted); }
 .counts { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }
 
-main { display: grid; gap: 20px; padding: 28px 0; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+main { display: grid; gap: 20px; padding: 28px 0; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
 main.job { display: block; max-width: 760px; }
+
+/*
+ * An address is forty-two characters with nothing to break on, and a grid or flex child refuses to
+ * shrink below its longest word. Together that pushes the whole page wider than a phone, which is
+ * how the wall first looked on one. Both halves are answered here: children may shrink, and a word
+ * with nowhere to break may break anywhere.
+ */
+main > *, .tile, main.job { min-width: 0; overflow-wrap: anywhere; }
 
 .tile {
   background: var(--raised);
@@ -129,3 +137,8 @@ a:focus-visible, .tile:focus-within { outline: 2px solid var(--accent); outline-
 
 .job .fetch { margin: 12px 0 0; font-size: 14px; }
 .job .fetch a { color: var(--accent); font-weight: 600; }
+
+/* Wide content scrolls inside its own box. The page itself never scrolls sideways, on any width. */
+.sideways { overflow-x: auto; }
+/* the table scrolls as a whole rather than breaking an address, or a word, across two lines */
+.sideways table th, .sideways table td { white-space: nowrap; }

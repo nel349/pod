@@ -10,6 +10,7 @@
  */
 import type { Address, Hex } from "viem";
 import { agentPath, jobPath, ROUTES } from "./routes.ts";
+import { MONAD_TESTNET } from "./registry.ts";
 
 export interface Tile {
   readonly jobId: string;
@@ -35,7 +36,8 @@ export interface Tile {
 const escape = (text: string): string =>
   text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-const money = (amount: bigint): string => `${(Number(amount) / 1e18).toFixed(2)}`;
+// a number with no unit is not a price. The coin's name comes from the chain we are on.
+const money = (amount: bigint): string => `${(Number(amount) / 1e18).toFixed(2)} ${MONAD_TESTNET.coin}`;
 
 const shortAddress = (address: string): string => `${address.slice(0, 6)}…${address.slice(-4)}`;
 

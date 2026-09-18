@@ -22,6 +22,8 @@ import {
 export const MONAD_TESTNET = {
   id: 10143,
   rpc: "https://testnet-rpc.monad.xyz",
+  /** what the chain's own coin is called, which is what a price on the wall is denominated in */
+  coin: "MON",
   identityRegistry: "0x8004A818BFB912233c491871b3d84c89A494BD9e" as Address,
   validationRegistry: "0x8004Cb1BF31DAf7788923b405b754f57acEB4272" as Address,
 } as const;

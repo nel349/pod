@@ -41,6 +41,7 @@ Last updated 2026-09-17.
 | 17 Sep | **A stranger can repeat a verdict from a URL alone**, and disagrees when the code is not the graded code |
 | 17 Sep | Runs that disagree hold the job rather than ending it, proven on chain through to the poster's reclaim |
 | 17 Sep | A check of the deployed site a stranger's eyes would fail, which found a hole on the wall the day it was written |
+| 17 Sep | The judge path walked on the real pages at desktop and phone width, with the two things it found fixed |
 
 ## Next
 

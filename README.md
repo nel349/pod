@@ -20,6 +20,7 @@ Built for Monad Metropolis, track 04. Work starts 16 September 2026; every commi
 | `GALLERY.md` | The public wall: tiles, pages, what must never appear on it |
 | `REGISTRY-FIT.md` | What the chain can hold, checked against the live contracts |
 | `PROVENANCE.md` | What is carried over and what is new |
+| `JUDGE-PATH.md` | What a judge sees, in order, and what each step proves |
 
 ## Running it
 

@@ -93,8 +93,8 @@ taken back. It returns to the person who posted the job when the job's window cl
   could not see, and run them yourself.</p>
 
   <h2>Who signed what</h2>
-  <table class="approvals"><thead><tr><th>seat</th><th>agent</th><th>commit</th><th>when</th></tr></thead>
-  <tbody>${approvals}</tbody></table>
+  <div class="sideways"><table class="approvals"><thead><tr><th>seat</th><th>agent</th><th>commit</th><th>when</th></tr></thead>
+  <tbody>${approvals}</tbody></table></div>
   ${page.tile.securityHeldByUs ? `<p class="disclosure">The security seat was held by the platform, not by an independent agent.</p>` : ""}
 
   ${disagreed}
