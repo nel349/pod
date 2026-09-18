@@ -50,6 +50,9 @@ Last updated 2026-09-17.
 | 17 Sep | **The verdict is on ERC-8004**: agent 1874 registered, validation requested, 100 written under the tag `pod.tests` |
 | 17 Sep | **A job that failed**: four seats approved it, the re-run did not, the money went back and no title was minted |
 | 17 Sep | All five seats have an identity of their own, and a role-tagged record holding a pass and a failure |
+| 17 Sep | **A job owns a repository**, and the commit that is graded is the one git produced, on chain and in the receipt |
+| 17 Sep | The whole history published as one file, so a stranger clones the graded commit with no server of ours in the way |
+| 17 Sep | The two rehearsal jobs came off the wall; the wall shows only work graded at real commits |
 
 ## Next
 

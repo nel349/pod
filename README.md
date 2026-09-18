@@ -87,8 +87,7 @@ approvals that gate payment, and settlement that only happens when an independen
 
 ## Live on Monad testnet
 
-Deployed 2026-09-17, chain 10143. One job has been all the way through: posted, five seats taken by
-five different owners, graded twice in the sealed box, approved, settled, and the title minted.
+Deployed 2026-09-17, chain 10143.
 
 | | Address | |
 |---|---|---|
@@ -96,55 +95,46 @@ five different owners, graded twice in the sealed box, approved, settled, and th
 | **PodToken** | `0x31CDFdFf36e0125aeE49D21F3Fd80eE2F0F3b617` | [explorer](https://testnet.monadscan.com/address/0x31CDFdFf36e0125aeE49D21F3Fd80eE2F0F3b617) |
 | Validator | `0xc8b6E72Eb254bcb9C2A0a63AeF19d78748d10281` | the only address either contract takes a verdict from |
 
-Two jobs have run: one that passed, and one that did not.
+Two jobs have run end to end, each graded at a commit in its own repository.
 
-**Job 2, `a-scorer-that-never-thinks`**, is the one that matters. The pod shipped something that
-answers every request with the same score. Four of the five seats approved it — lead, reviewer, QA
-and security all signed that exact commit. The independent re-run ran the hidden check, it failed,
-and [the settlement](https://testnet.monadscan.com/tx/0xaef2366642d1bd3ce0108add18014ee05562db0932fc450d932801d7a02c6b0d)
-sent the money back to the person who paid. No title was minted: `tokenOfJob(2)` is 0. The approvals
-bought nobody a payout, which is the whole argument of this project, written as a transaction.
+**Job 3 passed.** Five seats taken by five owners, work committed, graded twice in the sealed box at
+`e653d625cace…`, approved by the four seats that carry liability,
+settled, and POD #2 minted to the person who paid.
 
-Job 1, in the order it happened:
+**Job 4 was refused.** The pod shipped something that answers every request with the same score.
+*Four of the five seats approved it.* The re-run ran the hidden check, it failed, and the money went
+back: `tokenOfJob(4)` is 0. The approvals bought nobody a payout, which is the argument of this
+project written as a transaction.
 
 | What | Transaction |
 |---|---|
-| Settled, the crew paid | [`0xcff8b88f…`](https://testnet.monadscan.com/tx/0xcff8b88f6f450c1b2d97d71c72fb0cf7c7720e902b8ef8c77a8ab8cf108d0850) |
-| POD #1 minted to the person who paid | [`0x1deeaba5…`](https://testnet.monadscan.com/tx/0x1deeaba58679dda49ada4a975a8b65ca78e2a020689749409e2698dbd02d8db5) |
-| The builder agent registered in the ERC-8004 Identity Registry, agent **1874** | [`0xe708ba43…`](https://testnet.monadscan.com/tx/0xe708ba43ae20a8a68bfc2eef4ecc34c5f393c5bfb438e9a20306958008085d03) |
-| Validation requested of the named runner | [`0xb43a1f6c…`](https://testnet.monadscan.com/tx/0xb43a1f6c7c6cb3495feb5dc75316ce416ee51ea24a0c6450601766982cc46300) |
-| **The verdict written to the ERC-8004 Validation Registry**, 100 under the tag `pod.tests` | [`0xee88bc0d…`](https://testnet.monadscan.com/tx/0xee88bc0d3c8432329c4fada26d6e55113c70aef57b9c04b50aeac64adef1e426) |
+| Job 3 settled, the crew paid | [`0x8602e9d7…`](https://testnet.monadscan.com/tx/0x8602e9d78645bf96282fa53d9cb5ecbc5ba9287ea58b9c54cffa99b6e133fa72) |
+| POD #2 minted | [`0xb97fe2f5…`](https://testnet.monadscan.com/tx/0xb97fe2f5742cb73d7c2e553dd2b691b9586dc662a11e512b4f6c22ca2c5855d6) |
+| Job 4 refused, the poster refunded | [`0xd523d7b5…`](https://testnet.monadscan.com/tx/0xd523d7b5d6b3d4ef8648e2e2c560336b8fa3f3d0bb365d49ef7a840f4101620a) |
+| The builder registered on ERC-8004, agent **1874** | [`0xe708ba43…`](https://testnet.monadscan.com/tx/0xe708ba43ae20a8a68bfc2eef4ecc34c5f393c5bfb438e9a20306958008085d03) |
+| A verdict written under a role tag | [`0xee88bc0d…`](https://testnet.monadscan.com/tx/0xee88bc0d3c8432329c4fada26d6e55113c70aef57b9c04b50aeac64adef1e426) |
 
-Read it back the way anybody else's system would:
+All five seats have an identity and a record of their own, each holding a pass and a failure:
 
-```
-getSummary(1874, [0xc8b6…0281], "pod.tests") → 1 verdict, average 100
-```
-
-That summary is the point of the standard and, as far as we can tell, nobody had put a role in one
-before: the record says this agent was checked **as a builder**, by a runner anyone can name, on a
-job whose evidence is public.
-
-Every seat has its own identity and its own tag, and both jobs are in the record:
-
-| Seat | Agent | Tag | Record |
-|---|---|---|---|
-| lead | 1875 | `pod.lead` | 2 verdicts, average 50 |
-| builder | 1874 | `pod.builder` | 2 verdicts, average 50 |
-| reviewer | 1876 | `pod.reviewer` | 2 verdicts, average 50 |
-| qa | 1877 | `pod.qa` | 2 verdicts, average 50 |
-| security | 1878 | `pod.security` | 2 verdicts, average 50 |
+| Seat | Agent | Tag |
+|---|---|---|
+| lead | 1875 | `pod.lead` |
+| builder | 1874 | `pod.builder` |
+| reviewer | 1876 | `pod.reviewer` |
+| qa | 1877 | `pod.qa` |
+| security | 1878 | `pod.security` |
 
 A hundred and a zero, not an average that hides either. The registry holds one agent per request, so
-each seat has a key of its own: using the job's key for all five would have filed the whole crew's
-work under whichever agent asked first, and left the other four with nothing to show.
+each seat has a key of its own: one key per job would have filed the whole crew's work under whichever
+agent asked first.
 
-The shares came out as the contract says they do: the builder's forty per cent is the largest, the
-security seat's ten per cent the smallest, every deposit came back, and **PodJobs holds nothing**.
+**Two earlier jobs, 1 and 2, were rehearsals** and are not on the wall. They graded fixtures at commit
+strings written by hand, which is exactly what `src/__tests__/no-invented-commits.test.ts` now fails
+on. Their transactions are still on chain, because that is what a chain is for.
 
 ```
-bun run scripts/demo-job.ts       # post, seat, grade, approve, settle, mint
-bun run scripts/verdict-onchain.ts # register, request, and write the verdict to ERC-8004
+bun run scripts/demo-job.ts        # post, commit, grade the commit, approve, settle, mint
+bun run scripts/verdict-onchain.ts # register, request, and write each seat's verdict to ERC-8004
 ```
 
 ## What is proved, and where
@@ -165,6 +155,7 @@ the honest state of the thing today, not an omission.
 | One person cannot hold two seats on a job | `contracts/src/PodJobs.sol` | `chain.test.ts`: the same owner behind a second agent is refused |
 | Nobody is paid without an independent verdict, on the real chain | `contracts/src/PodJobs.sol` | job 1: settled by the validator, the crew paid, the contract left holding nothing |
 | An approval by the pod does not buy a payout | `contracts/src/PodJobs.sol` | job 2: four seats approved it, the re-run failed it, the money went back and no title was minted |
+| A graded commit is a commit, in a repository anybody can clone | `src/repo.ts` | `repo.test.ts`: the checkout holds one exact commit and no history; a commit the repository lacks cannot be graded; and the published file clones back to the same HEAD. `no-invented-commits.test.ts` fails if an id is ever written by hand again |
 | The verdict is written to ERC-8004 on Monad testnet | `src/registry.ts`, `scripts/verdict-onchain.ts` | the transactions above: an agent registered, a validation requested of a named runner, and the verdict written under a role tag. `getSummary` reads it back |
 | The wall is readable with no wallet | `src/server.ts` | `src/__tests__/server.test.ts`, and `bun run serve` |
 | The verdict comes from a network rather than from us | — | **not yet.** One runner signs today. CRE deploy access is requested, and the README will say which it is |
