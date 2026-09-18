@@ -11,6 +11,7 @@
 import type { Address, Hex } from "viem";
 import { agentPath, jobPath, ROUTES } from "./routes.ts";
 import { MONAD_TESTNET } from "./registry.ts";
+import { renderSeal, SEATS } from "./seal.ts";
 
 export interface Tile {
   readonly jobId: string;
@@ -62,67 +63,86 @@ export function verdictWords(verdict: Tile["verdict"]): string {
   }
 }
 
+/**
+ * One job, as a row in a public record.
+ *
+ * The whole row is the link. A card where only the heading is clickable is a card that has been
+ * looked at rather than used: people aim at the middle of the thing they want. The heading carries
+ * the link for a keyboard and a screen reader, and its ::after covers the row for a mouse, which is
+ * the one trick in this file.
+ */
 export function renderTile(tile: Tile): string {
-  const roles = tile.pod.map((seat) =>
-    `<li><span class="role">${escape(seat.role)}</span> <a href="${agentPath(seat.agent)}">${shortAddress(seat.agent)}</a></li>`,
+  const seats = tile.pod.map((seat) =>
+    `<li><span class="role">${escape(seat.role)}</span><a href="${agentPath(seat.agent)}">${shortAddress(seat.agent)}</a></li>`,
   ).join("");
 
-  // the hash names which receipt this is, so a tile that has one shows it and a tile that does not
-  // says "receipt" and nothing more. Neither of them prints the word undefined at a reader.
-  const evidence = tile.receiptURI
-    ? `<a class="evidence" href="${escape(tile.receiptURI)}">${tile.receiptHash ? `receipt ${escape(tile.receiptHash.slice(0, 10))}…` : "receipt"}</a>`
-    : `<span class="evidence none">no receipt yet</span>`;
+  const openSeats = SEATS.filter((role) => !tile.pod.some((seat) => seat.role === role));
+  const waiting = openSeats.length > 0 && tile.verdict === "running"
+    ? `<li class="waiting">${openSeats.length} ${openSeats.length === 1 ? "seat" : "seats"} still open</li>`
+    : "";
 
-  // Why there is nothing to open is not one answer. Work that failed never shipped; work that
-  // passed and went unclaimed was taken down; work still running has not got there yet.
   const nothingToOpen = {
-    failed: "nothing shipped: the checks failed",
-    "not-reproducible": "nothing shipped: the runs disagreed",
-    running: "not finished yet",
-    passed: "archived, code still claimable",
+    failed: "nothing shipped",
+    "not-reproducible": "nothing shipped",
+    running: "not finished",
+    passed: "archived, still claimable",
   }[tile.verdict];
 
-  const openIt = tile.open
-    ? `<a class="open" href="${escape(tile.open)}">Open it</a>`
-    : `<span class="open gone">${escape(nothingToOpen)}</span>`;
+  const evidence = tile.receiptURI
+    ? `<a class="evidence" href="${escape(tile.receiptURI)}">receipt</a>`
+    : `<span class="evidence none">no receipt</span>`;
 
   return `<article class="tile ${tile.verdict}">
-  <h3><a href="${escape(jobPath(tile.jobId))}">${escape(tile.idea)}</a></h3>
-  <p class="line">${escape(verdictWords(tile.verdict))}${tile.seconds ? ` · ${took(tile.seconds)}` : ""} · ${money(tile.price)} · ${escape(tile.mode)}</p>
-  ${tile.commit ? `<p class="at">at <code>${escape(tile.commit.slice(0, 10))}</code></p>` : ""}
-  <ul class="pod">${roles}</ul>
-  ${tile.securityHeldByUs ? `<p class="disclosure">security seat held by the platform</p>` : ""}
-  <p class="links">${openIt} ${evidence}</p>
+  <div class="mark">${renderSeal(tile)}</div>
+  <div class="said">
+    <h2><a href="${escape(jobPath(tile.jobId))}">${escape(tile.idea)}</a></h2>
+    <p class="verdict">${escape(verdictWords(tile.verdict))}</p>
+    <ul class="pod">${seats}${waiting}</ul>
+  </div>
+  <div class="facts">
+    <p class="price">${money(tile.price)}</p>
+    <p class="meta">${escape(tile.mode)}${tile.seconds ? ` · ${took(tile.seconds)}` : ""}</p>
+    ${tile.commit ? `<p class="meta"><code>${escape(tile.commit.slice(0, 7))}</code></p>` : ""}
+    <p class="links">${tile.open
+      ? `<a class="open" href="${escape(tile.open)}">open it</a>`
+      : `<span class="open gone">${escape(nothingToOpen)}</span>`} ${evidence}</p>
+  </div>
 </article>`;
 }
 
-/**
- * The wall itself.
- *
- * Failures are not filtered out and cannot be: the caller hands us tiles, and the page shows what it
- * is given, newest first. If a wall ever looks perfect, that is a fact about the jobs, not a choice
- * made here.
- */
 export function renderWall(tiles: readonly Tile[]): string {
   const counts = {
     passed: tiles.filter((t) => t.verdict === "passed").length,
     failed: tiles.filter((t) => t.verdict === "failed").length,
     unreproducible: tiles.filter((t) => t.verdict === "not-reproducible").length,
+    running: tiles.filter((t) => t.verdict === "running").length,
   };
+
+  const tally = [
+    counts.running > 0 ? `<span class="running">${counts.running} running</span>` : "",
+    `<span class="passed">${counts.passed} paid</span>`,
+    `<span class="failed">${counts.failed} refused</span>`,
+    counts.unreproducible > 0 ? `<span class="unsure">${counts.unreproducible} unrepeatable</span>` : "",
+  ].filter(Boolean).join("");
 
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>POD, built by pods of agents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="${ROUTES.style}"></head>
 <body>
-<header>
-  <h1>Bring an idea, assemble a pod, keep the proof</h1>
-  <p>Each of these was built by agents owned by different people. Nobody was paid until the checks
-  were run again by somebody else. Open any of them.</p>
-  <p class="counts">${counts.passed} passed · ${counts.failed} failed · ${counts.unreproducible} could not be reproduced</p>
+<header class="masthead">
+  <p class="eyebrow">Proof of Development</p>
+  <h1>Nobody is paid until somebody else runs the checks again</h1>
+  <p class="stand">Each of these was built by a pod of agents owned by different people. The checks
+  that decide were re-run in a sealed box by a party with no stake in the answer. Both outcomes are
+  on this page, because a wall with only wins on it is an advertisement.</p>
+  <p class="tally">${tally}</p>
 </header>
 <main>${tiles.map(renderTile).join("\n")}</main>
-<footer><p>Monad testnet. The money is test money and the refusals are real.</p></footer>
+<footer><p>Monad testnet. The money is test money. The refusals are real.</p></footer>
 </body></html>`;
 }

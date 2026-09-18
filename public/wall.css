@@ -1,159 +1,258 @@
 /*
- * The wall, and every page that hangs off it.
+ * POD: a public record of work that was checked by somebody with no stake in the answer.
  *
- * Two things the styling has to carry: a failed job is as legible as a passed one, and the evidence
- * is never smaller than the claim. Verdicts are said in words in the markup; the colour here is a
- * second signal, never the only one.
+ * The identity is a ledger, not a dashboard: ink on cool paper, an editorial serif for the ideas
+ * themselves, and a plain institutional sans for everything the machine contributes. Colour appears
+ * in exactly two places — the seal, and the sentence that says what happened — so that a verdict is
+ * the only thing on the page competing for attention.
+ *
+ * The seal carries the mechanism. Five wedges, one per seat: closed when the checks passed, broken
+ * when they did not, incomplete while the job is open, and never settling when the runs disagreed.
+ * The motion is the fact, which is why it is the only motion here.
  */
 
 :root {
-  --ground: #f6f5f2;
-  --raised: #ffffff;
-  --ink: #17181c;
-  --muted: #5d6068;
-  --line: #e0dfda;
-  --accent: #2f4fd4;
-  --passed: #1d6f45;
-  --failed: #9a3412;
-  --unsure: #6b5b16;
-  --radius: 10px;
-  --gutter: 16px;
+  --paper: #f1f2f4;
+  --raised: #fbfbfc;
+  --ink: #14161a;
+  --muted: #5a6068;
+  --line: #d9dce1;
+  --rule: #c3c8d0;
+
+  --paid: #0f6b57;
+  --refused: #7a1f3d;
+  --unsure: #7a5c10;
+  --running: #2b3a8f;
+  --link: #1f2a44;
+
+  --gutter: clamp(20px, 5vw, 64px);
+  --measure: 1180px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --ground: #14151a;
-    --raised: #1c1e25;
-    --ink: #edeef2;
-    --muted: #a0a4b0;
-    --line: #2b2e38;
-    --accent: #8fa6ff;
-    --passed: #5fcf95;
-    --failed: #ff9c6e;
-    --unsure: #d9c463;
+    --paper: #101216;
+    --raised: #171a20;
+    --ink: #e9ebef;
+    --muted: #9aa1ab;
+    --line: #262b33;
+    --rule: #333944;
+    --paid: #58c9a6;
+    --refused: #e2879f;
+    --unsure: #d6b64e;
+    --running: #8f9fe8;
+    --link: #cfd6e6;
   }
 }
 
 :root[data-theme="dark"] {
-  --ground: #14151a;
-  --raised: #1c1e25;
-  --ink: #edeef2;
-  --muted: #a0a4b0;
-  --line: #2b2e38;
-  --accent: #8fa6ff;
-  --passed: #5fcf95;
-  --failed: #ff9c6e;
-  --unsure: #d9c463;
+  --paper: #101216; --raised: #171a20; --ink: #e9ebef; --muted: #9aa1ab;
+  --line: #262b33; --rule: #333944;
+  --paid: #58c9a6; --refused: #e2879f; --unsure: #d6b64e; --running: #8f9fe8; --link: #cfd6e6;
 }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; min-width: 0; }
 
 body {
   margin: 0;
-  padding: 0 var(--gutter) 64px;
-  background: var(--ground);
+  padding: 0 var(--gutter) 96px;
+  background: var(--paper);
   color: var(--ink);
-  font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 400 16px/1.6 "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  overflow-wrap: anywhere;
 }
 
-header, main, footer { max-width: 1080px; margin: 0 auto; }
+.masthead, main, footer, .job { max-width: var(--measure); margin: 0 auto; }
 
-header { padding: 48px 0 24px; border-bottom: 1px solid var(--line); }
-header h1 { margin: 0 0 8px; font-size: clamp(26px, 4vw, 40px); line-height: 1.15; text-wrap: balance; }
-header p { margin: 0 0 8px; max-width: 62ch; color: var(--muted); }
-.counts { font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }
+/* ---------- the masthead ---------- */
 
-main { display: grid; gap: 20px; padding: 28px 0; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
-main.job { display: block; max-width: 760px; }
+.masthead { padding: clamp(48px, 9vw, 104px) 0 40px; }
 
-/*
- * An address is forty-two characters with nothing to break on, and a grid or flex child refuses to
- * shrink below its longest word. Together that pushes the whole page wider than a phone, which is
- * how the wall first looked on one. Both halves are answered here: children may shrink, and a word
- * with nowhere to break may break anywhere.
- */
-main > *, .tile, main.job { min-width: 0; overflow-wrap: anywhere; }
+.eyebrow {
+  margin: 0 0 20px;
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.masthead h1 {
+  margin: 0 0 20px;
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(34px, 6.2vw, 72px);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  max-width: 19ch;
+}
+
+.stand { margin: 0 0 28px; max-width: 58ch; color: var(--muted); font-size: 17px; }
+
+.tally { display: flex; flex-wrap: wrap; gap: 0 22px; margin: 0; font-size: 14px; font-variant-numeric: tabular-nums; }
+.tally span { position: relative; padding-left: 16px; }
+.tally span::before {
+  content: ""; position: absolute; left: 0; top: 0.55em;
+  width: 8px; height: 8px; border-radius: 50%; background: currentColor;
+}
+.tally .passed { color: var(--paid); }
+.tally .failed { color: var(--refused); }
+.tally .unsure { color: var(--unsure); }
+.tally .running { color: var(--running); }
+
+/* ---------- the ledger ---------- */
+
+main { border-top: 2px solid var(--ink); }
 
 .tile {
-  background: var(--raised);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 18px 18px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  position: relative;
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr) auto;
+  gap: clamp(20px, 3vw, 44px);
+  align-items: start;
+  padding: 36px 0;
+  border-bottom: 1px solid var(--rule);
+  transition: background 220ms ease;
 }
-.tile h3 { margin: 0; font-size: 19px; line-height: 1.3; text-wrap: balance; }
-.tile h3 a { color: var(--ink); text-decoration: none; }
-.tile h3 a:hover { text-decoration: underline; }
-.tile .line { margin: 0; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
-.tile.passed .line { color: var(--passed); }
-.tile.failed .line { color: var(--failed); }
-.tile.not-reproducible .line { color: var(--unsure); }
 
-ul.pod { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 13px; }
-ul.pod .role { color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: 11px; }
-ul.pod a { color: var(--accent); text-decoration: none; }
+.tile:hover, .tile:focus-within { background: var(--raised); }
 
-.disclosure { margin: 0; font-size: 13px; color: var(--unsure); }
+/* the whole row is the target; the heading's link is what a keyboard and a reader get */
+.said h2 { margin: 0 0 10px; font-family: "Fraunces", Georgia, serif; font-weight: 400; font-size: clamp(22px, 2.6vw, 34px); line-height: 1.12; letter-spacing: -0.01em; text-wrap: balance; }
+.said h2 a { color: inherit; text-decoration: none; }
+.said h2 a::after { content: ""; position: absolute; inset: 0; }
+.said h2 a:hover { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
 
-.links { margin: auto 0 0; display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; font-size: 14px; }
-.open { color: var(--accent); font-weight: 600; text-decoration: none; }
-.open.gone { color: var(--muted); font-weight: 400; }
-.evidence { color: var(--muted); font-variant-numeric: tabular-nums; }
-.evidence.none { font-style: italic; }
+.verdict { margin: 0 0 16px; font-size: 15px; font-weight: 500; }
+.passed .verdict { color: var(--paid); }
+.failed .verdict { color: var(--refused); }
+.not-reproducible .verdict { color: var(--unsure); }
+.running .verdict { color: var(--running); }
 
-.job h1 { margin: 40px 0 6px; font-size: clamp(24px, 4vw, 34px); text-wrap: balance; }
-.job h2 { margin: 32px 0 10px; font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
-.job .line, .job .seal { margin: 0 0 4px; color: var(--muted); }
-.job code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; }
+ul.pod { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 13px; }
+ul.pod li { display: flex; gap: 6px; align-items: baseline; }
+ul.pod .role { color: var(--muted); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+ul.pod a { position: relative; z-index: 1; color: var(--link); text-decoration: none; border-bottom: 1px solid var(--line); font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; }
+ul.pod a:hover { border-bottom-color: currentColor; }
+ul.pod .waiting { color: var(--running); }
+
+.facts { text-align: right; }
+.facts p { margin: 0; }
+.price { font-family: "Fraunces", Georgia, serif; font-size: 26px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.meta { font-size: 13px; color: var(--muted); }
+.meta code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; }
+.facts .links { margin-top: 12px; display: flex; gap: 14px; justify-content: flex-end; font-size: 13px; }
+.facts .links a { position: relative; z-index: 1; color: var(--link); }
+.open.gone, .evidence.none { color: var(--muted); }
+
+/* ---------- the seal ---------- */
+
+.mark { display: grid; place-items: start center; }
+.seal { width: 92px; height: 92px; overflow: visible; }
+
+.seal .piece {
+  fill: var(--ink);
+  transform-origin: 50px 50px;
+  animation: settle 620ms cubic-bezier(0.2, 0.9, 0.2, 1) backwards;
+}
+.seal .piece.free { fill: none; stroke: var(--line); stroke-width: 1; }
+
+.seal.passed .piece.held { fill: var(--paid); }
+.seal.failed .piece.held { fill: var(--refused); }
+.seal.not-reproducible .piece.held { fill: var(--unsure); }
+.seal.running .piece.held { fill: var(--running); }
+
+/* each piece arrives in turn: a pod assembles, it does not appear */
+.piece-0 { animation-delay: 0ms; }
+.piece-1 { animation-delay: 70ms; }
+.piece-2 { animation-delay: 140ms; }
+.piece-3 { animation-delay: 210ms; }
+.piece-4 { animation-delay: 280ms; }
+
+@keyframes settle {
+  from { transform: rotate(-24deg) scale(0.86); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+/* a broken ring: the pieces are pushed apart, and stay that way */
+.seal.failed .piece.held { transform: scale(1.06); }
+
+/* runs that never agreed, and a shape that never settles */
+@keyframes unsettled {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+.seal.not-reproducible .piece.held { animation: settle 620ms cubic-bezier(0.2,0.9,0.2,1) backwards, unsettled 2.6s ease-in-out 700ms infinite; }
+
+/* a job still being worked on turns slowly, because it is not finished */
+@keyframes turning { to { transform: rotate(360deg); } }
+.seal.running { animation: turning 44s linear infinite; }
+
+/* the pieces separate slightly when you consider the row: five seats, not one badge */
+.tile:hover .seal .piece.held, .tile:focus-within .seal .piece.held { transform: scale(1.05); }
+.seal .piece { transition: transform 260ms cubic-bezier(0.2, 0.9, 0.2, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .seal .piece, .seal { animation: none !important; transition: none; }
+}
+
+/* ---------- one job ---------- */
+
+.job { padding: clamp(40px, 7vw, 88px) 0 0; }
+.job h1 { margin: 0 0 16px; font-family: "Fraunces", Georgia, serif; font-weight: 400; font-size: clamp(30px, 5vw, 56px); line-height: 1.05; letter-spacing: -0.02em; text-wrap: balance; max-width: 22ch; }
+.job h2 { margin: 48px 0 14px; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+.job .line, .job .seal-line { margin: 0 0 6px; color: var(--muted); }
+.job code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.92em; }
+.job a { color: var(--link); }
 
 ul.checks { list-style: none; margin: 0; padding: 0; }
-ul.checks li { padding: 8px 0 8px 26px; border-bottom: 1px solid var(--line); position: relative; }
-ul.checks li::before { position: absolute; left: 0; font-weight: 700; }
-ul.checks li.ok::before { content: "✓"; color: var(--passed); }
-ul.checks li.no::before { content: "✕"; color: var(--failed); }
-.hidden-check { color: var(--muted); font-size: 13px; }
+ul.checks li { padding: 14px 0 14px 30px; border-bottom: 1px solid var(--line); position: relative; font-size: 17px; }
+ul.checks li::before { position: absolute; left: 0; top: 14px; font-weight: 600; }
+ul.checks li.ok::before { content: "✓"; color: var(--paid); }
+ul.checks li.no::before { content: "✕"; color: var(--refused); }
+ul.checks li.todo::before { content: "·"; color: var(--muted); }
+.hidden-check { color: var(--muted); font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; }
 
+.job .fetch { margin: 16px 0 0; font-size: 15px; }
+.asked { font-family: "Fraunces", Georgia, serif; font-size: 22px; line-height: 1.4; max-width: 54ch; }
+.sealed-count, .ends { color: var(--muted); font-size: 14px; }
+ul.seats { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+ul.seats li { border: 1px solid var(--line); border-radius: 999px; padding: 5px 14px; font-size: 13px; }
+ul.seats li.open { border-color: var(--running); color: var(--running); }
+
+.sideways { overflow-x: auto; }
+.sideways table th, .sideways table td { white-space: nowrap; }
 table.approvals { width: 100%; border-collapse: collapse; font-size: 14px; }
-table.approvals th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
-table.approvals th, table.approvals td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); }
+table.approvals th { text-align: left; color: var(--muted); font-weight: 500; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; }
+table.approvals th, table.approvals td { padding: 12px 20px 12px 0; border-bottom: 1px solid var(--line); }
+table.approvals td { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12.5px; }
 
 pre.repeat {
   background: var(--raised);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 16px;
+  border-left: 3px solid var(--ink);
+  padding: 20px;
   overflow-x: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
-  line-height: 1.5;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
 }
 
-footer { padding-top: 24px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+.disclosure { color: var(--unsure); font-size: 14px; }
+.none { max-width: 58ch; color: var(--muted); padding: 32px 0; }
+.agent-address { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; color: var(--muted); }
 
-a:focus-visible, .tile:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+footer { padding-top: 40px; color: var(--muted); font-size: 13px; }
 
-.job .fetch { margin: 12px 0 0; font-size: 14px; }
-.job .fetch a { color: var(--accent); font-weight: 600; }
+a:focus-visible, .tile:focus-within { outline: 2px solid var(--ink); outline-offset: 3px; }
 
-/* Wide content scrolls inside its own box. The page itself never scrolls sideways, on any width. */
-.sideways { overflow-x: auto; }
-/* the table scrolls as a whole rather than breaking an address, or a word, across two lines */
-.sideways table th, .sideways table td { white-space: nowrap; }
+/* ---------- a phone ---------- */
 
-.agent-address { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; word-break: break-all; }
-header + .sideways { margin-top: 24px; }
-.none { max-width: 62ch; color: var(--muted); padding: 28px 0; }
-
-.asked { font-size: 18px; line-height: 1.5; max-width: 62ch; }
-.sealed-count, .ends { color: var(--muted); font-size: 14px; }
-ul.seats { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-ul.seats li { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 13px; background: var(--raised); }
-ul.seats li.open { border-color: var(--accent); color: var(--accent); font-weight: 600; }
-
-ul.checks li.todo::before { content: "·"; color: var(--muted); }
-
-.tile .at { margin: -4px 0 0; font-size: 12.5px; color: var(--muted); }
-.tile .at code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+@media (max-width: 720px) {
+  .tile { grid-template-columns: 64px minmax(0, 1fr); gap: 18px; padding: 28px 0; }
+  .seal { width: 56px; height: 56px; }
+  .facts { grid-column: 2; text-align: left; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+  .facts .links { margin-top: 0; justify-content: flex-start; width: 100%; }
+  .price { font-size: 20px; }
+}
