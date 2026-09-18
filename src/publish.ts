@@ -14,7 +14,8 @@ import { join } from "node:path";
 import type { Address, Hex } from "viem";
 import type { Tile } from "./gallery.ts";
 import type { Approval } from "./jobpage.ts";
-import type { Mode } from "./job.ts";
+import type { Mode, Role, Spec } from "./job.ts";
+import { publicSpec } from "./job.ts";
 import type { GradeReport } from "./pipeline.ts";
 import { isSafeName, receiptPath } from "./routes.ts";
 import { JobStore, type JobRecord } from "./store.ts";
@@ -105,5 +106,51 @@ async function checkFiles(directory: string): Promise<Record<string, string>> {
 export async function publish(store: JobStore, job: PublishJob): Promise<JobRecord> {
   const record = recordFor(job);
   await store.save(record, await checkFiles(job.checksDirectory));
+  return record;
+}
+
+export interface OpenJob {
+  readonly jobId: string;
+  readonly seal: Hex;
+  /** the spec as posted. Only what publicSpec allows ever reaches the page */
+  readonly spec: Spec;
+  readonly endsAt: Date;
+  readonly seats: readonly { readonly role: Role; readonly seat?: Seat }[];
+}
+
+/**
+ * Publish a job that is open, before anybody has built anything.
+ *
+ * What reaches the page is what `publicSpec` allows: the idea, the visible checks, and a count of
+ * the ones that are sealed. The hidden checks themselves stay off this server until there is a
+ * verdict, which is the moment they stop being able to change what a pod writes.
+ */
+export async function openJob(store: JobStore, job: OpenJob): Promise<JobRecord> {
+  const shown = publicSpec(job.spec);
+  const taken = job.seats.filter((seat) => seat.seat !== undefined);
+
+  const record: JobRecord = {
+    jobId: job.jobId,
+    seal: job.seal,
+    tile: {
+      jobId: job.jobId,
+      idea: shown.idea,
+      mode: shown.mode,
+      verdict: "running",
+      price: shown.price,
+      pod: taken.map((seat) => seat.seat!),
+      securityHeldByUs: !job.seats.some((seat) => seat.role === "security" && seat.seat !== undefined),
+    },
+    checksSaid: shown.checks.map((check) => ({ says: check.says, hidden: check.hidden })),
+    approvals: [],
+    brief: {
+      asked: shown.idea,
+      endsAt: job.endsAt.toISOString(),
+      sealedChecks: job.spec.checks.length - shown.checks.length,
+      seats: job.seats.map((seat) => ({ role: seat.role, taken: seat.seat !== undefined })),
+    },
+  };
+
+  await store.save(record);
   return record;
 }

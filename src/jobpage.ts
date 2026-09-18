@@ -5,6 +5,7 @@
  * exactly how to run it again yourself. The last part is the one that matters, because the reason to
  * believe a verdict here is not that we signed it, it is that anybody can repeat it.
  */
+import type { Brief, CheckSaid } from "./store.ts";
 import type { Tile } from "./gallery.ts";
 import type { Receipt } from "./receipt.ts";
 import { ROUTES } from "./routes.ts";
@@ -20,9 +21,11 @@ export interface JobPage {
   readonly tile: Tile;
   /** the idea as posted, and the hash it was sealed under before it opened */
   readonly seal: string;
-  readonly checksSaid: readonly { readonly says: string; readonly hidden: boolean; readonly exitCode: number }[];
+  readonly checksSaid: readonly CheckSaid[];
   readonly approvals: readonly Approval[];
   readonly receipt?: Receipt;
+  /** while the job is open, what a pod is being asked for */
+  readonly brief?: Brief;
   /** where the code went, and who holds the token that owns it */
   readonly repository?: string;
   readonly podHolder?: string;
@@ -50,9 +53,14 @@ export function repeatCommand(receipt: Receipt, checksURI: string): string {
 }
 
 export function renderJob(page: JobPage, checksURI: string): string {
+  const outcome = (exitCode?: number): string =>
+    exitCode === undefined ? "todo" : exitCode === 0 ? "ok" : "no";
+
   const checks = page.checksSaid.map((c) =>
-    `<li class="${c.exitCode === 0 ? "ok" : "no"}">${escape(c.says)}${c.hidden ? ` <span class="hidden-check">hidden from the pod</span>` : ""}</li>`,
+    `<li class="${outcome(c.exitCode)}">${escape(c.says)}${c.hidden ? ` <span class="hidden-check">hidden from the pod</span>` : ""}</li>`,
   ).join("");
+
+  const checksHeading = page.tile.verdict === "running" ? "What will be checked" : "What was checked";
 
   const approvals = page.approvals.map((a) =>
     `<tr><td>${escape(a.role)}</td><td>${escape(a.agent)}</td><td><code>${escape(a.commit.slice(0, 10))}</code></td><td>${escape(a.at)}</td></tr>`,
@@ -63,6 +71,8 @@ export function renderJob(page: JobPage, checksURI: string): string {
 <p>This is the run we did. Nothing about it is private.</p>
 <pre class="repeat">${escape(repeatCommand(page.receipt, checksURI))}</pre>`
     : "";
+
+  const brief = page.brief && page.tile.verdict === "running" ? renderBrief(page.brief) : "";
 
   // The third outcome is the one a reader will not have a word for, so the page says it in full.
   const disagreed = page.tile.verdict === "not-reproducible"
@@ -87,7 +97,7 @@ taken back. It returns to the person who posted the job when the job's window cl
   <p class="line">${escape(page.tile.verdict)}${page.tile.commit ? ` · commit <code>${escape(page.tile.commit.slice(0, 10))}</code>` : ""}</p>
   <p class="seal">sealed before it opened as <code>${escape(page.seal.slice(0, 18))}…</code></p>
 
-  <h2>What was checked</h2>
+  <h2>${checksHeading}</h2>
   <ul class="checks">${checks}</ul>
   <p class="fetch"><a href="${escape(checksURI)}">Fetch the checks</a>, including the ones the pod
   could not see, and run them yourself.</p>
@@ -97,9 +107,31 @@ taken back. It returns to the person who posted the job when the job's window cl
   <tbody>${approvals}</tbody></table></div>
   ${page.tile.securityHeldByUs ? `<p class="disclosure">The security seat was held by the platform, not by an independent agent.</p>` : ""}
 
+  ${brief}
   ${disagreed}
   ${repeat}
   ${ownership}
 </main>
 </body></html>`;
+}
+
+/**
+ * An open job, as a pod and a passer-by both read it.
+ *
+ * It says how many checks are sealed rather than pretending there are none: knowing that two of the
+ * four are hidden is exactly what stops a pod writing to the tests, and it is no secret.
+ */
+function renderBrief(brief: Brief): string {
+  const seats = brief.seats.map((seat) =>
+    `<li class="${seat.taken ? "taken" : "open"}">${escape(seat.role)}${seat.taken ? "" : " — open"}</li>`,
+  ).join("");
+
+  return `<h2>What is being asked for</h2>
+<p class="asked">${escape(brief.asked)}</p>
+<p class="sealed-count">${brief.sealedChecks === 0
+    ? "Every check on this job is published above."
+    : `${brief.sealedChecks} ${brief.sealedChecks === 1 ? "check is" : "checks are"} sealed until there is a verdict. The pod cannot read ${brief.sealedChecks === 1 ? "it" : "them"} either.`}</p>
+<h2>Seats</h2>
+<ul class="seats">${seats}</ul>
+<p class="ends">Open until ${escape(brief.endsAt)}.</p>`;
 }

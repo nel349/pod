@@ -58,6 +58,7 @@ export async function handle(request: Request, store: JobStore): Promise<Respons
       checksSaid: record.checksSaid,
       approvals: record.approvals,
       receipt: record.signed?.receipt,
+      brief: record.brief,
       repository: record.repository,
       podHolder: record.podHolder,
     }, checksPath(jobId)), { headers: HTML });

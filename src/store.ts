@@ -17,10 +17,26 @@ import type { Approval } from "./jobpage.ts";
 import type { SignedReceipt } from "./receipt.ts";
 import { isSafeName } from "./routes.ts";
 
+/**
+ * What an open job tells a pod, and tells a reader, before there is any verdict.
+ *
+ * The sealed part is deliberately visible as a number: a pod can see that four checks exist and read
+ * two of them, which is the whole mechanism said out loud rather than hidden.
+ */
+export interface Brief {
+  /** the idea as posted, once the seal was opened */
+  readonly asked: string;
+  readonly endsAt: string;
+  /** how many checks are sealed until there is a verdict */
+  readonly sealedChecks: number;
+  readonly seats: readonly { readonly role: string; readonly taken: boolean }[];
+}
+
 export interface CheckSaid {
   readonly says: string;
   readonly hidden: boolean;
-  readonly exitCode: number;
+  /** absent on a job nobody has graded yet: a check with no outcome is not a check that passed */
+  readonly exitCode?: number;
 }
 
 /** One graded job, as the runner leaves it behind. */
@@ -30,6 +46,8 @@ export interface JobRecord {
   readonly tile: Tile;
   readonly checksSaid: readonly CheckSaid[];
   readonly approvals: readonly Approval[];
+  /** present while the job is open. A graded job is described by its receipt instead */
+  readonly brief?: Brief;
   readonly signed?: SignedReceipt;
   readonly repository?: string;
   readonly podHolder?: string;

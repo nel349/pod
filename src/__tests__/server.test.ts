@@ -106,6 +106,37 @@ describe("one job, opened", () => {
     expect((await get(store, receiptPath("a-weather-page"))).status).toBe(404);
   });
 
+  test("a job still open says what is being asked for, and what is sealed", async () => {
+    const store = await storeWith(record({
+      tile: tile({ verdict: "running" }),
+      brief: {
+        asked: "A page that tells me whether to take a coat, from my postcode",
+        endsAt: "2026-09-18T10:00:00.000Z",
+        sealedChecks: 2,
+        seats: [{ role: "lead", taken: true }, { role: "builder", taken: true }, { role: "security", taken: false }],
+      },
+    }));
+
+    const body = await (await get(store, jobPath("a-weather-page"))).text();
+    expect(body).toContain("What is being asked for");
+    expect(body).toContain("from my postcode");
+    expect(body).toContain("2 checks are sealed until there is a verdict");
+    expect(body).toContain("security — open");
+  });
+
+  test("a graded job is described by its receipt, not by a brief", async () => {
+    const store = await storeWith(record({
+      brief: {
+        asked: "A page that tells me whether to take a coat",
+        endsAt: "2026-09-18T10:00:00.000Z",
+        sealedChecks: 2,
+        seats: [{ role: "lead", taken: true }],
+      },
+    }));
+    const body = await (await get(store, jobPath("a-weather-page"))).text();
+    expect(body).not.toContain("What is being asked for");
+  });
+
   test("a job the runs disagreed on says what that means for the money", async () => {
     const store = await storeWith(record({ tile: tile({ verdict: "not-reproducible" }) }));
     const body = await (await get(store, jobPath("a-weather-page"))).text();

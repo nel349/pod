@@ -146,3 +146,11 @@ a:focus-visible, .tile:focus-within { outline: 2px solid var(--accent); outline-
 .agent-address { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; word-break: break-all; }
 header + .sideways { margin-top: 24px; }
 .none { max-width: 62ch; color: var(--muted); padding: 28px 0; }
+
+.asked { font-size: 18px; line-height: 1.5; max-width: 62ch; }
+.sealed-count, .ends { color: var(--muted); font-size: 14px; }
+ul.seats { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+ul.seats li { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 13px; background: var(--raised); }
+ul.seats li.open { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+ul.checks li.todo::before { content: "·"; color: var(--muted); }
