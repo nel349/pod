@@ -12,6 +12,8 @@ import type { Hex } from "viem";
 import { gradeJob, type GradeJob } from "./pipeline.ts";
 import { publish, type PublishJob } from "./publish.ts";
 import { settle, type Contract } from "./jobs.ts";
+import { mintPod } from "./token.ts";
+import type { Role } from "./job.ts";
 import type { JobStore, JobRecord } from "./store.ts";
 
 /**
@@ -51,6 +53,13 @@ export interface RunJob {
     readonly jobId: bigint;
     /** the commit as the contract holds it, which is a hash and not a string */
     readonly commit: Hex;
+    /**
+     * Where the title is minted, on a job that passed. Left out, the job still settles and the crew
+     * is still paid: a mint that cannot happen is not a reason to withhold somebody's money.
+     */
+    readonly token?: Contract;
+    /** the job's own page, which is what the title points at */
+    readonly uri?: string;
   };
   readonly whenUnreproducible?: WhenUnreproducible;
 }
@@ -60,6 +69,8 @@ export interface RunOutcome {
   readonly verdict: "passed" | "failed" | "not-reproducible";
   /** the settlement, when there was one. A held job has none, and says why */
   readonly settlement?: { readonly hash: Hex; readonly paid: boolean };
+  /** the title, minted to the person who paid, on a job that passed */
+  readonly mint?: Hex;
   readonly heldBecause?: string;
 }
 
@@ -81,5 +92,17 @@ export async function runJob(job: RunJob): Promise<RunOutcome> {
 
   const paid = move === "pay";
   const hash = await settle(job.chain.contract, job.chain.jobId, job.chain.commit, paid);
-  return { record, verdict, settlement: { hash, paid } };
+  if (!paid || !job.chain.token) return { record, verdict, settlement: { hash, paid } };
+
+  // the crew has been paid; the title goes to whoever paid for the job, read from the job itself
+  const mint = await mintPod(job.chain.token, {
+    jobs: job.chain.contract,
+    jobId: job.chain.jobId,
+    seal: record.seal,
+    commit: job.chain.commit,
+    receiptHash: record.signed!.hash,
+    crew: record.tile.pod.map((seat) => ({ role: seat.role as Role, agent: seat.agent })),
+    uri: job.chain.uri ?? "",
+  });
+  return { record, verdict, settlement: { hash, paid }, mint };
 }

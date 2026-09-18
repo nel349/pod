@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createPublicClient, createWalletClient, defineChain, http, parseEther, type Address, type Hex, type PublicClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { approve, podJobsAbi, policyMet, post, readJob, seatPay, settle, takeSeat, type Contract } from "../jobs.ts";
+import { mintPod, podTokenAbi, posterOf, tokenOfJob } from "../token.ts";
 import type { Role } from "../job.ts";
 
 /**
@@ -41,6 +42,7 @@ const anvilAvailable = await (async () => {
 let node: ReturnType<typeof Bun.spawn> | undefined;
 let publicClient: PublicClient;
 let address: Address;
+let tokenAddress: Address;
 let port = 0;
 
 const at = (key: (typeof KEYS)[number]): Contract => ({
@@ -108,6 +110,14 @@ describe.skipIf(!anvilAvailable)("the money, on a chain that behaves like the re
     } as Parameters<typeof deployer.deployContract>[0]);
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
     address = receipt.contractAddress!;
+
+    const tokenArtefact = await Bun.file(new URL("../../contracts/out/PodToken.sol/PodToken.json", import.meta.url)).json();
+    const tokenHash = await deployer.deployContract({
+      abi: tokenArtefact.abi,
+      bytecode: tokenArtefact.bytecode.object as Hex,
+      args: [validator],
+    } as Parameters<typeof deployer.deployContract>[0]);
+    tokenAddress = (await publicClient.waitForTransactionReceipt({ hash: tokenHash })).contractAddress!;
   }, 120_000);
 
   afterAll(() => { node?.kill(); });
@@ -184,6 +194,51 @@ describe.skipIf(!anvilAvailable)("the money, on a chain that behaves like the re
     expect((await readJob({ address, publicClient }, jobId)).state).toBe("refunded");
     const spent = receipt.gasUsed * receipt.effectiveGasPrice;
     expect(await publicClient.getBalance({ address: poster })).toBe(before + PRICE - spent);
+  }, 60_000);
+
+  test("the title is minted to the person who paid, and holds what the verdict rested on", async () => {
+    const jobId = await post1Hour();
+    await fullPod(jobId);
+    for (const [role, index] of [["lead", 0], ["reviewer", 2], ["qa", 3], ["security", 4]] as const) {
+      await approve(at(KEYS[index + 1]!), jobId, role as Role, COMMIT);
+    }
+    await settle(at(KEYS[6]!), jobId, COMMIT, true);
+
+    const jobs = { ...at(KEYS[6]!), address };
+    const token = { ...at(KEYS[6]!), address: tokenAddress };
+    const receiptHash = `0x${"9e".repeat(32)}` as Hex;
+
+    await mintPod(token, {
+      jobs, jobId, seal: SEAL, commit: COMMIT, receiptHash,
+      crew: [{ role: "lead", agent: privateKeyToAccount(KEYS[1]!).address }],
+      uri: `https://pod.example/job/${jobId}`,
+    });
+
+    const tokenId = await tokenOfJob({ address: tokenAddress, publicClient }, jobId);
+    expect(tokenId).toBeGreaterThan(0n);
+
+    const owner = await publicClient.readContract({
+      address: tokenAddress, abi: podTokenAbi, functionName: "ownerOf", args: [tokenId],
+    });
+    expect(owner).toBe(await posterOf({ address, publicClient }, jobId));
+
+    const held = await publicClient.readContract({
+      address: tokenAddress, abi: podTokenAbi, functionName: "pod", args: [tokenId],
+    });
+    expect(held.commitHash).toBe(COMMIT);
+    expect(held.receiptHash).toBe(receiptHash);
+    expect(held.uri).toBe(`https://pod.example/job/${jobId}`);
+  }, 60_000);
+
+  test("a stranger cannot mint a title, however true it is", async () => {
+    const jobId = await post1Hour();
+    const jobs = { ...at(KEYS[5]!), address };
+    const token = { ...at(KEYS[5]!), address: tokenAddress };
+    expect(mintPod(token, {
+      jobs, jobId, seal: SEAL, commit: COMMIT, receiptHash: `0x${"9e".repeat(32)}` as Hex,
+      crew: [{ role: "lead", agent: privateKeyToAccount(KEYS[1]!).address }],
+      uri: "https://pod.example/job/whatever",
+    })).rejects.toThrow();
   }, 60_000);
 
   test("a stranger cannot report a verdict, however good it is", async () => {
