@@ -25,7 +25,7 @@ import { sealSpec, type Role, type Spec } from "../src/job.ts";
 import type { CheckToRun } from "../src/blackbox.ts";
 
 const IMAGE = "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944";
-const CHECKS = new URL("../fixtures/checks", import.meta.url).pathname;
+const CHECKS = new URL(`../fixtures/${process.env.POD_DEMO_CHECKS ?? "checks"}`, import.meta.url).pathname;
 const PRICE = parseEther("0.1");
 
 /**
@@ -48,8 +48,8 @@ const spec: Spec = {
   mode: "flash",
   price: PRICE,
   checks: [
-    { says: "the page answers", run: "node loads.mjs", hidden: false },
-    { says: "a weak excuse scores lower than a strong one", run: "node weak.mjs", hidden: true },
+    { says: process.env.POD_DEMO_VISIBLE ?? "the page answers", run: process.env.POD_DEMO_VISIBLE_RUN ?? "node loads.mjs", hidden: false },
+    { says: process.env.POD_DEMO_HIDDEN ?? "a weak excuse scores lower than a strong one", run: process.env.POD_DEMO_HIDDEN_RUN ?? "node weak.mjs", hidden: true },
   ],
   allowed: [],
   salt: process.env.POD_DEMO_SALT ?? need("POD_DEMO_SALT"),
@@ -156,7 +156,7 @@ const settled = await settle(contracts.jobs, onChainId, commitHash, report.verdi
 console.log(`settled  ${settled}`);
 
 // 8. the evidence is published before the title is minted
-const record = await publish(store, {
+let record = await publish(store, {
   jobId, seal, idea: spec.idea, mode: spec.mode, price: PRICE, report,
   pod: seats.map((seat) => ({ role: seat.role, agent: seat.address, owner: seat.address })),
   checksDirectory: CHECKS,
@@ -168,17 +168,26 @@ const record = await publish(store, {
 });
 
 // a title is minted for work that passed, and for nothing else
+let minted: Hex | undefined;
+let tokenId: bigint | undefined;
 if (report.verdict.kind === "passed") {
-  const minted = await mintPod(contracts.token, {
+  minted = await mintPod(contracts.token, {
     jobs: contracts.jobs, jobId: onChainId, seal, commit: commitHash,
     receiptHash: record.signed!.hash, crew: seats.map((s) => ({ role: s.role, agent: s.address })),
     uri: `${site}/job/${jobId}`,
   });
-  const tokenId = await tokenOfJob({ address: contracts.token.address, publicClient }, onChainId);
+  tokenId = await tokenOfJob({ address: contracts.token.address, publicClient }, onChainId);
   console.log(`minted   POD #${tokenId} to the person who paid  ${minted}`);
 } else {
   console.log(`no title: the checks said ${report.verdict.kind}, so the money went back to the poster`);
 }
+
+// and the page says where to read the same thing on the chain
+record = { ...record, chain: {
+  network: "monad-testnet", jobId: onChainId.toString(), jobs: jobsAt,
+  settled, minted, tokenId: tokenId?.toString(),
+} };
+await store.save(record, {});
 
 const after = await readJob({ address: jobsAt, publicClient }, onChainId);
 console.log(`\njob ${onChainId} is ${after.state}. The wall has it at ${site}/job/${jobId}`);

@@ -22,6 +22,7 @@ export const podJobsAbi = parseAbi([
   "function seatDeposit(uint256 jobId, uint8 role) view returns (uint256)",
   "function seatCount(uint256 jobId, uint8 role) view returns (uint256)",
   "function validator() view returns (address)",
+  "function nextJobId() view returns (uint256)",
   "function jobs(uint256) view returns (address poster, uint256 price, bytes32 seal, uint64 endsAt, uint8 state, bytes32 commit, uint8 reviewers)",
   "event Posted(uint256 indexed jobId, address indexed poster, bytes32 seal, uint256 price, uint64 endsAt)",
   "event Settled(uint256 indexed jobId, bytes32 commitHash, uint256 paid)",

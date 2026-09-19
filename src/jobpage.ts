@@ -5,7 +5,7 @@
  * exactly how to run it again yourself. The last part is the one that matters, because the reason to
  * believe a verdict here is not that we signed it, it is that anybody can repeat it.
  */
-import type { Brief, CheckSaid } from "./store.ts";
+import type { Brief, CheckSaid, OnChain } from "./store.ts";
 import { verdictWords as verdictWordsFor } from "./gallery.ts";
 import type { Tile } from "./gallery.ts";
 import type { Receipt } from "./receipt.ts";
@@ -28,6 +28,7 @@ export interface JobPage {
   readonly receipt?: Receipt;
   /** while the job is open, what a pod is being asked for */
   readonly brief?: Brief;
+  readonly chain?: OnChain;
   /** where the code went, and who holds the token that owns it */
   readonly repository?: string;
   readonly podHolder?: string;
@@ -86,15 +87,28 @@ is not a finding about the work, so nothing was settled: the pod was not paid an
 taken back. It returns to the person who posted the job when the job's window closes.</p>`
     : "";
 
+  const chain = page.chain ? renderChain(page.chain) : "";
+
   const where = page.repository
     ? `<h2>The work itself</h2>
 <p class="work"><a href="${escape(page.repository)}">${escape(page.repository.replace("https://github.com/", ""))}</a>
  — every attempt, including the ones that failed, at the commit that was graded.</p>`
     : "";
 
-  const ownership = page.repository
-    ? `<h2>Who owns it</h2><p>The code is at <a href="${escape(page.repository)}">${escape(page.repository)}</a>${page.podHolder ? `, and the POD is held by ${escape(page.podHolder)}` : ""}.</p>`
-    : "";
+  /**
+   * What the title does, rather than where the code is — which the section above already said.
+   *
+   * The transfer is an invitation on GitHub's side, so this says "claim" and not "is yours", and it
+   * says who holds it now rather than who paid, because a sale carries the repository.
+   */
+  const ownership = page.chain?.tokenId
+    ? `<h2>Who owns it</h2>
+<p class="owns">POD #${escape(page.chain.tokenId)} is the title to this repository. Whoever holds it
+can claim the repository by signing for it with the wallet that owns the token — a sale carries both.
+${page.podHolder ? `It is held by <code>${escape(page.podHolder)}</code>.` : ""}</p>`
+    : page.tile.verdict === "passed"
+      ? `<h2>Who owns it</h2><p class="owns">No title was minted for this job, so nobody can claim the repository yet.</p>`
+      : "";
 
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -128,6 +142,7 @@ taken back. It returns to the person who posted the job when the job's window cl
   ${page.tile.securityHeldByUs ? `<p class="disclosure">The security seat was held by the platform, not by an independent agent.</p>` : ""}
 
   ${where}
+  ${chain}
   ${brief}
   ${disagreed}
   ${repeat}
@@ -155,4 +170,25 @@ function renderBrief(brief: Brief): string {
 <h2>Seats</h2>
 <ul class="seats">${seats}</ul>
 <p class="ends">Open until ${escape(brief.endsAt)}.</p>`;
+}
+
+/**
+ * Where to read the same thing on the chain.
+ *
+ * The page is ours and the chain is not, which is the point: everything here can be checked without
+ * us. Each row is a transaction a stranger can open.
+ */
+function renderChain(chain: OnChain): string {
+  const explorer = "https://testnet.monadscan.com";
+  const row = (what: string, hash?: string): string =>
+    hash ? `<tr><td>${escape(what)}</td><td><a href="${explorer}/tx/${escape(hash)}"><code>${escape(hash.slice(0, 12))}…</code></a></td></tr>` : "";
+
+  return `<h2>On the chain</h2>
+<p class="onchain">Job ${escape(chain.jobId)} in
+<a href="${explorer}/address/${escape(chain.jobs)}"><code>${escape(chain.jobs.slice(0, 10))}…</code></a>
+on Monad testnet${chain.tokenId ? `, and POD #${escape(chain.tokenId)}` : ""}.</p>
+<div class="sideways"><table class="approvals"><tbody>
+${row("settled", chain.settled)}
+${row("the title minted", chain.minted)}
+</tbody></table></div>`;
 }

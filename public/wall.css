@@ -231,7 +231,8 @@ ul.checks li.todo::before { content: "·"; color: var(--muted); }
 .hidden-check { color: var(--muted); font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; }
 
 .job .fetch { margin: 16px 0 0; font-size: 15px; }
-.job .work { margin: 0; max-width: 62ch; }
+.job .work, .job .owns { margin: 0; max-width: 62ch; }
+.job .onchain { margin: 0 0 18px; }
 .job .work a { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 15px; }
 .job .fetch.sealed { color: var(--muted); }
 .asked { font-family: "Fraunces", Georgia, serif; font-size: 22px; line-height: 1.4; max-width: 54ch; }

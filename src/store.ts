@@ -39,6 +39,22 @@ export interface CheckSaid {
   readonly exitCode?: number;
 }
 
+/**
+ * Where the job is on the chain, so a reader can go from the page to the transaction.
+ *
+ * Every one of these is looked up, never typed: the on-chain job is matched to this record by the
+ * seal it was posted under, which is the one thing both sides hold.
+ */
+export interface OnChain {
+  readonly network: "monad-testnet";
+  /** the job's number in the contract */
+  readonly jobId: string;
+  readonly jobs: string;
+  readonly settled?: string;
+  readonly minted?: string;
+  readonly tokenId?: string;
+}
+
 /** One graded job, as the runner leaves it behind. */
 export interface JobRecord {
   readonly jobId: string;
@@ -48,6 +64,8 @@ export interface JobRecord {
   readonly approvals: readonly Approval[];
   /** present while the job is open. A graded job is described by its receipt instead */
   readonly brief?: Brief;
+  /** where this job is on the chain, once it has been settled there */
+  readonly chain?: OnChain;
   readonly signed?: SignedReceipt;
   readonly repository?: string;
   readonly podHolder?: string;

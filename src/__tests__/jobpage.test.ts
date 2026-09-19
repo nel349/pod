@@ -62,10 +62,23 @@ describe("the job page", () => {
     expect(renderJob(page(), "u")).toContain("sealed before it opened");
   });
 
-  test("says where the code went and who holds the token", () => {
-    const html = renderJob(page(), "u");
+  test("says where the work is, and what the title does about it", () => {
+    const html = renderJob(page({
+      repository: "https://github.com/pod/job-7",
+      chain: { network: "monad-testnet", jobId: "7", jobs: "0xBAD5", tokenId: "4" },
+    }), "u");
+
     expect(html).toContain("https://github.com/pod/job-7");
-    expect(html).toContain("0xowner");
+    expect(html).toContain("every attempt, including the ones that failed");
+    expect(html).toContain("POD #4 is the title to this repository");
+    expect(html).toContain("signing for it");
+    // and where to read the same thing on the chain
+    expect(html).toContain("Job 7");
+  });
+
+  test("a job that passed with no title says nobody can claim it yet", () => {
+    expect(renderJob(page({ repository: "https://github.com/pod/job-7" }), "u"))
+      .toContain("No title was minted");
   });
 
   test("a job with no receipt yet simply omits the repeat instructions", () => {
