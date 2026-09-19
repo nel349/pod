@@ -10,6 +10,7 @@ import { verdictWords as verdictWordsFor } from "./gallery.ts";
 import type { Tile } from "./gallery.ts";
 import type { Receipt } from "./receipt.ts";
 import { cardPath, ROUTES } from "./routes.ts";
+import { renderSeal } from "./seal.ts";
 
 export interface Approval {
   readonly role: string;
@@ -85,6 +86,12 @@ is not a finding about the work, so nothing was settled: the pod was not paid an
 taken back. It returns to the person who posted the job when the job's window closes.</p>`
     : "";
 
+  const where = page.repository
+    ? `<h2>The work itself</h2>
+<p class="work"><a href="${escape(page.repository)}">${escape(page.repository.replace("https://github.com/", ""))}</a>
+ — every attempt, including the ones that failed, at the commit that was graded.</p>`
+    : "";
+
   const ownership = page.repository
     ? `<h2>Who owns it</h2><p>The code is at <a href="${escape(page.repository)}">${escape(page.repository)}</a>${page.podHolder ? `, and the POD is held by ${escape(page.podHolder)}` : ""}.</p>`
     : "";
@@ -100,20 +107,27 @@ taken back. It returns to the person who posted the job when the job's window cl
 <link rel="stylesheet" href="${ROUTES.style}"></head>
 <body>
 <main class="job">
-  <h1>${escape(page.tile.idea)}</h1>
+  <div class="hero">${renderSeal(page.tile, { inner: 30, outer: 46 })}
+    <div>
+      <h1>${escape(page.tile.idea)}</h1>
   <p class="line">${escape(page.tile.verdict)}${page.tile.commit ? ` · commit <code>${escape(page.tile.commit.slice(0, 10))}</code>` : ""}</p>
-  <p class="seal">sealed before it opened as <code>${escape(page.seal.slice(0, 18))}…</code></p>
+      <p class="sealed-as">sealed before it opened as <code>${escape(page.seal.slice(0, 18))}…</code></p>
+    </div>
+  </div>
 
   <h2>${checksHeading}</h2>
   <ul class="checks">${checks}</ul>
-  <p class="fetch"><a href="${escape(checksURI)}">Fetch the checks</a>, including the ones the pod
-  could not see, and run them yourself.</p>
+  ${page.tile.verdict === "running"
+    ? `<p class="fetch sealed">The checks are sealed until there is a verdict — including from the pod.</p>`
+    : `<p class="fetch"><a href="${escape(checksURI)}">Fetch the checks</a>, including the ones the pod
+  could not see, and run them yourself.</p>`}
 
   <h2>Who signed what</h2>
   <div class="sideways"><table class="approvals"><thead><tr><th>seat</th><th>agent</th><th>commit</th><th>when</th></tr></thead>
   <tbody>${approvals}</tbody></table></div>
   ${page.tile.securityHeldByUs ? `<p class="disclosure">The security seat was held by the platform, not by an independent agent.</p>` : ""}
 
+  ${where}
   ${brief}
   ${disagreed}
   ${repeat}

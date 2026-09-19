@@ -15,7 +15,8 @@ import { createPublicClient, createWalletClient, http, parseEther, type Address,
 import { privateKeyToAccount } from "viem/accounts";
 import { approve, post, readJob, seatDeposit, settle, takeSeat, type Contract } from "../src/jobs.ts";
 import { gradeCommit } from "../src/pipeline.ts";
-import { bundle, commitToBytes32, commitWork, head, openRepository } from "../src/repo.ts";
+import { bundle, BRANCH, commitToBytes32, commitWork, head, openRepository } from "../src/repo.ts";
+import { credentialAvailable, ensureRepository, hasCommit, push } from "../src/github.ts";
 import { openJob, publish } from "../src/publish.ts";
 import { JobStore } from "../src/store.ts";
 import { mintPod, tokenOfJob } from "../src/token.ts";
@@ -121,10 +122,23 @@ const bundled = join(need("POD_JOBS"), jobId, "history.bundle");
 await mkdir(join(bundled, ".."), { recursive: true });
 await bundle(repo, bundled);
 
+// and the repository a person can read, public from the moment there is anything in it
+const owner = process.env.POD_GITHUB_OWNER;
+let published: Awaited<ReturnType<typeof ensureRepository>> | undefined;
+if (owner && (await credentialAvailable())) {
+  published = await ensureRepository(owner, jobId, spec.idea);
+  await push(repo, published, BRANCH);
+  const there = await hasCommit(published, commit);
+  console.log(`repo     ${published.url}${there ? "" : "  (the commit did not arrive!)"}`);
+  if (!there) throw new Error("the commit is not on GitHub, so the page would link to work nobody can read");
+} else {
+  console.log("repo     local only: set POD_GITHUB_OWNER, and sign in, to publish it");
+}
+
 // 5. that exact commit is graded in the sealed box, twice, before anybody approves anything
 const report = await gradeCommit({
   seal, commit, repo, start: "node server.js",
-  repository: `${site}/bundle/${jobId}`,
+  repository: published?.cloneUrl ?? `${site}/bundle/${jobId}`,
   checks: CHECKS, toRun, image: IMAGE, times: 2,
   runner: contracts.validator, runnerKey: need("POD_VALIDATOR_KEY") as Hex,
 });
@@ -150,6 +164,7 @@ const record = await publish(store, {
     role: seat.role, agent: seat.address, commit, at: report.signed.receipt.finishedAt,
   })),
   open: report.verdict.kind === "passed" ? `${site}/job/${jobId}` : undefined,
+  repository: published?.url,
 });
 
 // a title is minted for work that passed, and for nothing else

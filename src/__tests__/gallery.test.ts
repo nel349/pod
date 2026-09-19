@@ -23,23 +23,23 @@ const tile = (over: Partial<Tile> = {}): Tile => ({
 
 describe("a tile never shows a reader a hole", () => {
   test("one second is not 1 seconds", () => {
-    expect(renderTile(tile({ seconds: 1 }))).toContain("1 second ·");
+    expect(renderTile(tile({ seconds: 1 }))).toContain("1 second");
     expect(renderTile(tile({ seconds: 2 }))).toContain("2 seconds");
     expect(renderTile(tile({ seconds: 60 }))).toContain("60 seconds");
     expect(renderTile(tile({ seconds: 3600 }))).toContain("60 minutes");
   });
 
   test("why there is nothing to open depends on what happened", () => {
-    expect(renderTile(tile({ verdict: "failed", open: undefined }))).toContain("nothing shipped: the checks failed");
-    expect(renderTile(tile({ verdict: "passed", open: undefined }))).toContain("archived, code still claimable");
-    expect(renderTile(tile({ verdict: "running", open: undefined }))).toContain("not finished yet");
+    expect(renderTile(tile({ verdict: "failed", open: undefined }))).toContain("nothing shipped");
+    expect(renderTile(tile({ verdict: "passed", open: undefined }))).toContain("archived, still claimable");
+    expect(renderTile(tile({ verdict: "running", open: undefined }))).toContain("not finished");
   });
 
   test("two attempts at one idea are told apart by the commit each was graded at", () => {
     const first = renderTile(tile({ jobId: "a", commit: "c0ffee1234" }));
     const second = renderTile(tile({ jobId: "b", commit: "7ae91bb000" }));
-    expect(first).toContain("c0ffee1234");
-    expect(second).toContain("7ae91bb000");
+    expect(first).toContain("c0ffee1");
+    expect(second).toContain("7ae91bb");
   });
 
   test("a price carries the name of what it is paid in", () => {
@@ -66,13 +66,13 @@ describe("a tile", () => {
 
   test("offers the thing itself, which is the point of the tile", () => {
     expect(renderTile(tile())).toContain('href="https://pod.example/j/7"');
-    expect(renderTile(tile())).toContain("Open it");
+    expect(renderTile(tile())).toContain("open it");
   });
 
   test("an archived job says so instead of offering a dead link", () => {
     const archived = renderTile(tile({ open: undefined }));
-    expect(archived).toContain("archived, code still claimable");
-    expect(archived).not.toContain("Open it");
+    expect(archived).toContain("archived, still claimable");
+    expect(archived).not.toContain("open it");
   });
 
   test("links the receipt, so a stranger can check the verdict themselves", () => {
@@ -105,9 +105,9 @@ describe("the wall", () => {
       tile({ jobId: "8", verdict: "failed" }),
       tile({ jobId: "9", verdict: "not-reproducible" }),
     ]);
-    expect(html).toContain("1 passed");
-    expect(html).toContain("1 failed");
-    expect(html).toContain("1 could not be reproduced");
+    expect(html).toContain("1 paid");
+    expect(html).toContain("1 refused");
+    expect(html).toContain("1 unrepeatable");
   });
 
   test("says where it runs and what the money is", () => {
@@ -116,7 +116,7 @@ describe("the wall", () => {
 
   test("an empty wall is still a page, and says nothing false", () => {
     const html = renderWall([]);
-    expect(html).toContain("0 passed");
+    expect(html).toContain("0 paid");
     expect(html).not.toContain("undefined");
   });
 
