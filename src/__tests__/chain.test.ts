@@ -3,6 +3,7 @@ import { createPublicClient, createWalletClient, defineChain, http, parseEther, 
 import { privateKeyToAccount } from "viem/accounts";
 import { approve, podJobsAbi, policyMet, post, readJob, seatPay, settle, takeSeat, type Contract } from "../jobs.ts";
 import { mintPod, podTokenAbi, posterOf, tokenOfJob } from "../token.ts";
+import { checkClaim, claimToSign, holderOf } from "../handover.ts";
 import type { Role } from "../job.ts";
 
 /**
@@ -228,6 +229,79 @@ describe.skipIf(!anvilAvailable)("the money, on a chain that behaves like the re
     expect(held.commitHash).toBe(COMMIT);
     expect(held.receiptHash).toBe(receiptHash);
     expect(held.uri).toBe(`https://pod.example/job/${jobId}`);
+  }, 60_000);
+
+  test("the holder can claim the repository, and a stranger cannot", async () => {
+    const jobId = await post1Hour();
+    await fullPod(jobId);
+    for (const [role, index] of [["lead", 0], ["reviewer", 2], ["qa", 3], ["security", 4]] as const) {
+      await approve(at(KEYS[index + 1]!), jobId, role as Role, COMMIT);
+    }
+    await settle(at(KEYS[6]!), jobId, COMMIT, true);
+
+    const jobs = { ...at(KEYS[6]!), address };
+    const token = { ...at(KEYS[6]!), address: tokenAddress };
+    await mintPod(token, {
+      jobs, jobId, seal: SEAL, commit: COMMIT, receiptHash: `0x${"9e".repeat(32)}` as Hex,
+      crew: [{ role: "lead", agent: privateKeyToAccount(KEYS[1]!).address }],
+      uri: `https://pod.example/job/${jobId}`,
+    });
+    const tokenId = await tokenOfJob({ address: tokenAddress, publicClient }, jobId);
+
+    // the person who paid holds it, which the contract is the authority on
+    const holder = await holderOf({ address: tokenAddress, publicClient }, tokenId);
+    expect(holder).toBe(privateKeyToAccount(KEYS[0]!).address);
+
+    const claim = { jobId: "a-job", tokenId, toAccount: "somebody-on-github" };
+    const message = claimToSign(claim);
+
+    const theirs = await privateKeyToAccount(KEYS[0]!).signMessage({ message });
+    const good = await checkClaim({ address: tokenAddress, publicClient }, { ...claim, signature: theirs });
+    expect(good.allowed).toBe(true);
+    expect(good.holder).toBe(holder);
+
+    // somebody else's signature, however well formed, is not the holder's
+    const someoneElse = await privateKeyToAccount(KEYS[5]!).signMessage({ message });
+    const refused = await checkClaim({ address: tokenAddress, publicClient }, { ...claim, signature: someoneElse });
+    expect(refused.allowed).toBe(false);
+    expect(refused.why).toBe("that signature is not the holder's");
+
+    // and a signature for a different account cannot be replayed to redirect the transfer
+    const elsewhere = { ...claim, toAccount: "somebody-else-entirely" };
+    const replayed = await checkClaim({ address: tokenAddress, publicClient }, { ...elsewhere, signature: theirs });
+    expect(replayed.allowed).toBe(false);
+  }, 60_000);
+
+  test("a sold POD carries the repository, because the check reads the owner now", async () => {
+    const jobId = await post1Hour();
+    await fullPod(jobId);
+    for (const [role, index] of [["lead", 0], ["reviewer", 2], ["qa", 3], ["security", 4]] as const) {
+      await approve(at(KEYS[index + 1]!), jobId, role as Role, COMMIT);
+    }
+    await settle(at(KEYS[6]!), jobId, COMMIT, true);
+    const token = { ...at(KEYS[6]!), address: tokenAddress };
+    await mintPod(token, {
+      jobs: { ...at(KEYS[6]!), address }, jobId, seal: SEAL, commit: COMMIT,
+      receiptHash: `0x${"9e".repeat(32)}` as Hex,
+      crew: [{ role: "lead", agent: privateKeyToAccount(KEYS[1]!).address }],
+      uri: `https://pod.example/job/${jobId}`,
+    });
+    const tokenId = await tokenOfJob({ address: tokenAddress, publicClient }, jobId);
+
+    const buyer = privateKeyToAccount(KEYS[5]!);
+    const seller = at(KEYS[0]!);
+    const { request } = await publicClient.simulateContract({
+      address: tokenAddress, abi: podTokenAbi, functionName: "transferFrom",
+      args: [privateKeyToAccount(KEYS[0]!).address, buyer.address, tokenId],
+      account: seller.wallet.account!,
+    });
+    await publicClient.waitForTransactionReceipt({ hash: await seller.wallet.writeContract(request) });
+
+    const claim = { jobId: "a-job", tokenId, toAccount: "the-buyer-on-github" };
+    const signature = await buyer.signMessage({ message: claimToSign(claim) });
+    const outcome = await checkClaim({ address: tokenAddress, publicClient }, { ...claim, signature });
+    expect(outcome.allowed).toBe(true);
+    expect(outcome.holder).toBe(buyer.address);
   }, 60_000);
 
   test("a stranger cannot mint a title, however true it is", async () => {

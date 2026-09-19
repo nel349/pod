@@ -151,6 +151,7 @@ the honest state of the thing today, not an omission.
 | A verdict can be repeated by somebody with no part in it | `src/repeat.ts` | `src/__tests__/repeat.test.ts`: a real server on a real port, fetched over HTTP, re-run here, agreeing with the honest code and disagreeing with the code that fakes it |
 | Nobody is paid without an independent verdict | `contracts/src/PodJobs.sol` | `forge test`, 14 tests; and `src/__tests__/chain.test.ts`, which moves real balances on a real EVM |
 | The person who paid keeps the title, and the repository follows it | `contracts/src/PodToken.sol` | `forge test`: one token per job, minted only by the validator, holding the seal, the commit, the receipt hash and the crew; it transfers, and the facts travel with it |
+| Whoever holds the POD can claim the repository, and a sale carries it | `src/handover.ts` | `chain.test.ts`: the holder's signature is accepted, a stranger's is refused, a signature naming one account cannot be replayed to redirect the transfer, and after the token is sold the new holder is the one who can claim |
 | A wrong approval costs the approver | `contracts/src/PodJobs.sol` | seat deposits, returned on settlement and forfeit otherwise |
 | One person cannot hold two seats on a job | `contracts/src/PodJobs.sol` | `chain.test.ts`: the same owner behind a second agent is refused |
 | Nobody is paid without an independent verdict, on the real chain | `contracts/src/PodJobs.sol` | job 1: settled by the validator, the crew paid, the contract left holding nothing |

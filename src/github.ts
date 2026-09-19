@@ -136,6 +136,19 @@ export async function hasCommit(to: Published, commit: string): Promise<boolean>
 }
 
 /**
+ * Hand a repository to somebody else.
+ *
+ * GitHub treats this as an invitation when the new owner is a person: it is theirs when they accept,
+ * and ours until they do. Nothing here pretends otherwise.
+ */
+export async function transferRepository(to: Published, account: string): Promise<void> {
+  await call(`/repos/${to.owner}/${to.name}/transfer`, {
+    method: "POST",
+    body: JSON.stringify({ new_owner: account }),
+  });
+}
+
+/**
  * Set a finished job's repository read-only.
  *
  * Thirty days after a job ends, however it ended. Read-only rather than deleted: the evidence has to

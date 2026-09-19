@@ -21,6 +21,8 @@ export const podTokenAbi = parseAbi([
   "function crew(uint256 tokenId) view returns (Seat[])",
   "function tokenURI(uint256 tokenId) view returns (string)",
   "function ownerOf(uint256 tokenId) view returns (address)",
+  // the title is transferable on purpose: a sale carries the repository with it
+  "function transferFrom(address from, address to, uint256 tokenId)",
   "function tokenOfJob(uint256 jobId) view returns (uint256)",
   "function minter() view returns (address)",
 ]);
