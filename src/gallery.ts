@@ -100,6 +100,7 @@ export function renderTile(tile: Tile): string {
     <ul class="pod">${seats}${waiting}</ul>
   </div>
   <div class="facts">
+    ${tile.securityHeldByUs ? `<p class="disclosure">security seat held by the platform</p>` : ""}
     <p class="price">${money(tile.price)}</p>
     <p class="meta">${escape(tile.mode)}${tile.seconds ? ` · ${took(tile.seconds)}` : ""}</p>
     ${tile.commit ? `<p class="meta"><code>${escape(tile.commit.slice(0, 7))}</code></p>` : ""}

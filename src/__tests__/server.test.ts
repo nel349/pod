@@ -74,7 +74,8 @@ describe("the wall", () => {
     const body = await (await get(store, ROUTES.wall)).text();
     expect(body.indexOf(jobPath("newer"))).toBeLessThan(body.indexOf(jobPath("older")));
     expect(body).toContain("checks failed");
-    expect(body).toContain("1 passed · 1 failed");
+    expect(body).toContain("1 paid");
+    expect(body).toContain("1 refused");
   });
 
   test("what is running is at the top, then what happened, newest first", async () => {
@@ -109,6 +110,14 @@ describe("one job, opened", () => {
     expect(body).toContain("the page answers");
     expect(body).toContain("hidden from the pod");
     expect(body).toContain(checksPath("a-weather-page"));
+  });
+
+  test("a job that has a repository links it, and says what is in it", async () => {
+    const store = await storeWith(record({ repository: "https://github.com/kuiralabs/pod-a-weather-page" }));
+    const body = await (await get(store, jobPath("a-weather-page"))).text();
+    expect(body).toContain("The work itself");
+    expect(body).toContain("https://github.com/kuiralabs/pod-a-weather-page");
+    expect(body).toContain("including the ones that failed");
   });
 
   test("a job with no receipt says so instead of showing one", async () => {

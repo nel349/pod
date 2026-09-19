@@ -143,13 +143,46 @@ export class Browser {
     }
   }
 
-  /** The middle of the first thing matching a selector, in page coordinates. */
+  /**
+   * The middle of something, after scrolling it into view.
+   *
+   * A click is dispatched at viewport coordinates, so an element below the fold has to be brought
+   * into the viewport first or the click lands on whatever happens to be there instead. The first
+   * version of this did not, and two tests failed for a reason that had nothing to do with the page.
+   */
   async centreOf(selector: string): Promise<{ x: number; y: number }> {
+    const box = await this.evaluate<{ x: number; y: number; covered: string | null } | null>(`(() => {
+      const element = document.querySelector(${JSON.stringify(selector)});
+      if (!element) return null;
+      element.scrollIntoView({ block: "center", behavior: "instant" });
+      const rect = element.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      const at = document.elementFromPoint(x, y);
+      const covered = at && (at === element || element.contains(at) || at.contains(element))
+        ? null
+        : (at ? at.tagName + "." + (at.className || "") : "nothing");
+      return { x, y, covered };
+    })()`);
+    if (!box) throw new Error(`nothing matches ${selector}`);
+    if (box.covered) throw new Error(`${selector} is covered by ${box.covered}, so a person could not click it`);
+    return box;
+  }
+
+  /** Click a thing by what it is, rather than by where it happened to be. */
+  async click(selector: string): Promise<void> {
+    const { x, y } = await this.centreOf(selector);
+    await this.clickAt(x, y);
+  }
+
+  /** A point inside an element but away from its middle, for testing that a whole row is a target. */
+  async cornerOf(selector: string): Promise<{ x: number; y: number }> {
     const box = await this.evaluate<{ x: number; y: number } | null>(`(() => {
       const element = document.querySelector(${JSON.stringify(selector)});
       if (!element) return null;
+      element.scrollIntoView({ block: "center", behavior: "instant" });
       const rect = element.getBoundingClientRect();
-      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      return { x: rect.left + rect.width / 2, y: rect.bottom - 6 };
     })()`);
     if (!box) throw new Error(`nothing matches ${selector}`);
     return box;

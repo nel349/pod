@@ -175,8 +175,16 @@ ul.pod .waiting { color: var(--running); }
   to { transform: none; opacity: 1; }
 }
 
-/* a broken ring: the pieces are pushed apart, and stay that way */
-.seal.failed .piece.held { transform: scale(1.06); }
+/*
+ * A broken ring, and it has to read as broken at a glance rather than as a ring with wider gaps.
+ * Each piece is knocked out of true by a different amount, so the symmetry that makes the passed
+ * seal look finished is exactly what is missing here.
+ */
+.seal.failed .piece.held.piece-0 { transform: rotate(-7deg) translateY(-1.5px); }
+.seal.failed .piece.held.piece-1 { transform: rotate(5deg) translateX(2px); }
+.seal.failed .piece.held.piece-2 { transform: rotate(-3deg) translateY(2px); }
+.seal.failed .piece.held.piece-3 { transform: rotate(9deg) translateX(-1.5px); }
+.seal.failed .piece.held.piece-4 { transform: rotate(-5deg) translateY(-2px); }
 
 /* runs that never agreed, and a shape that never settles */
 @keyframes unsettled {
@@ -190,7 +198,8 @@ ul.pod .waiting { color: var(--running); }
 .seal.running { animation: turning 44s linear infinite; }
 
 /* the pieces separate slightly when you consider the row: five seats, not one badge */
-.tile:hover .seal .piece.held, .tile:focus-within .seal .piece.held { transform: scale(1.05); }
+.tile:hover .seal.passed .piece.held, .tile:focus-within .seal.passed .piece.held,
+.tile:hover .seal.running .piece.held, .tile:focus-within .seal.running .piece.held { transform: scale(1.06); }
 .seal .piece { transition: transform 260ms cubic-bezier(0.2, 0.9, 0.2, 1); }
 
 @media (prefers-reduced-motion: reduce) {
@@ -202,7 +211,14 @@ ul.pod .waiting { color: var(--running); }
 .job { padding: clamp(40px, 7vw, 88px) 0 0; }
 .job h1 { margin: 0 0 16px; font-family: "Fraunces", Georgia, serif; font-weight: 400; font-size: clamp(30px, 5vw, 56px); line-height: 1.05; letter-spacing: -0.02em; text-wrap: balance; max-width: 22ch; }
 .job h2 { margin: 48px 0 14px; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
-.job .line, .job .seal-line { margin: 0 0 6px; color: var(--muted); }
+.job .line, .job .sealed-as { margin: 0 0 6px; color: var(--muted); font-size: 14px; }
+.job .sealed-as code { overflow-wrap: normal; }
+
+/* the job's own seal, beside its name. The paragraph that says what it was sealed as is not it */
+.job .hero { display: flex; gap: clamp(18px, 3vw, 40px); align-items: start; }
+.job .hero .seal { flex: 0 0 auto; width: clamp(64px, 9vw, 104px); height: clamp(64px, 9vw, 104px); margin-top: 6px; }
+.job h1 { margin-top: 0; }
+@media (max-width: 720px) { .job .hero { flex-direction: column; gap: 16px; } }
 .job code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.92em; }
 .job a { color: var(--link); }
 
@@ -215,6 +231,9 @@ ul.checks li.todo::before { content: "·"; color: var(--muted); }
 .hidden-check { color: var(--muted); font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; }
 
 .job .fetch { margin: 16px 0 0; font-size: 15px; }
+.job .work { margin: 0; max-width: 62ch; }
+.job .work a { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 15px; }
+.job .fetch.sealed { color: var(--muted); }
 .asked { font-family: "Fraunces", Georgia, serif; font-size: 22px; line-height: 1.4; max-width: 54ch; }
 .sealed-count, .ends { color: var(--muted); font-size: 14px; }
 ul.seats { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
@@ -239,7 +258,7 @@ pre.repeat {
   line-height: 1.7;
 }
 
-.disclosure { color: var(--unsure); font-size: 14px; }
+.disclosure { color: var(--unsure); font-size: 12.5px; margin: 0 0 6px; }
 .none { max-width: 58ch; color: var(--muted); padding: 32px 0; }
 .agent-address { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; color: var(--muted); }
 

@@ -30,7 +30,9 @@ let server: { stop: () => void } | undefined;
 
 async function receiptFor(verdict: Receipt["verdict"], commit: string) {
   return signReceipt({
-    version: "pod.receipt.v1", seal: SEAL, commit, tree: `0x${"11".repeat(32)}`,
+    version: "pod.receipt.v1", seal: SEAL, commit,
+    repository: "http://127.0.0.1/bundle/one-that-passed",
+    tree: `0x${"11".repeat(32)}`,
     image: "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944",
     start: "node server.js",
     checks: [
@@ -45,7 +47,7 @@ async function receiptFor(verdict: Receipt["verdict"], commit: string) {
 function tile(over: Partial<Tile> = {}): Tile {
   return {
     jobId: "one-that-passed", idea: "A page that tells me whether to take a coat today",
-    mode: "flash", verdict: "passed", open: "https://example.test/coat", commit: "c0ffee1234",
+    mode: "flash", verdict: "passed", open: "https://example.test/coat", commit: "c0ffee1234abcdef0123456789abcdef01234567",
     seconds: 812, price: 25_000_000_000_000_000_000n,
     pod: [{ role: "lead", agent: AGENT, owner: AGENT }],
     receiptURI: receiptPath("one-that-passed"), securityHeldByUs: false,
@@ -70,10 +72,10 @@ beforeAll(async () => {
   const checks = { "loads.mjs": "// asks the page for a page\n", "weak.mjs": "// the one the pod could not see\n" };
   await store.save(await record(), checks);
   await store.save(await record({
-    tile: tile({ jobId: "one-that-failed", verdict: "failed", open: undefined, commit: "7ae91bb000", finishedAt: "2026-09-16T10:04:00.000Z" }),
+    tile: tile({ jobId: "one-that-failed", verdict: "failed", open: undefined, commit: "7ae91bb0001234567890abcdef1234567890abcd", finishedAt: "2026-09-16T10:04:00.000Z" }),
   }), checks);
   const unrepeatable = await record({
-    tile: tile({ jobId: "one-nobody-could-repeat", verdict: "not-reproducible", open: undefined, commit: "3ee7100000", finishedAt: "2026-09-15T10:04:00.000Z" }),
+    tile: tile({ jobId: "one-nobody-could-repeat", verdict: "not-reproducible", open: undefined, commit: "3ee7100000abcdef1234567890abcdef12345678", finishedAt: "2026-09-15T10:04:00.000Z" }),
   });
   await store.save(unrepeatable, checks);
 
@@ -110,16 +112,9 @@ describe.skipIf(!available)("the wall, driven the way a person drives it", () =>
   test("a tile is clickable across its whole surface, not only on its title", async () => {
     await browser.open(base + ROUTES.wall);
 
-    // a point inside the tile but away from the heading: where a person actually aims
-    const spot = await browser.evaluate<{ x: number; y: number } | null>(`(() => {
-      const tile = document.querySelector("article.tile");
-      if (!tile) return null;
-      const box = tile.getBoundingClientRect();
-      return { x: box.left + box.width / 2, y: box.bottom - 8 };
-    })()`);
-    expect(spot).not.toBeNull();
-
-    await browser.clickAt(spot!.x, spot!.y);
+    // a point inside the tile but away from its heading: where a person actually aims
+    const spot = await browser.cornerOf("article.tile");
+    await browser.clickAt(spot.x, spot.y);
     await Bun.sleep(300);
     expect(await browser.where()).toContain(ROUTES.job);
   }, 60_000);
@@ -134,8 +129,7 @@ describe.skipIf(!available)("the wall, driven the way a person drives it", () =>
 
   test("the checks can be fetched from the page, hidden ones included", async () => {
     await browser.open(base + jobPath("one-that-passed"));
-    const spot = await browser.centreOf("p.fetch a");
-    await browser.clickAt(spot.x, spot.y);
+    await browser.click("p.fetch a");
     await Bun.sleep(300);
     expect(await browser.where()).toBe(checksPath("one-that-passed"));
 
@@ -162,6 +156,7 @@ describe.skipIf(!available)("the wall, driven the way a person drives it", () =>
     expect(command).toContain("--network none");
     expect(command).toContain("node server.js");
     expect(command).toContain("c0ffee1234");
+    expect(command).toContain("git clone");
   }, 60_000);
 
   test("an agent's page shows the seats it held and what came of them", async () => {
