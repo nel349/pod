@@ -8,7 +8,11 @@
  * The order matters. Nothing is signed until the runs agree, and nothing reaches the chain that the
  * receipt does not already explain.
  */
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { grade, type CheckToRun, type GradeOutcome } from "./blackbox.ts";
+import { checkout, has, type Repository } from "./repo.ts";
 import { fingerprintTree, signReceipt, type Receipt, type SignedReceipt } from "./receipt.ts";
 import { registryResponse, registryTag, reachVerdict, type Verdict } from "./verdict.ts";
 import type { Address, Hex } from "viem";
@@ -16,7 +20,10 @@ import type { Address, Hex } from "viem";
 export interface GradeJob {
   readonly seal: Hex;
   readonly commit: string;
+  /** the directory that is graded. `gradeCommit` fills this in from a repository */
   readonly artefact: string;
+  /** where the commit came from, recorded so somebody else can fetch it */
+  readonly repository?: string;
   readonly start: string;
   readonly checks: string;
   readonly toRun: readonly CheckToRun[];
@@ -76,6 +83,7 @@ export async function gradeJob(job: GradeJob): Promise<GradeReport> {
     seal: job.seal,
     commit: job.commit,
     tree: await fingerprintTree(job.artefact),
+    repository: job.repository ?? "",
     image: job.image,
     start: job.start,
     checks: last.checks.map((c) => ({
@@ -101,4 +109,29 @@ export async function gradeJob(job: GradeJob): Promise<GradeReport> {
     tag: registryTag(verdict, job.role ?? "tests"),
     rounds,
   };
+}
+
+export interface GradeCommit extends Omit<GradeJob, "artefact"> {
+  readonly repo: Repository;
+}
+
+/**
+ * Grade one exact commit out of a job's repository.
+ *
+ * This is the way a real job is graded, and the directory version underneath it is for fixtures and
+ * for a stranger repeating a run against code they fetched themselves. The commit is laid out fresh,
+ * graded, and thrown away: nothing that ran can persist into the next round, and no later commit can
+ * change what this verdict was about.
+ */
+export async function gradeCommit(job: GradeCommit): Promise<GradeReport> {
+  if (!(await has(job.repo, job.commit))) {
+    throw new Error(`${job.commit} is not a commit in ${job.repo.jobId}, so there is nothing to grade`);
+  }
+  const laid = await mkdtemp(join(tmpdir(), "pod-graded-"));
+  try {
+    await checkout(job.repo, job.commit, laid);
+    return await gradeJob({ ...job, artefact: laid, repository: job.repository ?? job.repo.path });
+  } finally {
+    await rm(laid, { recursive: true, force: true });
+  }
 }

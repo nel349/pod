@@ -4,3 +4,5 @@ dist/
 .DS_Store
 scratch/
 jobs/
+repos/
+retired/

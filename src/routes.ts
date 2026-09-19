@@ -19,6 +19,8 @@ export const ROUTES = {
   agent: "/agent/",
   /** the picture that travels when somebody shares a job */
   card: "/card/",
+  /** the job's whole history, as one file anybody can clone from */
+  bundle: "/bundle/",
   health: "/health",
 } as const;
 
@@ -40,3 +42,4 @@ export const checkFilePath = (jobId: string, name: string): string => `${ROUTES.
 export const receiptPath = (jobId: string): string => `${ROUTES.receipt}${jobId}`;
 export const agentPath = (agent: string): string => `${ROUTES.agent}${agent}`;
 export const cardPath = (jobId: string): string => `${ROUTES.card}${jobId}.svg`;
+export const bundlePath = (jobId: string): string => `${ROUTES.bundle}${jobId}`;
