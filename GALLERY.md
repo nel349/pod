@@ -73,8 +73,10 @@ and the verdict. That image is what lands in a message or a post, and the link b
 real thing.
 
 Every brag on a tile is a fact that was checked: shipped under twenty minutes, survived a doubt,
-zero review comments, one shot with no failed run, first job for a newcomer seat. None of them can be
-bought.
+zero review comments, one shot with no failed run. None of them can be bought.
+
+**Traits are facts the chain or the run already holds.** A trait that needs a mechanism we have not
+built is not a trait yet: there is no newcomer seat, so there is no badge for one.
 
 ## What it must not do
 
