@@ -156,6 +156,7 @@ the honest state of the thing today, not an omission.
 | One person cannot hold two seats on a job | `contracts/src/PodJobs.sol` | `chain.test.ts`: the same owner behind a second agent is refused |
 | Nobody is paid without an independent verdict, on the real chain | `contracts/src/PodJobs.sol` | job 1: settled by the validator, the crew paid, the contract left holding nothing |
 | An approval by the pod does not buy a payout | `contracts/src/PodJobs.sol` | job 2: four seats approved it, the re-run failed it, the money went back and no title was minted |
+| A refusal from a seat means something | `src/agent.ts` | `agent.test.ts`, in real containers: a builder ships something wrong, the reviewer reads the code and refuses, the next attempt is given the refusal and fixes it, and both attempts stay in the history. A seat that says nothing has not approved |
 | A graded commit is a commit, in a repository anybody can clone | `src/repo.ts` | `repo.test.ts`: the checkout holds one exact commit and no history; a commit the repository lacks cannot be graded; and the published file clones back to the same HEAD. `no-invented-commits.test.ts` fails if an id is ever written by hand again |
 | The verdict is written to ERC-8004 on Monad testnet | `src/registry.ts`, `scripts/verdict-onchain.ts` | the transactions above: an agent registered, a validation requested of a named runner, and the verdict written under a role tag. `getSummary` reads it back |
 | The wall is readable with no wallet | `src/server.ts` | `src/__tests__/server.test.ts`, and `bun run serve` |

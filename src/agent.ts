@@ -1,0 +1,246 @@
+/**
+ * A seat, worked by an agent.
+ *
+ * The part of this that is hard is not the model. It is everything around it: an agent gets a
+ * workspace and nothing else, whatever it leaves becomes a commit under its own name, what it
+ * decided is recorded, and none of it is allowed to touch the checks that will judge it.
+ *
+ * So the model is one call at the edge, and everything else is built and proven without it. An agent
+ * here is any program: a script, a compiler, a model with a prompt. The protocol is deliberately
+ * small enough that all three can be one.
+ *
+ *   in    the work so far, in /work, and the brief at /work/.pod/brief.md
+ *   out   whatever it leaves in /work, and what it decided at /work/.pod/say.json
+ *
+ * `.pod` never reaches a commit: it is the conversation with the platform, not part of the work.
+ */
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { Role } from "./job.ts";
+import { checkout, commitIfChanged, head, type Repository } from "./repo.ts";
+
+/** What an agent says it did, or decided. A seat that says nothing has not done its job. */
+export interface Said {
+  readonly decision: "shipped" | "approve" | "refuse";
+  readonly why: string;
+}
+
+export interface SeatRun {
+  readonly role: Role;
+  readonly repo: Repository;
+  /** what is being asked for, in the words the job was posted in */
+  readonly brief: string;
+  /** the agent, as it runs: an image and the command that starts it */
+  readonly image: string;
+  readonly command: string;
+  /** the name the commit carries, which is the agent's own */
+  readonly name: string;
+  readonly email: string;
+  /**
+   * Hosts the agent may reach. Empty means no route out at all, which is the default: an agent that
+   * needs a model says so, and the job records that it did.
+   */
+  readonly allowedHosts?: readonly string[];
+  readonly seconds?: number;
+}
+
+export interface SeatOutcome {
+  readonly role: Role;
+  readonly said?: Said;
+  /** present when the agent changed the work. A reviewer that changes nothing has no commit */
+  readonly commit?: string;
+  readonly log: string;
+  readonly seconds: number;
+  readonly timedOut: boolean;
+  /** true when the agent had a route out, so a reader knows what it could have reached */
+  readonly hadNetwork: boolean;
+}
+
+const SAY = ".pod/say.json";
+const BRIEF = ".pod/brief.md";
+
+async function docker(args: readonly string[]): Promise<{ code: number; out: string }> {
+  const child = Bun.spawn(["docker", ...args], { stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  return { code: await child.exited, out: `${stdout}${stderr}`.trim() };
+}
+
+/**
+ * Run one seat.
+ *
+ * The workspace starts as the work so far, which for the first seat on a new job is nothing at all.
+ * The agent runs in a box with dropped capabilities and a memory limit, and with no route out unless
+ * the job declared one — a model endpoint is a declared host like any other, and it goes on the
+ * record rather than being assumed.
+ */
+export async function runSeat(run: SeatRun): Promise<SeatOutcome> {
+  const workspace = await mkdtemp(join(tmpdir(), `pod-seat-${run.role}-`));
+  const started = Date.now();
+  const hadNetwork = (run.allowedHosts?.length ?? 0) > 0;
+
+  try {
+    const tip = await head(run.repo);
+    if (tip) await checkout(run.repo, tip, workspace);
+
+    await mkdir(join(workspace, ".pod"), { recursive: true });
+    await writeFile(join(workspace, BRIEF), run.brief);
+
+    const name = `pod-seat-${run.role}-${Math.random().toString(36).slice(2, 10)}`;
+    const ran = await docker([
+      "run", "--rm", "--name", name,
+      ...(hadNetwork ? [] : ["--network", "none"]),
+      "--memory", "2g", "--cpus", "2", "--pids-limit", "512",
+      "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+      "-v", `${workspace}:/work`,
+      "-e", `POD_ROLE=${run.role}`,
+      "-e", `POD_BRIEF=/work/${BRIEF}`,
+      "-e", `POD_SAY=/work/${SAY}`,
+      "-w", "/work",
+      run.image,
+      "sh", "-c", `timeout ${run.seconds ?? 600} ${run.command}`,
+    ]);
+
+    const said = await readSaid(workspace);
+    // the conversation with the platform is not part of the work
+    await rm(join(workspace, ".pod"), { recursive: true, force: true });
+
+    const commit = await commitWhatChanged(run, workspace);
+
+    return {
+      role: run.role,
+      said,
+      commit,
+      log: ran.out,
+      seconds: (Date.now() - started) / 1000,
+      timedOut: ran.code === 124,
+      hadNetwork,
+    };
+  } finally {
+    await rm(workspace, { recursive: true, force: true });
+  }
+}
+
+async function readSaid(workspace: string): Promise<Said | undefined> {
+  try {
+    const parsed = JSON.parse(await readFile(join(workspace, SAY), "utf8")) as Said;
+    if (!["shipped", "approve", "refuse"].includes(parsed.decision)) return undefined;
+    return { decision: parsed.decision, why: String(parsed.why ?? "") };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Commit what the agent left, if it left anything different.
+ *
+ * A seat that changed nothing produces no commit: a reviewer reads, it does not rewrite, and a
+ * commit that changes nothing is noise in a history somebody will have to read later.
+ */
+async function commitWhatChanged(run: SeatRun, workspace: string): Promise<string | undefined> {
+  return commitIfChanged(run.repo, {
+    workspace,
+    message: `${run.role}: ${run.command.slice(0, 60)}`,
+    agent: run.name,
+    email: run.email,
+  });
+}
+
+/** A seat, and the agent that works it. */
+export interface Seated {
+  readonly role: Role;
+  readonly command: string;
+  readonly name: string;
+  readonly email: string;
+}
+
+export interface PodRun {
+  readonly repo: Repository;
+  readonly brief: string;
+  readonly image: string;
+  /** the crew, in the order they work: the builder ships, the rest read */
+  readonly seats: readonly Seated[];
+  readonly allowedHosts?: readonly string[];
+  readonly seconds?: number;
+  /**
+   * How many times the builder may try again after a refusal. A pod that cannot be refused is a pod
+   * whose reviewers are decoration, and one that can try for ever is a pod that never ships.
+   */
+  readonly attempts?: number;
+}
+
+export interface Attempt {
+  readonly number: number;
+  readonly built?: SeatOutcome;
+  readonly read: readonly SeatOutcome[];
+  readonly refusals: readonly { readonly role: Role; readonly why: string }[];
+}
+
+export interface PodOutcome {
+  readonly attempts: readonly Attempt[];
+  /** the commit the pod settled on, if any seat ever shipped anything */
+  readonly commit?: string;
+  /** true when every reading seat approved the last attempt */
+  readonly agreed: boolean;
+}
+
+/**
+ * The pod, working.
+ *
+ * The builder ships; the seats that carry liability read what it shipped and approve or refuse. A
+ * refusal sends it back, with the refusal in the workspace for the next attempt to read, and every
+ * attempt stays in the history — the ones that were refused are the evidence that the reading seats
+ * are not decoration.
+ *
+ * Nothing here decides whether the work is good. That is the sealed re-run's job, and it happens
+ * after this, on whatever the pod settled on.
+ */
+export async function runPod(run: PodRun): Promise<PodOutcome> {
+  const builder = run.seats.find((seat) => seat.role === "builder");
+  if (!builder) throw new Error("a pod with no builder has nobody to ship anything");
+  const readers = run.seats.filter((seat) => seat.role !== "builder");
+
+  const attempts: Attempt[] = [];
+  let brief = run.brief;
+
+  for (let number = 1; number <= (run.attempts ?? 2); number++) {
+    const built = await runSeat({ ...builder, repo: run.repo, brief, image: run.image,
+      allowedHosts: run.allowedHosts, seconds: run.seconds });
+
+    const read: SeatOutcome[] = [];
+    for (const seat of readers) {
+      read.push(await runSeat({ ...seat, repo: run.repo, brief, image: run.image,
+        allowedHosts: run.allowedHosts, seconds: run.seconds }));
+    }
+
+    const refusals = read
+      .filter((outcome) => outcome.said?.decision === "refuse")
+      .map((outcome) => ({ role: outcome.role, why: outcome.said?.why ?? "" }));
+
+    attempts.push({ number, built, read, refusals });
+
+    // silence is not approval. A seat that said nothing has not approved, and the work goes back
+    const held = read
+      .filter((outcome) => outcome.said?.decision !== "approve")
+      .map((outcome) => ({
+        role: outcome.role,
+        why: outcome.said?.why ?? "it said nothing at all, which is not approval",
+      }));
+    if (held.length === 0) break;
+
+    // the next attempt is told what it was refused for, in the brief it reads
+    brief = `${run.brief}\n\n## What was refused last time\n\n${held
+      .map((refusal) => `- the ${refusal.role} refused: ${refusal.why}`)
+      .join("\n")}`;
+  }
+
+  const last = attempts[attempts.length - 1]!;
+  return {
+    attempts,
+    commit: await head(run.repo),
+    agreed: last.read.length > 0 && last.read.every((outcome) => outcome.said?.decision === "approve"),
+  };
+}

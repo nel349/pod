@@ -22,7 +22,7 @@ export interface Ran {
   readonly out: string;
 }
 
-async function git(args: readonly string[], cwd?: string): Promise<Ran> {
+async function git(args: readonly string[], cwd?: string, extra: Record<string, string> = {}): Promise<Ran> {
   const child = Bun.spawn(["git", ...args], {
     cwd,
     stdout: "pipe",
@@ -33,6 +33,7 @@ async function git(args: readonly string[], cwd?: string): Promise<Ran> {
       GIT_CONFIG_GLOBAL: "/dev/null",
       GIT_CONFIG_SYSTEM: "/dev/null",
       GIT_TERMINAL_PROMPT: "0",
+      ...extra,
     },
   });
   const [stdout, stderr] = await Promise.all([
@@ -42,8 +43,8 @@ async function git(args: readonly string[], cwd?: string): Promise<Ran> {
   return { code: await child.exited, out: `${stdout}${stderr}`.trim() };
 }
 
-async function must(args: readonly string[], cwd?: string): Promise<string> {
-  const ran = await git(args, cwd);
+async function must(args: readonly string[], cwd?: string, extra: Record<string, string> = {}): Promise<string> {
+  const ran = await git(args, cwd, extra);
   if (ran.code !== 0) throw new Error(`git ${args.join(" ")} failed: ${ran.out}`);
   return ran.out;
 }
@@ -83,32 +84,59 @@ export interface Work {
  * commit deletes. Anything else would let work accumulate that nobody wrote.
  */
 export async function commitWork(repo: Repository, work: Work): Promise<string> {
-  const index = await mkdtemp(join(tmpdir(), "pod-index-"));
-  const indexFile = join(index, "index");
+  const staged = await stage(repo, work.workspace);
   try {
-    const env = [
-      `--git-dir=${repo.path}`,
-      `--work-tree=${work.workspace}`,
-    ];
-    process.env.GIT_INDEX_FILE = indexFile;
-    await must([...env, "add", "--all", "."], work.workspace);
-
-    const parent = await head(repo);
-    const tree = await must([...env, "write-tree"]);
-    const commit = await must([
-      ...env,
-      "-c", `user.name=${work.agent}`,
-      "-c", `user.email=${work.email}`,
-      "commit-tree", tree,
-      ...(parent ? ["-p", parent] : []),
-      "-m", work.message,
-    ]);
-    await must([...env, "update-ref", `refs/heads/${BRANCH}`, commit]);
-    return commit;
+    return await write(repo, work, staged.tree);
   } finally {
-    delete process.env.GIT_INDEX_FILE;
-    await rm(index, { recursive: true, force: true });
+    await staged.discard();
   }
+}
+
+/**
+ * Commit only if the work actually moved.
+ *
+ * A seat that read the code and changed nothing produces no commit. Comparing commit ids cannot
+ * answer that — a new commit always has a new id, because its parent and its timestamp differ — so
+ * this compares the tree, which is the thing that describes the work itself.
+ */
+export async function commitIfChanged(repo: Repository, work: Work): Promise<string | undefined> {
+  const staged = await stage(repo, work.workspace);
+  try {
+    const tip = await head(repo);
+    if (tip) {
+      const before = await must([`--git-dir=${repo.path}`, "rev-parse", `${tip}^{tree}`]);
+      if (before === staged.tree) return undefined;
+    }
+    return await write(repo, work, staged.tree);
+  } finally {
+    await staged.discard();
+  }
+}
+
+/** Build an index from a workspace and hand back the tree it describes. */
+async function stage(repo: Repository, workspace: string): Promise<{ tree: string; discard: () => Promise<void> }> {
+  const held = await mkdtemp(join(tmpdir(), "pod-index-"));
+  const indexFile = join(held, "index");
+  const where = [`--git-dir=${repo.path}`, `--work-tree=${workspace}`];
+  const withIndex = { GIT_INDEX_FILE: indexFile };
+
+  await must([...where, "add", "--all", "."], workspace, withIndex);
+  const tree = await must([...where, "write-tree"], undefined, withIndex);
+  return { tree, discard: () => rm(held, { recursive: true, force: true }) };
+}
+
+async function write(repo: Repository, work: Work, tree: string): Promise<string> {
+  const parent = await head(repo);
+  const commit = await must([
+    `--git-dir=${repo.path}`,
+    "-c", `user.name=${work.agent}`,
+    "-c", `user.email=${work.email}`,
+    "commit-tree", tree,
+    ...(parent ? ["-p", parent] : []),
+    "-m", work.message,
+  ]);
+  await must([`--git-dir=${repo.path}`, "update-ref", `refs/heads/${BRANCH}`, commit]);
+  return commit;
 }
 
 /** The tip of the branch, or nothing at all if the pod has not committed yet. */
