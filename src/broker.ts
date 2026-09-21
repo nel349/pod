@@ -16,7 +16,7 @@
  * The model itself is one function. In tests it is a program that answers predictably; in a real run
  * it is Claude, through the CLI that is already signed in on this machine.
  */
-import { unlink } from "node:fs/promises";
+import { chmod, unlink } from "node:fs/promises";
 
 export interface Exchange {
   readonly at: string;
@@ -117,6 +117,13 @@ export async function openBroker(input: {
       }
     },
   });
+
+  /*
+   * Connecting to a unix socket needs write permission on the socket file, and the box cannot ignore
+   * modes any more than it can for a directory. Without this the agent's ask is refused by the
+   * kernel before it reaches anything, which looks exactly like an agent that said nothing.
+   */
+  await chmod(input.socket, 0o777);
 
   return {
     socket: input.socket,
