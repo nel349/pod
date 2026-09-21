@@ -20,6 +20,7 @@ import { join } from "node:path";
 import type { Role } from "./job.ts";
 import type { Broker } from "./broker.ts";
 import { checkout, commitIfChanged, head, type Repository } from "./repo.ts";
+import { writableByTheBox } from "./sandbox.ts";
 
 /** What an agent says it did, or decided. A seat that says nothing has not done its job. */
 export interface Said {
@@ -103,6 +104,10 @@ export async function runSeat(run: SeatRun): Promise<SeatOutcome> {
 
     await mkdir(join(workspace, ".pod"), { recursive: true });
     await writeFile(join(workspace, BRIEF), run.brief);
+
+    // the box cannot ignore file modes, and a temporary directory is its owner's alone. Without
+    // this an agent can read nothing and write nothing, and says nothing as a result
+    await writableByTheBox(workspace);
 
     const name = `pod-seat-${run.role}-${Math.random().toString(36).slice(2, 10)}`;
     const ran = await docker([

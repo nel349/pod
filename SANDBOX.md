@@ -202,6 +202,12 @@ Two rules came out of it, and both are in the code.
   and quotes its own last words, where it used to cost ninety seconds and say only that no such
   container existed.
 
+**It happened again on 20 September**, in the other direction. An agent's workspace is made for it
+by us, and it was 0700 like any temporary directory, so an agent could not write into the workspace
+it had been handed: no code, no decision, nothing. Every agent test passed on this Mac and every one
+failed on Linux. The rule is now in two functions that say which side they are for — one for a
+directory the box only reads, one for a workspace it owns — and the reason is in both.
+
 The second one matters beyond this bug: the failure mode it replaced made every real startup failure
 look identical, which is the worst thing a grading system can do to the person reading the verdict.
 

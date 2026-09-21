@@ -140,6 +140,31 @@ export async function readableToTheBox(directory: string): Promise<string> {
   return directory;
 }
 
+/**
+ * Make a directory the box can write into, not just read.
+ *
+ * The sibling of `readableToTheBox`, and the same lesson learned twice: a temporary directory is
+ * 0700 on Linux, the box drops the capability that lets root ignore file modes, and so an agent
+ * handed a workspace could read nothing and write nothing. On a Mac it all worked, because the file
+ * sharing layer there ignores modes — which is why this cost a green suite and a red CI rather than
+ * being noticed here.
+ *
+ * An agent's workspace is its own to change, so this is 0777 rather than 0755. What protects us from
+ * the agent is the box, not the mode bits on a directory we made for it.
+ */
+export async function writableByTheBox(directory: string): Promise<string> {
+  const { chmod, readdir, stat } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  await chmod(directory, 0o777);
+  for (const name of await readdir(directory)) {
+    const path = join(directory, name);
+    const what = await stat(path);
+    if (what.isDirectory()) await writableByTheBox(path);
+    else await chmod(path, 0o666);
+  }
+  return directory;
+}
+
 export async function installDependencies(phase: InstallPhase): Promise<SealedRunOutcome> {
   const timeoutSeconds = phase.timeoutSeconds ?? 600;
   const name = `pod-install-${crypto.randomUUID().slice(0, 12)}`;
