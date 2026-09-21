@@ -18,6 +18,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Role } from "./job.ts";
+import type { Broker } from "./broker.ts";
 import { checkout, commitIfChanged, head, type Repository } from "./repo.ts";
 
 /** What an agent says it did, or decided. A seat that says nothing has not done its job. */
@@ -42,6 +43,16 @@ export interface SeatRun {
    * needs a model says so, and the job records that it did.
    */
   readonly allowedHosts?: readonly string[];
+  /**
+   * A model, reachable through a socket mounted into the box.
+   *
+   * This is not a route out. It is a file the agent can write to and read from, and on the other
+   * side is one function that answers prompts — so an agent with a model still has no internet, no
+   * credential, and nothing else it can reach.
+   */
+  readonly broker?: Broker;
+  /** a directory of agent programs, mounted read-only at /agents so a seat cannot rewrite itself */
+  readonly agents?: string;
   readonly seconds?: number;
 }
 
@@ -55,10 +66,14 @@ export interface SeatOutcome {
   readonly timedOut: boolean;
   /** true when the agent had a route out, so a reader knows what it could have reached */
   readonly hadNetwork: boolean;
+  /** how many times it asked the model, which is a fact about the run worth keeping */
+  readonly askedTheModel: number;
 }
 
 const SAY = ".pod/say.json";
 const BRIEF = ".pod/brief.md";
+/** where the socket appears inside the box. Outside /work, so it cannot be committed */
+const MODEL = "/pod-model.sock";
 
 async function docker(args: readonly string[]): Promise<{ code: number; out: string }> {
   const child = Bun.spawn(["docker", ...args], { stdout: "pipe", stderr: "pipe" });
@@ -96,9 +111,13 @@ export async function runSeat(run: SeatRun): Promise<SeatOutcome> {
       "--memory", "2g", "--cpus", "2", "--pids-limit", "512",
       "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
       "-v", `${workspace}:/work`,
+      // the model, as a file rather than a route: the box still has no network of any kind
+      ...(run.broker ? ["-v", `${run.broker.socket}:${MODEL}`] : []),
+      ...(run.agents ? ["-v", `${run.agents}:/agents:ro`] : []),
       "-e", `POD_ROLE=${run.role}`,
       "-e", `POD_BRIEF=/work/${BRIEF}`,
       "-e", `POD_SAY=/work/${SAY}`,
+      ...(run.broker ? ["-e", `POD_MODEL=${MODEL}`] : []),
       "-w", "/work",
       run.image,
       "sh", "-c", `timeout ${run.seconds ?? 600} ${run.command}`,
@@ -118,6 +137,7 @@ export async function runSeat(run: SeatRun): Promise<SeatOutcome> {
       seconds: (Date.now() - started) / 1000,
       timedOut: ran.code === 124,
       hadNetwork,
+      askedTheModel: run.broker?.transcript.length ?? 0,
     };
   } finally {
     await rm(workspace, { recursive: true, force: true });
@@ -164,6 +184,8 @@ export interface PodRun {
   /** the crew, in the order they work: the builder ships, the rest read */
   readonly seats: readonly Seated[];
   readonly allowedHosts?: readonly string[];
+  readonly broker?: Broker;
+  readonly agents?: string;
   readonly seconds?: number;
   /**
    * How many times the builder may try again after a refusal. A pod that cannot be refused is a pod
@@ -208,12 +230,12 @@ export async function runPod(run: PodRun): Promise<PodOutcome> {
 
   for (let number = 1; number <= (run.attempts ?? 2); number++) {
     const built = await runSeat({ ...builder, repo: run.repo, brief, image: run.image,
-      allowedHosts: run.allowedHosts, seconds: run.seconds });
+      allowedHosts: run.allowedHosts, broker: run.broker, agents: run.agents, seconds: run.seconds });
 
     const read: SeatOutcome[] = [];
     for (const seat of readers) {
       read.push(await runSeat({ ...seat, repo: run.repo, brief, image: run.image,
-        allowedHosts: run.allowedHosts, seconds: run.seconds }));
+        allowedHosts: run.allowedHosts, broker: run.broker, agents: run.agents, seconds: run.seconds }));
     }
 
     const refusals = read

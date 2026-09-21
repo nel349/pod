@@ -150,6 +150,19 @@ describe("a job's repository", () => {
   });
 });
 
+describe("a seat that produced nothing", () => {
+  test("makes no commit, rather than committing that nothing happened", async () => {
+    const repo = await aRepository();
+    const { commitIfChanged } = await import("../repo.ts");
+    const nothing = await mkdtemp(join(tmpdir(), "pod-nothing-"));
+
+    expect(await commitIfChanged(repo, { workspace: nothing, message: "nothing", ...BUILDER }))
+      .toBeUndefined();
+    expect(await head(repo)).toBeUndefined();
+    expect(await history(repo)).toEqual([]);
+  });
+});
+
 describe("a commit id, as the chain holds it", () => {
   test("it goes in and comes back the same", () => {
     const commit = "c0ffee1234abcdef0123456789abcdef01234567";

@@ -106,11 +106,20 @@ export async function commitIfChanged(repo: Repository, work: Work): Promise<str
     if (tip) {
       const before = await must([`--git-dir=${repo.path}`, "rev-parse", `${tip}^{tree}`]);
       if (before === staged.tree) return undefined;
+    } else if (staged.tree === (await emptyTree(repo))) {
+      // nothing before, and nothing now: an agent that produced nothing has produced nothing, and a
+      // commit of an empty tree is a claim that something happened
+      return undefined;
     }
     return await write(repo, work, staged.tree);
   } finally {
     await staged.discard();
   }
+}
+
+/** The id of a tree with nothing in it, which git will tell us rather than us remembering it. */
+async function emptyTree(repo: Repository): Promise<string> {
+  return must([`--git-dir=${repo.path}`, "hash-object", "-t", "tree", "/dev/null"]);
 }
 
 /** Build an index from a workspace and hand back the tree it describes. */
