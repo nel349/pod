@@ -47,7 +47,7 @@ jobs:
       # the test deploys the bytecode this build produces, onto anvil, and moves real balances
       - run: forge build
         working-directory: contracts
-      - run: bun test src/__tests__/chain.test.ts
+      - run: bun test src/__tests__/chain.test.ts src/__tests__/posting.test.ts
 
   contracts:
     name: contract tests

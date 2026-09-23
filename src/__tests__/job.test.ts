@@ -124,3 +124,55 @@ describe("deadlines", () => {
     for (const mode of Object.values(MODES)) expect(mode.windowMinutes).toBeGreaterThan(mode.idleMinutes);
   });
 });
+
+describe("the files a check runs are sealed with it", () => {
+  const base = async (weak: string) => {
+    const { digestOf } = await import("../job.ts");
+    return {
+      idea: "a page that scores excuses",
+      mode: "flash" as const,
+      price: 10n,
+      allowed: [],
+      salt: "nobody-can-guess-this",
+      checks: [
+        { says: "it answers", run: "node loads.mjs", hidden: false, file: "loads.mjs", digest: await digestOf("// loads") },
+        { says: "a thin excuse scores lower", run: "node weak.mjs", hidden: true, file: "weak.mjs", digest: await digestOf(weak) },
+      ],
+    };
+  };
+
+  test("the files that were sealed are accepted", async () => {
+    const { filesMatchSeal } = await import("../job.ts");
+    const spec = await base("// the real hidden check");
+    expect(await filesMatchSeal(spec, { "loads.mjs": "// loads", "weak.mjs": "// the real hidden check" }))
+      .toEqual({ ok: true });
+  });
+
+  test("a hidden check swapped after posting is caught, which is the reason for all this", async () => {
+    const { filesMatchSeal } = await import("../job.ts");
+    const spec = await base("// the real hidden check");
+    expect(await filesMatchSeal(spec, { "loads.mjs": "// loads", "weak.mjs": "// an easier one" }))
+      .toEqual({ ok: false, why: "weak.mjs is not the file that was sealed" });
+  });
+
+  test("changing a hidden check's file changes the seal, so it cannot be done quietly", async () => {
+    const { sealSpec } = await import("../job.ts");
+    expect(await sealSpec(await base("// the real hidden check")))
+      .not.toBe(await sealSpec(await base("// an easier one")));
+  });
+
+  test("a missing file, and a file nobody sealed, are both refused", async () => {
+    const { filesMatchSeal } = await import("../job.ts");
+    const spec = await base("// the real hidden check");
+    expect((await filesMatchSeal(spec, { "loads.mjs": "// loads" })).why).toBe("weak.mjs was sealed and not supplied");
+    expect((await filesMatchSeal(spec, {
+      "loads.mjs": "// loads", "weak.mjs": "// the real hidden check", "extra.mjs": "// sneaked in",
+    })).why).toBe("extra.mjs was supplied and never sealed");
+  });
+
+  test("a check that does not seal its file is refused rather than trusted", async () => {
+    const { filesMatchSeal } = await import("../job.ts");
+    const spec = { ...(await base("x")), checks: [{ says: "it answers", run: "node loads.mjs", hidden: false }] };
+    expect((await filesMatchSeal(spec, {})).why).toBe('"it answers" does not seal its file');
+  });
+});

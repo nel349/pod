@@ -29,6 +29,17 @@ export interface Check {
   readonly run: string;
   /** whether the pod gets to see this one. Hidden checks are the reason the box is sealed */
   readonly hidden: boolean;
+  /** the file the command runs, by name */
+  readonly file?: string;
+  /**
+   * The file's fingerprint, sealed with everything else.
+   *
+   * Without this the seal covers the command — `node weak.mjs` — but not what `weak.mjs` says, and
+   * the hidden check that decides whether anybody is paid could be swapped after the job was posted
+   * without the seal noticing. With it, whoever holds the checks cannot change one, and anybody can
+   * prove it when they are published.
+   */
+  readonly digest?: `0x${string}`;
 }
 
 /** Something the artefact is allowed to reach at grading time. Anything else is a finding. */
@@ -82,6 +93,36 @@ async function sha256(text: string): Promise<`0x${string}`> {
  */
 export function sealSpec(spec: Spec): Promise<`0x${string}`> {
   return sha256(canonical(spec));
+}
+
+/** The fingerprint of a check's file, computed the same way in a browser and on the server. */
+export function digestOf(contents: string): Promise<`0x${string}`> {
+  return sha256(contents);
+}
+
+/**
+ * Whether the files in hand are the files that were sealed.
+ *
+ * Every check that names a file must have that file, with that fingerprint. A check with no digest
+ * is refused rather than trusted: a job posted today seals its files, and one that did not is one
+ * whose checks nobody can hold anybody to.
+ */
+export async function filesMatchSeal(
+  spec: Spec,
+  files: Readonly<Record<string, string>>,
+): Promise<{ readonly ok: boolean; readonly why?: string }> {
+  for (const check of spec.checks) {
+    if (!check.file || !check.digest) return { ok: false, why: `"${check.says}" does not seal its file` };
+    const contents = files[check.file];
+    if (contents === undefined) return { ok: false, why: `${check.file} was sealed and not supplied` };
+    if ((await digestOf(contents)) !== check.digest) {
+      return { ok: false, why: `${check.file} is not the file that was sealed` };
+    }
+  }
+  const named = new Set(spec.checks.map((check) => check.file));
+  const extra = Object.keys(files).filter((name) => !named.has(name));
+  if (extra.length > 0) return { ok: false, why: `${extra.join(", ")} was supplied and never sealed` };
+  return { ok: true };
 }
 
 /** Check that the text we were handed is the text that was sealed. */

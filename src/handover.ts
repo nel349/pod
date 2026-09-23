@@ -14,23 +14,9 @@ import { verifyMessage, type Address, type Hex } from "viem";
 import { podTokenAbi } from "./token.ts";
 import type { Contract } from "./jobs.ts";
 import type { Published } from "./github.ts";
+import { claimToSign } from "./messages.ts";
 
-/**
- * The sentence a holder signs.
- *
- * It names the job, the account the repository is going to, and the token being claimed with, so a
- * signature for one claim cannot be replayed for another.
- */
-export function claimToSign(input: {
-  readonly jobId: string;
-  readonly tokenId: bigint;
-  readonly toAccount: string;
-}): string {
-  return [
-    `I hold POD #${input.tokenId} for the job "${input.jobId}".`,
-    `Transfer its repository to the GitHub account "${input.toAccount}".`,
-  ].join("\n");
-}
+export { claimToSign };
 
 export interface Claim {
   readonly jobId: string;
