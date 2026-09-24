@@ -141,7 +141,7 @@ describe("one job, opened", () => {
     expect(body).toContain("What is being asked for");
     expect(body).toContain("from my postcode");
     expect(body).toContain("2 checks are sealed until there is a verdict");
-    expect(body).toContain("security — open");
+    expect(body).toContain("security · open");
   });
 
   test("a graded job is described by its receipt, not by a brief", async () => {

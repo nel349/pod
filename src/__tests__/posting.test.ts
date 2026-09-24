@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { parseEther, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { acceptPosting, postingMessage, readerFor, type ChainReader, type Posting, type SpecOnTheWire } from "../posting.ts";
+import { ProvenChecks, type TriedCheck } from "../checkwriting/index.ts";
 import { digestOf, sealSpec, type Spec } from "../job.ts";
 import { post, readJob } from "../jobs.ts";
 import { JobStore } from "../store.ts";
@@ -14,7 +15,7 @@ import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/an
  * A stranger posts a job.
  *
  * Every case here is a real transaction on a real EVM and a real signature, because what is being
- * tested is whether the server can be talked into publishing something the chain does not back — and
+ * tested is whether the server can be talked into publishing something the chain does not back, and
  * a fake chain would only tell us the fake agrees.
  */
 
@@ -22,6 +23,7 @@ const available = await anvilAvailable();
 let anvil: Anvil;
 let jobs: Address;
 let reader: ChainReader;
+let proven: ProvenChecks;
 
 const POSTER = ANVIL_KEYS[1];
 const STRANGER = ANVIL_KEYS[2];
@@ -29,6 +31,14 @@ const PRICE = parseEther("0.1");
 
 const VISIBLE = "// the page answers";
 const HIDDEN = "// the hidden check, which decides whether anybody is paid";
+
+/** A check as the writer hands one back when it passed all three of its trials. */
+const passedItsTrials = (source: string): TriedCheck => ({
+  checkable: true, says: "a check", secret: false, asks: "asks", expects: "expects", nearMiss: "a mistake",
+  file: "check.mjs", source,
+  proof: { working: true, nearMiss: true, nothing: true },
+  saw: { working: "ok", nearMiss: "caught", nothing: "caught" },
+});
 
 async function specOf(hidden = HIDDEN): Promise<Spec> {
   return {
@@ -81,6 +91,9 @@ beforeAll(async () => {
     jobs,
     read: async (id) => readJob({ address: jobs, publicClient: anvil.publicClient }, id),
   });
+  // the two checks every honest posting below carries have been through their trials here
+  proven = new ProvenChecks(await mkdtemp(join(tmpdir(), "pod-proven-")));
+  await proven.remember([passedItsTrials(VISIBLE), passedItsTrials(HIDDEN)]);
 }, 120_000);
 
 afterAll(() => anvil?.stop());
@@ -89,7 +102,7 @@ describe.skipIf(!available)("a stranger posts a job", () => {
   test("a job paid for on the chain, signed by who paid, with the files it sealed, is published", async () => {
     const spec = await specOf();
     const store = await aStore();
-    const accepted = await acceptPosting(store, reader, await signed({ jobId: "a-coat", onChainId: await paid(spec), spec }));
+    const accepted = await acceptPosting(store, reader, await signed({ jobId: "a-coat", onChainId: await paid(spec), spec }), proven);
 
     expect(accepted.ok).toBe(true);
     const record = await store.read("a-coat");
@@ -102,7 +115,7 @@ describe.skipIf(!available)("a stranger posts a job", () => {
   test("somebody else's signature cannot attach a spec to money they did not put up", async () => {
     const spec = await specOf();
     const posting = await signed({ jobId: "a-coat", onChainId: await paid(spec), spec, key: STRANGER });
-    const accepted = await acceptPosting(await aStore(), reader, posting);
+    const accepted = await acceptPosting(await aStore(), reader, posting, proven);
     expect(accepted).toEqual({ ok: false, status: 403, why: expect.stringContaining("posted by somebody else") });
   }, 60_000);
 
@@ -110,14 +123,14 @@ describe.skipIf(!available)("a stranger posts a job", () => {
     const spec = await specOf();
     const honest = await signed({ jobId: "a-coat", onChainId: await paid(spec), spec });
     const forged = { ...honest, poster: privateKeyToAccount(STRANGER).address };
-    const accepted = await acceptPosting(await aStore(), reader, forged);
+    const accepted = await acceptPosting(await aStore(), reader, forged, proven);
     expect(accepted).toEqual({ ok: false, status: 401, why: "that signature is not from the address that says it posted" });
   }, 60_000);
 
   test("a spec that is not the one that was sealed is refused, however it differs", async () => {
     const onChainId = await paid(await specOf());
     const different = { ...(await specOf()), idea: "Something else entirely" };
-    const accepted = await acceptPosting(await aStore(), reader, await signed({ jobId: "a-coat", onChainId, spec: different }));
+    const accepted = await acceptPosting(await aStore(), reader, await signed({ jobId: "a-coat", onChainId, spec: different }), proven);
     expect(accepted).toEqual({ ok: false, status: 409, why: expect.stringContaining("does not match") });
   }, 60_000);
 
@@ -127,22 +140,52 @@ describe.skipIf(!available)("a stranger posts a job", () => {
     const swapped = await signed({
       jobId: "a-coat", onChainId, spec, files: { "loads.mjs": VISIBLE, "cold.mjs": "// an easier check" },
     });
-    const accepted = await acceptPosting(await aStore(), reader, swapped);
+    const accepted = await acceptPosting(await aStore(), reader, swapped, proven);
     expect(accepted).toEqual({ ok: false, status: 409, why: "cold.mjs is not the file that was sealed" });
   }, 60_000);
 
+  test("a check the server never tried is refused, even paid for, sealed and signed properly", async () => {
+    // the bug this guards: the page only lets a poster seal proven checks, but the page is theirs to
+    // change and the API can be called without it. A check nobody could pass must not reach a pod
+    const untried = "process.exit(1); // nobody passes this";
+    const spec = await specOf(untried);
+    const posting = await signed({
+      jobId: "a-coat", onChainId: await paid(spec), spec, files: { "loads.mjs": VISIBLE, "cold.mjs": untried },
+    });
+    const store = await aStore();
+    const accepted = await acceptPosting(store, reader, posting, proven);
+    expect(accepted).toEqual({
+      ok: false, status: 409,
+      why: "\"a cold day says take a coat\" was never tried here: write the checks on the posting page, and post the ones that passed",
+    });
+    expect(await store.read("a-coat")).toBeUndefined();
+  }, 60_000);
+
+  test("a posting in the wrong shape is refused with what is wrong, not a crash", async () => {
+    const { spec: _spec, ...noSpec } = await signed({ jobId: "a-coat", onChainId: 1n, spec: await specOf() });
+    const accepted = await acceptPosting(await aStore(), reader, noSpec, proven);
+    expect(accepted.ok).toBe(false);
+    expect(accepted.ok ? 0 : accepted.status).toBe(400);
+  }, 60_000);
+
+  test("a name that is not a wall address, such as one beginning with a dot, is refused", async () => {
+    const spec = await specOf();
+    const accepted = await acceptPosting(await aStore(), reader, await signed({ jobId: ".proven", onChainId: await paid(spec), spec }), proven);
+    expect(accepted).toEqual({ ok: false, status: 400, why: "a job's name is lower-case letters, numbers and dashes, from 3 to 64 of them" });
+  }, 60_000);
+
   test("a job that was never paid for is not published", async () => {
-    const accepted = await acceptPosting(await aStore(), reader, await signed({ jobId: "a-coat", onChainId: 999n, spec: await specOf() }));
+    const accepted = await acceptPosting(await aStore(), reader, await signed({ jobId: "a-coat", onChainId: 999n, spec: await specOf() }), proven);
     expect(accepted).toEqual({ ok: false, status: 404, why: "there is no job 999 on the contract" });
   }, 60_000);
 
   test("a name already on the wall is not taken twice", async () => {
     const store = await aStore();
     const first = await specOf();
-    expect((await acceptPosting(store, reader, await signed({ jobId: "a-coat", onChainId: await paid(first), spec: first }))).ok).toBe(true);
+    expect((await acceptPosting(store, reader, await signed({ jobId: "a-coat", onChainId: await paid(first), spec: first }), proven)).ok).toBe(true);
 
     const second = await specOf();
-    const again = await acceptPosting(store, reader, await signed({ jobId: "a-coat", onChainId: await paid(second), spec: second }));
+    const again = await acceptPosting(store, reader, await signed({ jobId: "a-coat", onChainId: await paid(second), spec: second }), proven);
     expect(again).toEqual({ ok: false, status: 409, why: "there is already a job called a-coat" });
   }, 60_000);
 });

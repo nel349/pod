@@ -85,6 +85,72 @@ async function docker(args: readonly string[]): Promise<{ code: number; out: str
   return { code: await child.exited, out: `${stdout}${stderr}`.trim() };
 }
 
+/** One agent program, in a box, on a workspace that is its own. */
+export interface InBox {
+  /** what the box is called, so a stray one can be traced to what started it */
+  readonly label: string;
+  readonly workspace: string;
+  readonly image: string;
+  readonly command: string;
+  /** whether it has a route out. Almost never: a model is a socket, not a route */
+  readonly network?: boolean;
+  readonly broker?: Broker;
+  readonly agents?: string;
+  readonly seconds?: number;
+  readonly env?: Readonly<Record<string, string>>;
+}
+
+/**
+ * Run an agent program in a box: no route out unless asked for, no capabilities, a memory and
+ * process limit, the workspace at /work, the brief and the answer under /work/.pod, and the model —
+ * when there is one — as a socket rather than a network.
+ *
+ * Seats use this, and so does anything else an agent does for the platform, so there is one place
+ * that says what an agent's box is.
+ */
+export async function runInBox(run: InBox): Promise<{ readonly code: number; readonly out: string }> {
+  const name = `pod-${run.label}-${Math.random().toString(36).slice(2, 10)}`;
+  const seconds = run.seconds ?? 600;
+  // the command inside has its own timeout, but a box that stops answering is killed from outside too
+  const killer = setTimeout(() => { void docker(["kill", name]); }, (seconds + OUTER_GRACE_SECONDS) * 1000);
+  try {
+    return await docker([
+      "run", "--rm", "--name", name,
+      ...(run.network ? [] : ["--network", "none"]),
+      "--memory", "2g", "--cpus", "2", "--pids-limit", "512",
+      "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+      "-v", `${run.workspace}:/work`,
+      // the model, as a file rather than a route: the box still has no network of any kind
+      ...(run.broker ? ["-v", `${run.broker.socket}:${MODEL}`] : []),
+      ...(run.agents ? ["-v", `${run.agents}:/agents:ro`] : []),
+      ...Object.entries(run.env ?? {}).flatMap(([key, value]) => ["-e", `${key}=${value}`]),
+      "-e", `POD_BRIEF=/work/${BRIEF}`,
+      "-e", `POD_SAY=/work/${SAY}`,
+      ...(run.broker ? ["-e", `POD_MODEL=${MODEL}`] : []),
+      "-w", "/work",
+      run.image,
+      "sh", "-c", `timeout ${seconds} ${run.command}; said=$?; ${HAND_THE_WORKSPACE_BACK}; exit $said`,
+    ]);
+  } finally {
+    clearTimeout(killer);
+  }
+}
+
+/** how long past its own timeout a box is given before it is killed from outside */
+const OUTER_GRACE_SECONDS = 30;
+
+/**
+ * The last thing a box does, after the agent has stopped: open everything in the workspace to its
+ * owner on the host.
+ *
+ * The box runs as root, and on Linux what root creates in a mounted folder stays root's, so folders
+ * the agent made could be neither read nor deleted by the server afterwards: a check writer's
+ * results would be lost and its workspace left behind. Running the box as the host's user instead
+ * was tried, and cuts the agent off from the model's socket under Docker Desktop. This runs after
+ * the agent, so nothing it does can stop it, including making folders nobody else may open.
+ */
+const HAND_THE_WORKSPACE_BACK = "chmod -R a+rwX /work 2>/dev/null";
+
 /**
  * Run one seat.
  *
@@ -109,24 +175,11 @@ export async function runSeat(run: SeatRun): Promise<SeatOutcome> {
     // this an agent can read nothing and write nothing, and says nothing as a result
     await writableByTheBox(workspace);
 
-    const name = `pod-seat-${run.role}-${Math.random().toString(36).slice(2, 10)}`;
-    const ran = await docker([
-      "run", "--rm", "--name", name,
-      ...(hadNetwork ? [] : ["--network", "none"]),
-      "--memory", "2g", "--cpus", "2", "--pids-limit", "512",
-      "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
-      "-v", `${workspace}:/work`,
-      // the model, as a file rather than a route: the box still has no network of any kind
-      ...(run.broker ? ["-v", `${run.broker.socket}:${MODEL}`] : []),
-      ...(run.agents ? ["-v", `${run.agents}:/agents:ro`] : []),
-      "-e", `POD_ROLE=${run.role}`,
-      "-e", `POD_BRIEF=/work/${BRIEF}`,
-      "-e", `POD_SAY=/work/${SAY}`,
-      ...(run.broker ? ["-e", `POD_MODEL=${MODEL}`] : []),
-      "-w", "/work",
-      run.image,
-      "sh", "-c", `timeout ${run.seconds ?? 600} ${run.command}`,
-    ]);
+    const ran = await runInBox({
+      label: `seat-${run.role}`, workspace, image: run.image, command: run.command,
+      network: hadNetwork, broker: run.broker, agents: run.agents, seconds: run.seconds,
+      env: { POD_ROLE: run.role },
+    });
 
     const said = await readSaid(workspace);
     // the conversation with the platform is not part of the work

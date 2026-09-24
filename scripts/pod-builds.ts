@@ -15,8 +15,8 @@ import { join } from "node:path";
 import { runPod } from "../src/agent.ts";
 import { claudeOnThisMachine, openBroker } from "../src/broker.ts";
 import { history, openRepository } from "../src/repo.ts";
+import { IMAGE } from "../src/sandbox.ts";
 
-const IMAGE = "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944";
 const AGENTS = new URL("../agents", import.meta.url).pathname;
 
 const brief = process.env.POD_BRIEF_TEXT

@@ -9,10 +9,22 @@
     "serve": "bun run src/server.ts"
   },
   "devDependencies": {
+    "@happy-dom/global-registrator": "^20.14.5",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
     "@types/bun": "^1.4.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "viem": "^2.56.7"
+    "@hookform/resolvers": "^5.9.1",
+    "@tanstack/react-query": "^5.103.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-hook-form": "^7.88.0",
+    "viem": "^2.56.7",
+    "wagmi": "^3.7.7",
+    "zod": "^4.6.5"
   }
 }

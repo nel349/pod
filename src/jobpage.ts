@@ -92,7 +92,7 @@ taken back. It returns to the person who posted the job when the job's window cl
   const where = page.repository
     ? `<h2>The work itself</h2>
 <p class="work"><a href="${escape(page.repository)}">${escape(page.repository.replace("https://github.com/", ""))}</a>
- — every attempt, including the ones that failed, at the commit that was graded.</p>`
+ holds every attempt, including the ones that failed, at the commit that was graded.</p>`
     : "";
 
   /**
@@ -104,7 +104,7 @@ taken back. It returns to the person who posted the job when the job's window cl
   const ownership = page.chain?.tokenId
     ? `<h2>Who owns it</h2>
 <p class="owns">POD #${escape(page.chain.tokenId)} is the title to this repository. Whoever holds it
-can claim the repository by signing for it with the wallet that owns the token — a sale carries both.
+can claim the repository by signing for it with the wallet that owns the token. A sale carries both.
 ${page.podHolder ? `It is held by <code>${escape(page.podHolder)}</code>.` : ""}</p>`
     : page.tile.verdict === "passed"
       ? `<h2>Who owns it</h2><p class="owns">No title was minted for this job, so nobody can claim the repository yet.</p>`
@@ -132,7 +132,7 @@ ${page.podHolder ? `It is held by <code>${escape(page.podHolder)}</code>.` : ""}
   <h2>${checksHeading}</h2>
   <ul class="checks">${checks}</ul>
   ${page.tile.verdict === "running"
-    ? `<p class="fetch sealed">The checks are sealed until there is a verdict — including from the pod.</p>`
+    ? `<p class="fetch sealed">The checks are sealed until there is a verdict. The pod cannot see them either.</p>`
     : `<p class="fetch"><a href="${escape(checksURI)}">Fetch the checks</a>, including the ones the pod
   could not see, and run them yourself.</p>`}
 
@@ -159,7 +159,7 @@ ${page.podHolder ? `It is held by <code>${escape(page.podHolder)}</code>.` : ""}
  */
 function renderBrief(brief: Brief): string {
   const seats = brief.seats.map((seat) =>
-    `<li class="${seat.taken ? "taken" : "open"}">${escape(seat.role)}${seat.taken ? "" : " — open"}</li>`,
+    `<li class="${seat.taken ? "taken" : "open"}">${escape(seat.role)}${seat.taken ? "" : " · open"}</li>`,
   ).join("");
 
   return `<h2>What is being asked for</h2>

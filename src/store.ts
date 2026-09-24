@@ -212,14 +212,16 @@ export class JobStore {
    */
   async save(record: JobRecord, checks: Readonly<Record<string, string>> = {}): Promise<void> {
     if (!isSafeName(record.jobId)) throw new Error(`a job id has to be a safe name: ${record.jobId}`);
+    // every name is checked before anything is written, so a refusal leaves nothing half saved behind
+    const names = Object.keys(checks);
+    const unsafe = names.find((name) => !isSafeName(name));
+    if (unsafe !== undefined) throw new Error(`a check's filename has to be a safe name: ${unsafe}`);
+
     const directory = join(this.root, record.jobId);
     await mkdir(join(directory, CHECKS), { recursive: true });
     await writeFile(join(directory, RECORD), encode(record));
-
-    const names = Object.keys(checks);
-    for (const name of names) {
-      if (!isSafeName(name)) throw new Error(`a check's filename has to be a safe name: ${name}`);
-      await writeFile(join(directory, CHECKS, name), checks[name]!);
+    for (const [name, contents] of Object.entries(checks)) {
+      await writeFile(join(directory, CHECKS, name), contents);
     }
     if (names.length === 0) return;
 

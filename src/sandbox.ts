@@ -16,6 +16,12 @@
  * code that can read the checks can return their expected values instead of doing the work.
  */
 
+/**
+ * The image every box runs, pinned by digest: Node, and nothing we added to it. A tag can be moved
+ * under us; a digest cannot.
+ */
+export const IMAGE = "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944";
+
 export interface SealedRun {
   /** the directory holding the work, mounted read-only and copied in */
   readonly source: string;

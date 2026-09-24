@@ -9,7 +9,9 @@
  * in the HTML while the thing it names is unreachable, unclickable, off the side of a phone, or
  * behind a link that goes nowhere. Those are the bugs a person hits first.
  */
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const LINUX_CHROME = ["/usr/bin/google-chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium"];
@@ -43,19 +45,20 @@ export class Browser {
     const path = await chromePath();
     if (!path) throw new Error("no Chrome on this machine to drive");
 
-    const port = 30000 + Math.floor(Math.random() * 20000);
+    // a profile directory, in a temporary place. The first version of this put it in the repository,
+    // which is how you end up committing a browser profile
+    const profile = await mkdtemp(join(tmpdir(), "pod-chrome-"));
     const process = Bun.spawn([
       path,
       "--headless=new",
-      `--remote-debugging-port=${port}`,
+      // port 0: Chrome picks one that is free and writes it into the profile, so two runs never collide
+      "--remote-debugging-port=0",
       "--remote-allow-origins=*",
       "--no-first-run",
       "--no-default-browser-check",
       "--disable-gpu",
       "--hide-scrollbars",
-      // a profile directory, in a temporary place. The first version of this line put it in the
-      // repository, which is how you end up committing a browser profile
-      `--user-data-dir=${tmpdir()}/pod-chrome-${port}`,
+      `--user-data-dir=${profile}`,
       "about:blank",
     ], { stdout: "ignore", stderr: "pipe" });
 
@@ -63,10 +66,11 @@ export class Browser {
     let target: { webSocketDebuggerUrl: string } | undefined;
     for (let i = 0; i < 100 && !target; i++) {
       try {
+        const port = (await Bun.file(join(profile, "DevToolsActivePort")).text()).split("\n")[0];
         const pages = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json() as
           { type: string; webSocketDebuggerUrl: string }[];
         target = pages.find((page) => page.type === "page");
-      } catch { /* not up yet */ }
+      } catch { /* not up yet: no port written, or not answering */ }
       if (!target) await Bun.sleep(100);
     }
     if (!target) {
@@ -116,6 +120,41 @@ export class Browser {
       await Bun.sleep(50);
     }
     throw new Error(`${url} never finished loading`);
+  }
+
+  /**
+   * Run a script in every page before the page's own code, for as long as this browser lives.
+   *
+   * It is how a wallet is put into a page for a test: the page cannot tell it apart from one an
+   * extension injected, which is the point.
+   */
+  async beforeEveryPage(source: string): Promise<void> {
+    await this.send("Page.enable");
+    await this.send("Page.addScriptToEvaluateOnNewDocument", { source });
+  }
+
+  /** Type into a field the way a keyboard would, rather than setting its value behind the page's back. */
+  async type(selector: string, text: string): Promise<void> {
+    await this.evaluate(`(() => {
+      const field = document.querySelector(${JSON.stringify(selector)});
+      field.focus();
+      field.select?.();
+    })()`);
+    await this.send("Input.insertText", { text });
+  }
+
+  /** Wait until something is true on the page, and say what the page showed if it never is. */
+  async until(expression: string, what: string, seconds = 60, show?: string): Promise<void> {
+    const deadline = Date.now() + seconds * 1000;
+    while (Date.now() < deadline) {
+      if (await this.evaluate<boolean>(`Boolean(${expression})`)) return;
+      await Bun.sleep(150);
+    }
+    // the part of the page that explains the wait, if the caller knows where that is
+    const shown = show
+      ? await this.evaluate<string>(`String(${show})`)
+      : (await this.text()).slice(0, 600);
+    throw new Error(`waited ${seconds}s for ${what}. The page said: ${shown}`);
   }
 
   /** Run an expression in the page and hand back what it evaluated to. */

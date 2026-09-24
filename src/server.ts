@@ -10,16 +10,44 @@
  */
 import { renderWall } from "./gallery.ts";
 import { renderAgent } from "./agentpage.ts";
+import { acceptPosting, readerFor, type ChainReader } from "./posting.ts";
+import { CheckWriting, ProvenChecks } from "./checkwriting/index.ts";
+import type { MarketConfig } from "./market.ts";
+import postPage from "./web/post/index.html";
 import { renderCard } from "./card.ts";
 import { renderJob } from "./jobpage.ts";
 import { checksArePublished, JobStore } from "./store.ts";
-import { checkFilePath, checksPath, isSafeName, ROUTES } from "./routes.ts";
+import { checkFilePath, checksPath, isSafeName, jobPath, ROUTES, writingPath } from "./routes.ts";
 
 const TEXT = { "content-type": "text/plain; charset=utf-8" } as const;
 const HTML = { "content-type": "text/html; charset=utf-8" } as const;
 const JSON_TYPE = { "content-type": "application/json; charset=utf-8" } as const;
 const CSS = { "content-type": "text/css; charset=utf-8" } as const;
 const SVG = { "content-type": "image/svg+xml; charset=utf-8" } as const;
+
+/**
+ * What a posting may weigh. The checks are small programs, not repositories; a posting larger than
+ * this is somebody sending us something other than checks.
+ */
+export const MOST_A_POSTING_MAY_WEIGH = 1_000_000;
+
+/**
+ * What a request to write checks may weigh: an idea and a handful of sentences, not a document.
+ */
+export const MOST_A_REQUEST_TO_WRITE_MAY_WEIGH = 32_000;
+
+/**
+ * The chain this server takes postings for, and the writer that turns a poster's sentences into
+ * checks. Without both, the wall is read-only and the posting page says so: a poster is not a
+ * programmer, and a page that asked them for check programs would be asking the wrong person.
+ */
+export interface Market {
+  readonly page: MarketConfig;
+  readonly chain: ChainReader;
+  readonly writing: CheckWriting;
+  /** the checks the writer proved, which every posting's checks must be among */
+  readonly proven: ProvenChecks;
+}
 const BUNDLE = { "content-type": "application/x-git-bundle" } as const;
 
 const style = new URL("../public/wall.css", import.meta.url);
@@ -34,9 +62,33 @@ const NOTHING_YET = `<!doctype html>
 <p>No job has been graded on this server. When one has, it appears here, whether it passed or not.</p>
 </header></body></html>`;
 
-export async function handle(request: Request, store: JobStore): Promise<Response> {
+export async function handle(request: Request, store: JobStore, market?: Market): Promise<Response> {
   const { pathname } = new URL(request.url);
+
+  // the one thing a stranger can change: posting a job they have already paid for
+  if (request.method === "POST" && pathname === ROUTES.postJob) return await posted(request, store, market);
+  if (request.method === "POST" && pathname === ROUTES.writeChecks) return await startWriting(request, market);
   if (request.method !== "GET") return new Response("only GET\n", { status: 405, headers: TEXT });
+
+  // the posting page itself is a bundled app served by `serve`; this is what it reads first
+  if (pathname === ROUTES.market) {
+    if (!market) return Response.json({ why: "posting is not open on this server: it has no contract to post to" }, { status: 404 });
+    return Response.json(market.page);
+  }
+
+  // whether a name is taken, so a poster hears it before they pay rather than after
+  if (pathname.startsWith(`${ROUTES.postJob}/`)) {
+    const jobId = pathname.slice(ROUTES.postJob.length + 1);
+    if (!isSafeName(jobId)) return Response.json({ why: `${jobId} is not a name a job can have` }, { status: 400 });
+    return Response.json({ taken: (await store.read(jobId)) !== undefined }, { headers: { "cache-control": "no-store" } });
+  }
+
+  if (pathname.startsWith(`${ROUTES.writeChecks}/`)) {
+    const id = pathname.slice(ROUTES.writeChecks.length + 1);
+    const writing = market?.writing.read(id);
+    if (!writing) return Response.json({ why: "those checks are not being written here any more" }, { status: 404 });
+    return Response.json(writing, { headers: { "cache-control": "no-store" } });
+  }
 
   if (pathname === ROUTES.wall) {
     const tiles = await store.tiles();
@@ -144,19 +196,136 @@ async function oneCheck(store: JobStore, jobId: string, name: string): Promise<R
   return new Response(contents, { headers: TEXT });
 }
 
+/**
+ * A posting arrives. Everything that decides whether it is published is in `acceptPosting`; this is
+ * only the door, and it refuses anything too large to be checks before reading it.
+ */
+async function posted(request: Request, store: JobStore, market?: Market): Promise<Response> {
+  if (!market) return Response.json({ why: "posting is not open on this server" }, { status: 503 });
+
+  const body = await bodyWithin(request, MOST_A_POSTING_MAY_WEIGH);
+  if (body === undefined) {
+    return Response.json({ why: "that is larger than any set of checks should be" }, { status: 413 });
+  }
+
+  let posting: unknown;
+  try {
+    posting = JSON.parse(body);
+  } catch {
+    return Response.json({ why: "that is not a posting" }, { status: 400 });
+  }
+
+  const accepted = await acceptPosting(store, market.chain, posting, market.proven);
+  if (!accepted.ok) return Response.json({ why: accepted.why }, { status: accepted.status });
+  return Response.json({ url: jobPath(accepted.record.jobId) }, { status: 201 });
+}
+
+/**
+ * A request's body, if it is within what that route should ever be sent. The declared length is
+ * checked before anything is read, so a sender cannot make the server hold a large body in memory
+ * just to be told it was too large; the actual length is checked too, because the declaration can lie.
+ */
+async function bodyWithin(request: Request, most: number): Promise<string | undefined> {
+  if (Number(request.headers.get("content-length") ?? "0") > most) return undefined;
+  const body = await request.text();
+  return body.length > most ? undefined : body;
+}
+
+/** A poster's sentences arrive, to be written into checks and tried. The page asks after them later. */
+async function startWriting(request: Request, market?: Market): Promise<Response> {
+  if (!market) return Response.json({ why: "posting is not open on this server" }, { status: 503 });
+  const body = await bodyWithin(request, MOST_A_REQUEST_TO_WRITE_MAY_WEIGH);
+  if (body === undefined) {
+    return Response.json({ why: "that is longer than an idea and a few sentences should be" }, { status: 413 });
+  }
+  let asked: unknown;
+  try {
+    asked = JSON.parse(body);
+  } catch {
+    return Response.json({ why: "that is not a request to write checks" }, { status: 400 });
+  }
+  const started = market.writing.start(asked);
+  if (!started.ok) return Response.json({ why: started.why }, { status: started.status });
+  return Response.json({ id: started.id, url: writingPath(started.id) }, { status: 202 });
+}
+
 function notFound(why: string): Response {
   return new Response(`${why}\n`, { status: 404, headers: TEXT });
 }
 
-/** Start it. The port and the directory come from the environment, and neither has a default that hides. */
-export function serve(store: JobStore, port: number): ReturnType<typeof Bun.serve> {
-  return Bun.serve({ port, fetch: (request) => handle(request, store) });
+/**
+ * Start it. The port and the directory come from the environment, and neither has a default that hides.
+ *
+ * The posting page is an app, not a document: Bun bundles it from its HTML entry the first time it
+ * is asked for, so nothing built is ever committed. While developing it also reloads as the source
+ * changes; in production it is bundled once and kept.
+ */
+export function serve(store: JobStore, port: number, market?: Market): ReturnType<typeof Bun.serve> {
+  return Bun.serve({
+    port,
+    development: process.env.NODE_ENV === "production" ? false : { hmr: true, console: true },
+    routes: { [ROUTES.post]: postPage },
+    fetch: (request) => handle(request, store, market),
+  });
 }
+
+/** The market this server takes postings for, from the environment, or none — and it says which. */
+async function marketFromTheEnvironment(jobsDirectory: string): Promise<Market | undefined> {
+  const configured = process.env.POD_JOBS_ADDRESS;
+  if (!configured) return undefined;
+  const { createPublicClient, http, isAddress } = await import("viem");
+  if (!isAddress(configured)) throw new Error(`POD_JOBS_ADDRESS is not an address: ${configured}`);
+  const jobs = configured;
+  const { readJob } = await import("./jobs.ts");
+  const { monadTestnet } = await import("./live.ts");
+  const { MONAD_TESTNET } = await import("./registry.ts");
+  const rpc = process.env.MONAD_TESTNET_RPC ?? MONAD_TESTNET.rpc;
+  const publicClient = createPublicClient({ chain: monadTestnet, transport: http(rpc) });
+  const { claudeOnThisMachine } = await import("./broker.ts");
+  const { IMAGE } = await import("./sandbox.ts");
+  const { join } = await import("node:path");
+  // beside the jobs, so a poster who paid can still publish after the server restarts
+  const proven = new ProvenChecks(join(jobsDirectory, PROVEN_FOLDER));
+  return {
+    page: {
+      chainId: MONAD_TESTNET.id, chainName: "Monad testnet", rpc, jobs,
+      explorer: "https://testnet.monadscan.com", coin: MONAD_TESTNET.coin,
+    },
+    chain: readerFor({
+      jobs,
+      read: (id) => readJob({ address: jobs, publicClient: publicClient as never }, id),
+    }),
+    writing: new CheckWriting({
+      writer: { model: claudeOnThisMachine(), image: IMAGE, agents: new URL("../agents", import.meta.url).pathname },
+      proven,
+    }),
+    proven,
+  };
+}
+
+/**
+ * Where the proven checks' fingerprints are kept, inside the jobs folder. A dot folder, so the wall,
+ * which lists the jobs folder, never mistakes it for a job.
+ */
+export const PROVEN_FOLDER = ".proven";
 
 if (import.meta.main) {
   const directory = process.env.POD_JOBS;
   if (!directory) throw new Error("POD_JOBS has to name the directory the runner writes jobs to");
   const port = Number(process.env.PORT ?? 3000);
-  serve(new JobStore(directory), port);
+  const market = await marketFromTheEnvironment(directory);
+  const server = serve(new JobStore(directory), port, market);
   console.log(`the wall is at http://localhost:${port}${ROUTES.wall}, reading ${directory}`);
+  console.log(market
+    ? `posting is open, against ${market.page.jobs}; checks are written by Claude, through the CLI signed in on this machine`
+    : "posting is closed: no POD_JOBS_ADDRESS");
+
+  // stopping: take no new requests, let any writing under way finish and take its boxes down, then go
+  const stop = async (): Promise<void> => {
+    await server.stop();
+    await market?.writing.whenIdle();
+    process.exit(0);
+  };
+  process.once("SIGINT", () => void stop());
+  process.once("SIGTERM", () => void stop());
 }

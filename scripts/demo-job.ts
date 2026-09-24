@@ -23,8 +23,8 @@ import { mintPod, tokenOfJob } from "../src/token.ts";
 import { live, monadTestnet } from "../src/live.ts";
 import { sealSpec, type Role, type Spec } from "../src/job.ts";
 import type { CheckToRun } from "../src/blackbox.ts";
+import { IMAGE } from "../src/sandbox.ts";
 
-const IMAGE = "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944";
 const CHECKS = new URL(`../fixtures/${process.env.POD_DEMO_CHECKS ?? "checks"}`, import.meta.url).pathname;
 const PRICE = parseEther("0.1");
 

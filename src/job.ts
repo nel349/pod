@@ -10,8 +10,10 @@
  * an earlier one.
  */
 
-/** How long a pod has, and how quiet it may go before its seat is released. */
-export type Mode = "flash" | "sprint" | "project";
+/** How long a pod has, and how quiet it may go before its seat is released, shortest first. */
+export const MODE_NAMES = ["flash", "sprint", "project"] as const;
+
+export type Mode = (typeof MODE_NAMES)[number];
 
 export const MODES: Record<Mode, { readonly windowMinutes: number; readonly idleMinutes: number }> = {
   flash: { windowMinutes: 120, idleMinutes: 10 },
@@ -20,6 +22,22 @@ export const MODES: Record<Mode, { readonly windowMinutes: number; readonly idle
 };
 
 export type Role = "lead" | "builder" | "reviewer" | "qa" | "security";
+
+/**
+ * What is being built, as far as grading is concerned.
+ *
+ * Grading drives the work from outside, over the network, so both are something that answers on a
+ * port: a page a person opens, or a service another program calls. The difference is what a check
+ * looks at — what a person would see, or the data that comes back — and the check writer needs to
+ * know which. Anything else (a command-line tool, a library, a contract) cannot be graded from
+ * outside the box yet, and is not offered.
+ */
+export const KINDS = ["page", "service"] as const;
+
+export type Kind = (typeof KINDS)[number];
+
+/** Where the work answers inside its box, which is what every check is pointed at. */
+export const PORT = 3000;
 
 /** One thing that must be true before anyone is paid. Objective, or it does not belong here. */
 export interface Check {
@@ -42,6 +60,15 @@ export interface Check {
   readonly digest?: `0x${string}`;
 }
 
+/**
+ * How a check file is run in the checks box. One definition, because the command is sealed: a page
+ * that wrote it one way and a server that rebuilt it another would never agree on the seal.
+ */
+export const checkCommand = (file: string): string => `node ${file}`;
+
+/** The mode a new job starts in, unless the poster chooses another: the shortest. */
+export const DEFAULT_MODE: Mode = "flash";
+
 /** Something the artefact is allowed to reach at grading time. Anything else is a finding. */
 export interface Allowed {
   readonly host: string;
@@ -51,6 +78,8 @@ export interface Allowed {
 /** The text of the job. Sealed before it opens, published when it does. */
 export interface Spec {
   readonly idea: string;
+  /** absent on jobs sealed before the page asked, which the seal must still match */
+  readonly kind?: Kind;
   readonly mode: Mode;
   /** what the pod is paid, in the smallest unit of whatever pays */
   readonly price: bigint;

@@ -59,7 +59,7 @@ export function renderCard(tile: Tile): string {
   ).join("\n  ");
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
-  <title>${escape(tile.idea)} — ${escape(verdictWords(tile.verdict))}</title>
+  <title>${escape(tile.idea)}: ${escape(verdictWords(tile.verdict))}</title>
   <rect width="1200" height="630" fill="#f6f5f2"/>
   <rect x="0" y="0" width="1200" height="10" fill="${colour}"/>
   <text x="64" y="112" font-size="22" letter-spacing="3" fill="#5d6068">PROOF OF DEVELOPMENT</text>

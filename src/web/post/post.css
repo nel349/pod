@@ -1,0 +1,557 @@
+/*
+ * Posting a job: a riot poster, and the flyers taped up beside it.
+ *
+ * Left, a bill in safety yellow with the loudest type on the page and the seal lying in shards. The
+ * seal is the wall's — five wedges, one per seat, and a centre — and it assembles as the job does:
+ * each finished step flies one wedge into place, writing the checks makes theirs tremble, proven
+ * checks flash it, and paying locks the centre and stamps it. Right, the steps as photocopied sheets
+ * on black, never quite straight, stamped with their number.
+ *
+ * One visual world, on purpose: this page does not follow the viewer's light or dark setting, so
+ * every colour is painted explicitly and holds on any ground.
+ */
+
+:root {
+  --yellow: #ffe500;
+  --pink: #ff2e88;
+  --ink: #0b0b0b;
+  --night: #151515;
+  --paper: #f3f3ee;
+  --white: #ffffff;
+  --grey: #5b5b55;
+  --rule: #c9c9c1;
+
+  --shout: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --read: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --type: "Special Elite", "Courier New", ui-monospace, monospace;
+  --code: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --slam: cubic-bezier(0.2, 0.9, 0.25, 1.15);
+}
+
+* { box-sizing: border-box; min-width: 0; }
+
+html { background: var(--night); }
+body {
+  margin: 0;
+  background: var(--night);
+  color: var(--ink);
+  font: 400 16px/1.55 var(--read);
+  -webkit-font-smoothing: antialiased;
+  overflow-wrap: anywhere;
+}
+
+:focus-visible { outline: 3px solid var(--pink); outline-offset: 3px; }
+
+/* read aloud, never drawn: what a mark or a colour says to somebody who cannot see it */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ================= the poster: a bill on the left, the sheets on the right ================= */
+
+.poster {
+  display: grid;
+  grid-template-columns: minmax(340px, 42fr) 58fr;
+  min-height: 100vh;
+}
+
+.bill {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  /* on a short screen the bill scrolls on its own rather than cutting off the line saying what is next */
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: clamp(24px, 3.4vw, 52px);
+  background: var(--yellow);
+  color: var(--ink);
+}
+
+.eyebrow { margin: 0; font: 400 14px/1.2 var(--type); letter-spacing: 0.04em; color: var(--ink); }
+.eyebrow a { color: var(--ink); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+
+/* the shout, misprinted: a pink pass lands a few pixels off the black one, the way a cheap press does */
+.shout {
+  margin: 4px 0 0;
+  font: 900 clamp(40px, min(4.9vw, 9.5vh), 92px)/0.86 var(--shout);
+  text-transform: uppercase;
+  letter-spacing: -0.005em;
+}
+.shout span { position: relative; display: block; width: fit-content; white-space: nowrap; }
+.shout span:not(.strap)::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  color: var(--pink);
+  transform: translate(4px, 3px);
+  z-index: -1;
+  animation: misprint 7s steps(1) infinite;
+}
+.shout span:nth-child(2)::before { animation-delay: -2.3s; }
+.shout span { isolation: isolate; }
+
+/* the promise, pasted on under the shout like a strip cut from another poster */
+.shout .strap {
+  margin-top: 0.28em;
+  padding: 0.14em 0.3em 0.06em;
+  font-size: 0.4em;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  background: var(--ink);
+  color: var(--yellow);
+  transform: rotate(-1.5deg);
+  box-shadow: 0.12em 0.12em 0 var(--pink);
+  white-space: normal;
+}
+
+@keyframes misprint {
+  0%, 92%, 100% { transform: translate(4px, 3px); }
+  93% { transform: translate(-5px, 2px); }
+  95% { transform: translate(7px, -2px); }
+  97% { transform: translate(2px, 5px); }
+}
+
+.stand { margin: 0; max-width: 46ch; font: 500 14.5px/1.5 var(--read); }
+
+/* ---------------- the seal, in shards ---------------- */
+
+/* the seal takes whatever height the bill has left, so it is always on screen with its caption */
+.seal-figure {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  justify-items: center;
+  gap: 8px;
+}
+
+.shard-seal { width: 100%; height: 100%; max-width: 540px; min-height: 140px; overflow: visible; }
+
+/* on a phone, a small seal and the next step stay pinned while the poster works through the sheets */
+.strip { display: none; }
+
+/* the whole shard drifts with the pointer; deeper shards drift further */
+.drift {
+  transform: translate(calc(var(--mx, 0) * var(--depth) * 1px), calc(var(--my, 0) * var(--depth) * 1px));
+  transition: transform 700ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.shard {
+  transform-box: fill-box;
+  transform-origin: center;
+  stroke: var(--yellow);
+  stroke-width: 0.7;
+  stroke-linejoin: round;
+  transition:
+    transform var(--duration) var(--slam) var(--delay),
+    fill 480ms ease var(--delay);
+}
+
+.shard.loose { transform: translate(var(--sx), var(--sy)) rotate(var(--turn)) scale(var(--scale)); }
+.shard.loose.tone-ink { fill: var(--ink); }
+.shard.loose.tone-pink { fill: var(--pink); }
+.shard.loose.tone-paper { fill: var(--paper); stroke: var(--ink); stroke-width: 0.5; }
+
+.shard.placed { transform: none; fill: var(--ink); }
+.shard.placed.piece-pay { fill: var(--pink); }
+
+/* a piece being worked on shakes where it lies, until it is done */
+.shard.trembling { animation: tremble 140ms steps(2) infinite; }
+@keyframes tremble {
+  0% { translate: 1.2px -0.8px; }
+  50% { translate: -1px 1px; }
+  100% { translate: 0.6px 1.2px; }
+}
+
+/* at rest the flash is invisible; only its animation shows it. With motion reduced it simply never shows */
+.flash { fill: var(--white); opacity: 0; pointer-events: none; animation: flash 900ms ease-out forwards; }
+@keyframes flash {
+  0% { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+
+.shard-seal.complete { animation: lock 700ms var(--slam) 400ms backwards; }
+@keyframes lock {
+  0% { transform: rotate(-9deg) scale(1.04); }
+  100% { transform: none; }
+}
+
+.sealed-stamp {
+  position: absolute;
+  top: 62%;
+  left: 58%;
+  margin: 0;
+  padding: 2px 16px 0;
+  border: 5px solid var(--pink);
+  color: var(--pink);
+  background: var(--yellow);
+  font: 900 clamp(34px, 4vw, 60px)/1 var(--shout);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transform: translate(-50%, -50%) rotate(-12deg);
+  box-shadow: 6px 6px 0 var(--ink);
+  animation: stamped 520ms var(--slam) 900ms backwards;
+}
+@keyframes stamped {
+  0% { transform: translate(-50%, -50%) rotate(-20deg) scale(2.4); opacity: 0; }
+  100% { transform: translate(-50%, -50%) rotate(-12deg) scale(1); opacity: 1; }
+}
+
+.next { font: 400 16px/1.3 var(--type); text-align: center; }
+
+/* ================= the sheets ================= */
+
+.sheets {
+  display: grid;
+  align-content: start;
+  gap: clamp(26px, 3vw, 40px);
+  padding: clamp(28px, 4vw, 64px) clamp(16px, 4vw, 64px) 140px;
+  background:
+    radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1.3px) 0 0 / 7px 7px,
+    var(--night);
+}
+
+.sheet {
+  position: relative;
+  padding: clamp(24px, 3vw, 40px) clamp(20px, 3vw, 40px) clamp(24px, 3vw, 36px);
+  background:
+    radial-gradient(rgba(0, 0, 0, 0.05) 0.8px, transparent 1.1px) 0 0 / 5px 5px,
+    var(--paper);
+  color: var(--ink);
+  box-shadow: 8px 10px 0 rgba(0, 0, 0, 0.55);
+  transform: rotate(var(--lean, 0deg));
+  animation: slap 560ms var(--slam) calc(var(--order, 0) * 80ms) backwards;
+}
+@keyframes slap {
+  0% { transform: rotate(calc(var(--lean, 0deg) * 7)) translateY(-18px) scale(1.015); }
+  100% { transform: rotate(var(--lean, 0deg)); }
+}
+
+.tape {
+  position: absolute;
+  top: -13px;
+  left: calc(50% - 60px);
+  width: 120px;
+  height: 26px;
+  background: color-mix(in srgb, var(--yellow) 78%, transparent);
+  transform: rotate(-2.5deg);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
+}
+.sheet:nth-of-type(even) .tape { left: 36px; transform: rotate(3deg); background: color-mix(in srgb, var(--pink) 70%, transparent); }
+
+.stamp {
+  position: absolute;
+  top: 10px;
+  right: 22px;
+  margin: 0;
+  font: 900 clamp(52px, 6vw, 84px)/1 var(--shout);
+  color: var(--pink);
+  transform: rotate(7deg);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.sheet h2 {
+  margin: 0 64px 12px 0;
+  font: 900 clamp(30px, 3.6vw, 48px)/0.92 var(--shout);
+  text-transform: uppercase;
+  letter-spacing: 0.005em;
+}
+.sheet h2 label { cursor: text; }
+.guide { margin: 0 0 20px; max-width: 60ch; color: var(--grey); font-size: 16px; }
+.note { margin: 16px 0 0; max-width: 60ch; font: 400 14px/1.45 var(--type); color: var(--grey); }
+.notice p { margin: 0; font: 400 18px/1.4 var(--type); }
+
+/* ---------------- fields ---------------- */
+
+.sheets input[type="text"], .sheets textarea {
+  width: 100%;
+  font: 500 17px/1.4 var(--read);
+  color: var(--ink);
+  background: var(--white);
+  border: 3px solid var(--ink);
+  border-radius: 0;
+  padding: 12px 14px;
+  transition: box-shadow 140ms ease, transform 140ms ease;
+}
+.sheets textarea#idea { font: 600 clamp(20px, 2vw, 24px)/1.35 var(--read); resize: vertical; }
+.sheets input[type="text"]:focus-visible, .sheets textarea:focus-visible {
+  outline: 0;
+  box-shadow: 6px 6px 0 var(--pink);
+  transform: translate(-2px, -2px);
+}
+.sheets ::placeholder { color: #9a9a92; }
+
+.field { display: grid; gap: 8px; margin: 0 0 20px; font: 400 14px/1.2 var(--type); }
+
+/* what it is: two cards, and the chosen one is inked in */
+.kinds { border: 0; margin: 22px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.kinds legend { padding: 0; margin-bottom: 10px; font: 400 14px/1.2 var(--type); }
+.kind {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding: 16px 18px;
+  border: 3px solid var(--ink);
+  background: var(--paper);
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms var(--slam);
+}
+.kind input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.kind-name { font: 900 26px/1 var(--shout); text-transform: uppercase; }
+.kind-says { font-size: 14px; color: var(--grey); }
+.kind:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
+.kind:has(input:checked) { background: var(--ink); color: var(--paper); box-shadow: 6px 6px 0 var(--pink); transform: translate(-2px, -2px); }
+.kind:has(input:checked) .kind-says { color: #cfcfc6; }
+.kind:has(input:focus-visible) { outline: 3px solid var(--pink); outline-offset: 3px; }
+
+/* the brief and the exam: numbered lines, written straight onto the sheet */
+.lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; counter-reset: line; }
+.line { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; counter-increment: line; }
+.line::before { content: counter(line); font: 900 30px/1 var(--shout); text-align: right; }
+.lines[data-lines="exam"] .line::before { color: var(--pink); }
+.sheets .line input[type="text"] { border-width: 0 0 3px; background: transparent; padding: 10px 2px 8px; font-size: 18px; }
+.sheets .line input[type="text"]:focus-visible { box-shadow: 0 3px 0 var(--pink); transform: none; }
+.line { animation: drop 320ms var(--slam) backwards; }
+@keyframes drop { 0% { transform: translateY(-8px) rotate(-1deg); } 100% { transform: none; } }
+
+/* ---------------- buttons ---------------- */
+
+button { font: inherit; }
+
+button.primary {
+  font: 900 24px/1 var(--shout);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--yellow);
+  background: var(--ink);
+  border: 0;
+  border-radius: 0;
+  padding: 15px 26px 13px;
+  cursor: pointer;
+  box-shadow: 5px 5px 0 var(--pink);
+  transition: transform 120ms var(--slam), box-shadow 120ms var(--slam);
+}
+button.primary:hover { transform: translate(-3px, -3px); box-shadow: 8px 8px 0 var(--pink), -4px -4px 0 var(--yellow); }
+button.primary:active { transform: translate(4px, 4px); box-shadow: 0 0 0 var(--pink); }
+button.primary:disabled { opacity: 0.5; cursor: progress; transform: none; box-shadow: 5px 5px 0 var(--pink); }
+
+/* working, not broken: hazard stripes crawl across the button while the checks are written */
+button.primary[data-busy] { position: relative; opacity: 1; padding-bottom: 21px; }
+button.primary[data-busy]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 8px;
+  background: repeating-linear-gradient(-45deg, var(--yellow) 0 7px, var(--ink) 7px 14px) 0 0 / 20px 20px;
+  animation: hazard 700ms linear infinite;
+}
+@keyframes hazard { to { background-position: 20px 0; } }
+
+button.quiet {
+  background: none;
+  border: 0;
+  padding: 6px 8px;
+  font: 400 14px/1 var(--type);
+  color: var(--grey);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+button.quiet:hover { color: var(--pink); text-decoration: line-through; }
+button.add {
+  margin: 14px 0 0 44px;
+  padding: 9px 14px;
+  border: 2px dashed var(--ink);
+  color: var(--ink);
+  text-decoration: none;
+}
+button.add::before { content: "+ "; }
+button.add:hover { background: var(--ink); color: var(--yellow); text-decoration: none; border-style: solid; }
+
+/* ---------------- the checks ---------------- */
+
+.write-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px; }
+.writing { margin: 0; font: 400 15px/1.4 var(--type); font-variant-numeric: tabular-nums; }
+.writing[data-state="busy"]::after { content: "▮"; margin-left: 4px; color: var(--pink); animation: blink 900ms steps(1) infinite; }
+.writing[data-state="failed"] { color: var(--pink); }
+@keyframes blink { 50% { opacity: 0; } }
+
+.written { list-style: none; margin: 28px 0 0; padding: 0; transition: opacity 240ms ease, filter 240ms ease; }
+.written.stale { opacity: 0.4; filter: grayscale(1); }
+
+.written-check { padding: 22px 0 22px; border-top: 3px solid var(--ink); }
+.written-check .which {
+  display: inline-block;
+  margin: 0 0 10px;
+  padding: 3px 8px 2px;
+  font: 400 12px/1.2 var(--type);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: var(--ink);
+  color: var(--paper);
+  transform: rotate(-1.5deg);
+}
+.written-check .says { margin: 0 0 14px; font: 800 clamp(19px, 1.8vw, 23px)/1.3 var(--read); max-width: 52ch; }
+
+.readback { margin: 0 0 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 28px; }
+.readback dt { font: 400 12px/1.2 var(--type); letter-spacing: 0.1em; text-transform: uppercase; color: var(--grey); }
+.readback dd { margin: 4px 0 0; font-size: 16px; }
+
+.trials { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-weight: 600; font-size: 15px; }
+.trial { position: relative; padding-left: 30px; width: fit-content; animation: stampIn 380ms var(--slam) backwards; }
+.trial:nth-child(2) { animation-delay: 140ms; }
+.trial:nth-child(3) { animation-delay: 280ms; }
+.trial::before { position: absolute; left: 0; top: -2px; font: 900 22px/1 var(--shout); }
+.trial.held { background: linear-gradient(transparent 52%, var(--yellow) 52%, var(--yellow) 92%, transparent 92%); }
+.trial.held::before { content: "✓"; }
+.trial.broke { color: var(--pink); }
+.trial.broke::before { content: "✕"; }
+.trial .saw { display: block; margin-top: 2px; font: 400 13px/1.4 var(--type); color: var(--grey); }
+@keyframes stampIn { 0% { transform: scale(1.35) rotate(-3deg); opacity: 0; } 100% { transform: none; opacity: 1; } }
+
+.cannot-why { margin: 0; color: var(--pink); font-weight: 600; max-width: 60ch; }
+
+.source { margin-top: 16px; }
+.source summary, .sealed-details summary {
+  width: fit-content;
+  font: 400 14px/1.2 var(--type);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.source pre {
+  margin: 12px 0 0;
+  padding: 18px 20px;
+  background: var(--ink);
+  color: var(--paper);
+  overflow-x: auto;
+  font: 400 12.5px/1.65 var(--code);
+  box-shadow: 5px 5px 0 var(--pink);
+}
+
+.written-verdict { margin: 22px 0 0; border-top: 3px solid var(--ink); padding-top: 20px; }
+.verdict-shout {
+  display: inline-block;
+  margin: 0 0 8px;
+  padding: 8px 14px 5px;
+  font: 900 clamp(24px, 2.4vw, 32px)/1 var(--shout);
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  animation: stampIn 420ms var(--slam) backwards;
+}
+.verdict-says { margin: 0; font-size: 16px; max-width: 60ch; }
+.written-verdict[data-state="ready"] .verdict-shout { background: var(--yellow); color: var(--ink); transform: rotate(-1deg); }
+.written-verdict[data-state="short"] .verdict-shout { background: var(--pink); color: var(--ink); transform: rotate(1deg); }
+.written-verdict[data-state="stale"] .verdict-shout { background: var(--ink); color: var(--paper); }
+
+/* ---------------- terms ---------------- */
+
+.terms { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 24px; align-items: start; margin-bottom: 26px; }
+.with-unit { display: flex; align-items: baseline; gap: 10px; font: 900 32px/1 var(--shout); white-space: nowrap; }
+.sheets .with-unit input[type="text"] { font: 900 40px/1 var(--shout); padding: 6px 10px 4px; width: 100%; }
+
+.modes { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
+.modes legend { padding: 0; margin-bottom: 10px; font: 400 14px/1.2 var(--type); width: 100%; }
+.modes label {
+  position: relative;
+  padding: 10px 16px 8px;
+  border: 3px solid var(--ink);
+  font: 900 20px/1 var(--shout);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+.modes input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.modes label:has(input:checked) { background: var(--ink); color: var(--yellow); }
+.modes label:has(input:focus-visible) { outline: 3px solid var(--pink); outline-offset: 3px; }
+
+.slug-row { display: flex; align-items: center; gap: 6px; font: 400 16px/1 var(--type); white-space: nowrap; }
+.sheets .slug-row input[type="text"] { font: 400 16px/1.2 var(--type); }
+
+/* ---------------- paying ---------------- */
+
+.terms-plain { margin: 0 0 22px; max-width: 58ch; font-size: 18px; line-height: 1.55; }
+.paid-as { margin: -8px 0 18px; font: 400 15px/1.4 var(--type); overflow-wrap: anywhere; }
+#submit { font-size: clamp(26px, 2.6vw, 34px); padding: 18px 30px 15px; }
+/* once it has gone through, the button is a receipt, not a control that stopped working */
+#submit[data-state="posted"] { opacity: 1; cursor: default; background: var(--pink); color: var(--ink); box-shadow: 5px 5px 0 var(--ink); }
+#submit[data-state="posted"]::after { content: " ✓"; }
+
+.said-status { margin: 18px 0 0; min-height: 1.4em; max-width: 60ch; font: 400 15px/1.45 var(--type); color: var(--pink); }
+.said-status.done { color: var(--ink); }
+.said-status a { color: var(--ink); background: var(--yellow); padding: 0 4px; font-weight: 700; }
+
+.progress { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; font: 400 15px/1.3 var(--type); color: var(--grey); }
+.progress li { position: relative; padding-left: 26px; width: fit-content; }
+.progress li::before { content: "○"; position: absolute; left: 0; }
+.progress li[data-state="doing"] { color: var(--ink); }
+.progress li[data-state="doing"]::before { content: "●"; color: var(--pink); animation: blink 800ms steps(1) infinite; }
+.progress li[data-state="done"] { color: var(--ink); background: linear-gradient(transparent 55%, var(--yellow) 55%, var(--yellow) 92%, transparent 92%); }
+.progress li[data-state="done"]::before { content: "✓"; }
+.progress li[data-state="failed"] { color: var(--pink); }
+.progress li[data-state="failed"]::before { content: "✕"; }
+
+.sealed-details { margin-top: 28px; padding-top: 18px; border-top: 3px dashed var(--ink); font-size: 14px; }
+.sealed-details p { max-width: 60ch; color: var(--grey); }
+.sealed-details dl { margin: 0; display: grid; gap: 12px; }
+.sealed-details dt { font: 400 12px/1.2 var(--type); letter-spacing: 0.1em; text-transform: uppercase; color: var(--grey); }
+.sealed-details dd { margin: 4px 0 0; }
+.sealed-details code { font: 400 12px/1.5 var(--code); }
+.sealed-details a { color: var(--ink); }
+.fingerprints { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.fingerprints .which { font: 400 11px/1 var(--type); letter-spacing: 0.1em; text-transform: uppercase; color: var(--grey); }
+
+/* ================= calmer, for those who asked ================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* ================= a phone ================= */
+
+@media (max-width: 900px) {
+  .poster { grid-template-columns: minmax(0, 1fr); }
+  .bill { position: relative; height: auto; overflow: visible; }
+  .seal-figure { margin-top: 8px; }
+  .shard-seal { width: min(78vw, 300px); }
+  .strip {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 calc(-1 * clamp(16px, 4vw, 64px));
+    padding: 8px clamp(16px, 4vw, 64px);
+    background: var(--yellow);
+    border-bottom: 3px solid var(--ink);
+  }
+  .strip .shard-seal { width: 46px; height: 46px; min-height: 0; flex: 0 0 auto; }
+  .strip .drift { transform: none; }
+  .strip .shard.loose { opacity: 0; }
+  .strip p { margin: 0; font: 400 14px/1.25 var(--type); }
+  .sheets { padding-top: 0; }
+  .kinds, .readback, .terms { grid-template-columns: minmax(0, 1fr); }
+  .sheet { transform: none; animation: none; }
+  .stamp { font-size: 48px; right: 14px; }
+  .sheet h2 { margin-right: 52px; }
+  .line { grid-template-columns: 26px minmax(0, 1fr) auto; }
+  button.add { margin-left: 36px; }
+}

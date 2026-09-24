@@ -143,7 +143,7 @@ describe.skipIf(!available)("the wall, driven the way a person drives it", () =>
     const text = (await browser.text()).toLowerCase();
     expect(text).toContain("what is being asked for");
     expect(text).toContain("2 checks are sealed");
-    expect(text).toContain("security — open");
+    expect(text).toContain("security · open");
 
     await browser.open(base + checksPath("one-still-open"));
     expect(await browser.text()).toContain("published when it has a verdict");

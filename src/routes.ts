@@ -22,6 +22,14 @@ export const ROUTES = {
   /** the job's whole history, as one file anybody can clone from */
   bundle: "/bundle/",
   health: "/health",
+  /** where a stranger posts a job */
+  post: "/post",
+  /** what that page reads first: the chain, the contract and the coin it posts with */
+  market: "/api/market",
+  /** where the page sends a posting, once the poster has paid and signed */
+  postJob: "/api/jobs",
+  /** where the page asks for a poster's sentences to be written into checks, and tried */
+  writeChecks: "/api/checks",
 } as const;
 
 /**
@@ -36,6 +44,15 @@ export function isSafeName(name: string): boolean {
   return SAFE_NAME.test(name) && name !== "." && name !== "..";
 }
 
+/**
+ * What a new job may be called: lower case, numbers and dashes. Narrower than a safe name on purpose:
+ * it is an address people read and type, and it can never begin with a dot, which is where the
+ * server keeps things of its own beside the jobs.
+ */
+export const WALL_NAME = /^[a-z0-9][a-z0-9-]{2,63}$/;
+
+export const isWallName = (name: string): boolean => WALL_NAME.test(name);
+
 export const jobPath = (jobId: string): string => `${ROUTES.job}${jobId}`;
 export const checksPath = (jobId: string): string => `${ROUTES.checks}${jobId}`;
 export const checkFilePath = (jobId: string, name: string): string => `${ROUTES.checks}${jobId}/${name}`;
@@ -43,3 +60,7 @@ export const receiptPath = (jobId: string): string => `${ROUTES.receipt}${jobId}
 export const agentPath = (agent: string): string => `${ROUTES.agent}${agent}`;
 export const cardPath = (jobId: string): string => `${ROUTES.card}${jobId}.svg`;
 export const bundlePath = (jobId: string): string => `${ROUTES.bundle}${jobId}`;
+/** how one set of checks is getting on while it is written and tried */
+export const writingPath = (id: string): string => `${ROUTES.writeChecks}/${id}`;
+/** whether a job by this name exists, asked before anybody pays for a name that is already taken */
+export const jobNamePath = (jobId: string): string => `${ROUTES.postJob}/${jobId}`;

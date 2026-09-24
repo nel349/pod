@@ -18,32 +18,55 @@
  * Any one of them failing is a refusal that says which, because "no" with no reason is how a real
  * person gives up on a form.
  */
-import { recoverMessageAddress, type Address, type Hex } from "viem";
-import { filesMatchSeal, sealSpec, type Spec } from "./job.ts";
+import { isAddress, recoverMessageAddress, type Address, type Hex } from "viem";
+import { z } from "zod";
+import { filesMatchSeal, KINDS, MODE_NAMES, sealSpec, type Spec } from "./job.ts";
 import { openJob } from "./publish.ts";
-import { isSafeName } from "./routes.ts";
+import { isSafeName, isWallName } from "./routes.ts";
 import type { JobRecord, JobStore } from "./store.ts";
 import { SEATS } from "./seal.ts";
 import { postingMessage } from "./messages.ts";
 
 export { postingMessage };
 
-/** The spec as it travels. JSON has no bigint, and the price is money, so it moves as a string. */
-export interface SpecOnTheWire extends Omit<Spec, "price"> {
-  readonly price: string;
-}
+const HEX = /^0x[0-9a-fA-F]*$/;
+const FINGERPRINT = /^0x[0-9a-f]{64}$/;
 
-export interface Posting {
+/** The spec as it travels. JSON has no bigint, and the price is money, so it moves as a string of wei. */
+const SpecOnTheWireSchema = z.object({
+  idea: z.string(),
+  kind: z.enum(KINDS).optional(),
+  mode: z.enum(MODE_NAMES),
+  price: z.string().regex(/^[0-9]+$/, "the price is a whole number of wei"),
+  checks: z.array(z.object({
+    says: z.string(),
+    run: z.string(),
+    hidden: z.boolean(),
+    file: z.string().optional(),
+    digest: z.string().refine((digest): digest is `0x${string}` => FINGERPRINT.test(digest), "a check's fingerprint is 32 bytes of hex").optional(),
+  })).readonly(),
+  allowed: z.array(z.object({ host: z.string(), why: z.string() })).readonly(),
+  salt: z.string(),
+});
+
+/**
+ * A posting, as it arrives from anybody. Everything in it is read through this before anything else
+ * is asked of it, so a missing field is a refusal that says which, not a crash.
+ */
+export const PostingSchema = z.object({
   /** the name the job is known by on the wall, chosen by the poster */
-  readonly jobId: string;
+  jobId: z.string(),
   /** the job's number in the contract, which the poster's transaction produced */
-  readonly onChainId: string;
-  readonly spec: SpecOnTheWire;
+  onChainId: z.string().regex(/^[0-9]+$/, "the job number on the chain is a whole number"),
+  spec: SpecOnTheWireSchema,
   /** every check's file, by name. The hidden ones are held until there is a verdict */
-  readonly files: Readonly<Record<string, string>>;
-  readonly poster: Address;
-  readonly signature: Hex;
-}
+  files: z.record(z.string(), z.string()),
+  poster: z.string().refine((value): value is Address => isAddress(value), "the poster is not an address"),
+  signature: z.string().refine((value): value is Hex => HEX.test(value), "the signature is not hex"),
+});
+
+export type SpecOnTheWire = z.input<typeof SpecOnTheWireSchema>;
+export type Posting = z.input<typeof PostingSchema>;
 
 /** What the chain says about one job. Read, never assumed. */
 export interface OnChainJob {
@@ -63,21 +86,28 @@ export type Accepted =
   | { readonly ok: true; readonly record: JobRecord }
   | { readonly ok: false; readonly status: number; readonly why: string };
 
-function fromTheWire(spec: SpecOnTheWire): Spec | undefined {
-  if (!/^[0-9]+$/.test(spec.price)) return undefined;
-  return { ...spec, price: BigInt(spec.price) };
-}
-
 const refuse = (status: number, why: string): Accepted => ({ ok: false, status, why });
 
-export async function acceptPosting(store: JobStore, chain: ChainReader, posting: Posting): Promise<Accepted> {
-  if (!isSafeName(posting.jobId)) return refuse(400, "a job's name may use letters, numbers, dots, dashes and underscores");
-  if (await store.read(posting.jobId)) return refuse(409, `there is already a job called ${posting.jobId}`);
-  if (!/^[0-9]+$/.test(posting.onChainId)) return refuse(400, "the job number on the chain is a whole number");
+/**
+ * Where proven checks are looked up. Only `has` is needed here, so anything that can answer it will
+ * do; the server passes the record the check writer keeps.
+ */
+export interface ProvenLookup {
+  has(digest: string): Promise<boolean>;
+}
 
-  const spec = fromTheWire(posting.spec);
-  if (!spec) return refuse(400, "the price is a whole number of wei");
+export async function acceptPosting(store: JobStore, chain: ChainReader, asked: unknown, proven: ProvenLookup): Promise<Accepted> {
+  const parsed = PostingSchema.safeParse(asked);
+  if (!parsed.success) return refuse(400, parsed.error.issues[0]?.message ?? "that is not a posting");
+  const posting = parsed.data;
+
+  if (!isWallName(posting.jobId)) return refuse(400, "a job's name is lower-case letters, numbers and dashes, from 3 to 64 of them");
+  if (await store.read(posting.jobId)) return refuse(409, `there is already a job called ${posting.jobId}`);
+
+  const spec: Spec = { ...posting.spec, price: BigInt(posting.spec.price) };
   if (spec.checks.length === 0) return refuse(400, "a job with no checks has nothing to decide it");
+  const unsafeFile = spec.checks.find((check) => check.file !== undefined && !isSafeName(check.file));
+  if (unsafeFile) return refuse(400, `a check's file name may use letters, numbers, dots, dashes and underscores: ${unsafeFile.file}`);
 
   // the signature: whoever signed this is who the rest of the checks are about
   const seal = await sealSpec(spec);
@@ -108,7 +138,15 @@ export async function acceptPosting(store: JobStore, chain: ChainReader, posting
 
   // the files: the checks that decide payment are the ones that were sealed
   const files = await filesMatchSeal(spec, posting.files);
-  if (!files.ok) return refuse(409, files.why!);
+  if (!files.ok) return refuse(409, files.why ?? "the files are not the files that were sealed");
+
+  // and every one of them passed its three trials here: a check nobody could pass, or one that
+  // passes anything, is refused even if the poster wrote it by hand and sent it without the page
+  for (const check of spec.checks) {
+    if (!check.digest || !(await proven.has(check.digest))) {
+      return refuse(409, `"${check.says}" was never tried here: write the checks on the posting page, and post the ones that passed`);
+    }
+  }
 
   const opened = await openJob(store, {
     jobId: posting.jobId,

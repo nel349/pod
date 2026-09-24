@@ -127,7 +127,7 @@ export function saidPlainly(outcome: AuditOutcome): string {
   }
   return [
     `${outcome.findings.length} of ${outcome.checked} checks failed:`,
-    ...outcome.findings.map((f) => `  ${f.where}: ${f.what} — ${f.detail}`),
+    ...outcome.findings.map((f) => `  ${f.where}: ${f.what}. ${f.detail}`),
   ].join("\n");
 }
 

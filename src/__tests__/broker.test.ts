@@ -95,6 +95,21 @@ describe("what the broker allows", () => {
     expect(broker.transcript[0]?.answered).toContain("nothing:");
   });
 
+  test("a model past its deadline is told to stop, not only stopped waiting for", async () => {
+    const socket = join(await mkdtemp(join(tmpdir(), "pod-broker-")), "model.sock");
+    let wasTold = false;
+    open = await openBroker({
+      socket, role: "builder", limits: { seconds: 1 },
+      model: (_prompt, signal) => new Promise<string>((resolve) => {
+        signal.addEventListener("abort", () => { wasTold = true; resolve("too late"); });
+      }),
+    });
+    const response = await fetch("http://model/", { method: "POST", body: "x", unix: socket } as RequestInit & { unix: string });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: "the model took too long" });
+    expect(wasTold).toBe(true);
+  });
+
   test("the sensible limits are sensible", () => {
     expect(SENSIBLE.calls).toBeLessThanOrEqual(50);
     expect(SENSIBLE.seconds).toBeLessThanOrEqual(600);

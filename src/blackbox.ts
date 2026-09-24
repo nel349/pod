@@ -10,6 +10,7 @@
  * enough to cheat.
  */
 import { randomUUID } from "node:crypto";
+import { PORT } from "./job.ts";
 
 export interface CheckToRun {
   readonly says: string;
@@ -98,7 +99,7 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
         "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
         "--read-only", "--tmpfs", "/tmp:rw,size=64m",
         "-v", `${request.checks}:/checks:ro`,
-        "-e", `TARGET=http://${artefactName}:3000`,
+        "-e", `TARGET=http://${artefactName}:${PORT}`,
         request.image,
         "sh", "-c", `cd /checks && timeout ${request.checkSeconds ?? 60} ${check.command}`,
       ]);
@@ -149,7 +150,7 @@ async function waitUntilAnswering(target: string, seconds: number): Promise<void
     }
     const probe = await docker([
       "exec", target, "node", "-e",
-      "fetch('http://127.0.0.1:3000/').then(()=>process.exit(0)).catch(()=>process.exit(1))",
+      `fetch('http://127.0.0.1:${PORT}/').then(()=>process.exit(0)).catch(()=>process.exit(1))`,
     ]);
     if (probe.code === 0) return;
     await Bun.sleep(500);

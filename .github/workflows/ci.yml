@@ -16,7 +16,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       # only the tests that need neither Docker nor a network
-      - run: bun test src/__tests__/verdict.test.ts src/__tests__/job.test.ts src/__tests__/receipt.test.ts src/__tests__/gallery.test.ts src/__tests__/jobpage.test.ts src/__tests__/registry.test.ts src/__tests__/server.test.ts src/__tests__/publish.test.ts src/__tests__/runner.test.ts src/__tests__/audit.test.ts src/__tests__/agentpage.test.ts src/__tests__/card.test.ts src/__tests__/live.test.ts src/__tests__/repo.test.ts src/__tests__/no-invented-commits.test.ts src/__tests__/no-claims-we-do-not-keep.test.ts src/__tests__/github.test.ts
+      - run: bun test src/__tests__/verdict.test.ts src/__tests__/job.test.ts src/__tests__/receipt.test.ts src/__tests__/gallery.test.ts src/__tests__/jobpage.test.ts src/__tests__/registry.test.ts src/__tests__/server.test.ts src/__tests__/publish.test.ts src/__tests__/runner.test.ts src/__tests__/audit.test.ts src/__tests__/agentpage.test.ts src/__tests__/card.test.ts src/__tests__/live.test.ts src/__tests__/repo.test.ts src/__tests__/no-invented-commits.test.ts src/__tests__/no-claims-we-do-not-keep.test.ts src/__tests__/github.test.ts src/__tests__/post-state.test.ts src/__tests__/post-components.test.tsx src/__tests__/no-em-dashes.test.ts src/__tests__/every-test-runs-in-ci.test.ts src/__tests__/model-lockdown.test.ts src/__tests__/api-routes.test.ts
 
   sandbox:
     name: the sealed run, against a real container
@@ -30,7 +30,25 @@ jobs:
       # The image is pinned by digest, not by tag, so a run today and a run in October
       # are the same run.
       - run: docker pull node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944
-      - run: bun test src/__tests__/sandbox.test.ts src/__tests__/blackbox.test.ts src/__tests__/pipeline.test.ts src/__tests__/endtoend.test.ts src/__tests__/repeat.test.ts src/__tests__/browser.test.ts src/__tests__/agent.test.ts src/__tests__/broker.test.ts
+      - run: bun test src/__tests__/sandbox.test.ts src/__tests__/blackbox.test.ts src/__tests__/pipeline.test.ts src/__tests__/endtoend.test.ts src/__tests__/repeat.test.ts src/__tests__/browser.test.ts src/__tests__/agent.test.ts src/__tests__/broker.test.ts src/__tests__/checkwriting.test.ts
+
+  posting:
+    name: a stranger posts a job, in a browser, against a real chain and real boxes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - run: forge build
+        working-directory: contracts
+      # the checks the page has written are tried in the same pinned image a verdict uses
+      - run: docker pull node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944
+      - run: bun test src/__tests__/post-in-browser.test.ts
 
   chain:
     name: the money path, on a real EVM
