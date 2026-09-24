@@ -14,7 +14,7 @@
  *
  * `.pod` never reaches a commit: it is the conversation with the platform, not part of the work.
  */
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Role } from "./job.ts";
@@ -114,7 +114,7 @@ export async function runInBox(run: InBox): Promise<{ readonly code: number; rea
   // the command inside has its own timeout, but a box that stops answering is killed from outside too
   const killer = setTimeout(() => { void docker(["kill", name]); }, (seconds + OUTER_GRACE_SECONDS) * 1000);
   try {
-    return await docker([
+    const ran = await docker([
       "run", "--rm", "--name", name,
       ...(run.network ? [] : ["--network", "none"]),
       "--memory", "2g", "--cpus", "2", "--pids-limit", "512",
@@ -131,6 +131,8 @@ export async function runInBox(run: InBox): Promise<{ readonly code: number; rea
       run.image,
       "sh", "-c", `timeout ${seconds} ${run.command}; said=$?; ${HAND_THE_WORKSPACE_BACK}; exit $said`,
     ]);
+    await openWhatIsOurs(run.workspace);
+    return ran;
   } finally {
     clearTimeout(killer);
   }
@@ -148,8 +150,32 @@ const OUTER_GRACE_SECONDS = 30;
  * results would be lost and its workspace left behind. Running the box as the host's user instead
  * was tried, and cuts the agent off from the model's socket under Docker Desktop. This runs after
  * the agent, so nothing it does can stop it, including making folders nobody else may open.
+ *
+ * It starts one level down, on purpose. /work itself belongs to the host's user, and root in a box
+ * with no capabilities may not change it; the image's chmod is busybox, which gives up on the whole
+ * tree when the top of it refuses, so `chmod -R /work` opened nothing at all. On a Mac the box sees
+ * /work as its own, so only Linux ever showed it.
  */
-const HAND_THE_WORKSPACE_BACK = "chmod -R a+rwX /work 2>/dev/null";
+const HAND_THE_WORKSPACE_BACK = "find /work -mindepth 1 -maxdepth 1 ! -type l -exec chmod -R a+rwX {} + 2>/dev/null";
+
+/**
+ * The host's half of handing the workspace back, after the box has gone.
+ *
+ * On a Mac what the agent made is the host user's already, but the file sharing layer will not let
+ * the box change a folder the agent shut to mode 0, so only the host can open it. Anything that is
+ * not ours was the box's to open. A link is never followed: the agent chose where it points, and it
+ * could point at any file on this machine.
+ */
+async function openWhatIsOurs(directory: string): Promise<void> {
+  const us = process.getuid?.();
+  for (const name of await readdir(directory)) {
+    const path = join(directory, name);
+    const found = await lstat(path);
+    if (found.isSymbolicLink()) continue;
+    if (found.uid === us) await chmod(path, found.isDirectory() ? 0o777 : found.mode | 0o666);
+    if (found.isDirectory()) await openWhatIsOurs(path);
+  }
+}
 
 /**
  * Run one seat.

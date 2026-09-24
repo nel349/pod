@@ -134,14 +134,19 @@ export interface InstallPhase {
  *
  * A real job arrives from a git checkout, which is already world readable. This is for the
  * directories we build ourselves.
+ *
+ * A link is left alone: it was put there by whoever wrote the code, and could point at any file on
+ * this machine. Opening it would open that file instead.
  */
 export async function readableToTheBox(directory: string): Promise<string> {
-  const { chmod, readdir, stat } = await import("node:fs/promises");
+  const { chmod, lstat, readdir } = await import("node:fs/promises");
   const { join } = await import("node:path");
   await chmod(directory, 0o755);
   for (const name of await readdir(directory)) {
     const path = join(directory, name);
-    await chmod(path, (await stat(path)).isDirectory() ? 0o755 : 0o644);
+    const found = await lstat(path);
+    if (found.isSymbolicLink()) continue;
+    await chmod(path, found.isDirectory() ? 0o755 : 0o644);
   }
   return directory;
 }
@@ -157,15 +162,20 @@ export async function readableToTheBox(directory: string): Promise<string> {
  *
  * An agent's workspace is its own to change, so this is 0777 rather than 0755. What protects us from
  * the agent is the box, not the mode bits on a directory we made for it.
+ *
+ * A link is left alone. A workspace is a checkout of what earlier agents committed, and a link one
+ * of them committed could point at any file or folder on this machine: following it would hand that
+ * to everyone, and a folder all the way down.
  */
 export async function writableByTheBox(directory: string): Promise<string> {
-  const { chmod, readdir, stat } = await import("node:fs/promises");
+  const { chmod, lstat, readdir } = await import("node:fs/promises");
   const { join } = await import("node:path");
   await chmod(directory, 0o777);
   for (const name of await readdir(directory)) {
     const path = join(directory, name);
-    const what = await stat(path);
-    if (what.isDirectory()) await writableByTheBox(path);
+    const found = await lstat(path);
+    if (found.isSymbolicLink()) continue;
+    if (found.isDirectory()) await writableByTheBox(path);
     else await chmod(path, 0o666);
   }
   return directory;

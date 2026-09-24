@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runPod, runSeat } from "../agent.ts";
+import { runInBox, runPod, runSeat } from "../agent.ts";
 import { history, openRepository, type Repository } from "../repo.ts";
+import { writableByTheBox } from "../sandbox.ts";
 
 /**
  * A seat, worked by an agent.
@@ -153,6 +154,63 @@ describe.skipIf(!dockerAvailable)("a seat, worked by an agent", () => {
     // it still committed what it left, because the work is the work
     expect(outcome.commit).toMatch(/^[0-9a-f]{40}$/);
   }, 240_000);
+});
+
+describe.skipIf(!dockerAvailable)("the workspace, once the agent stops", () => {
+  /**
+   * The box runs as root, so on Linux everything an agent makes is root's. The server has to be able
+   * to read what it left and delete the rest, including a folder the agent shut on purpose.
+   */
+  test("everything the agent made is open to the server, even a folder it locked", async () => {
+    const workspace = await writableByTheBox(await mkdtemp(join(tmpdir(), "pod-handback-")));
+    const locksItselfIn = `node -e '
+      const fs = require("fs");
+      fs.mkdirSync("/work/shut/deeper", { recursive: true });
+      fs.writeFileSync("/work/shut/deeper/left.txt", "what it left");
+      fs.chmodSync("/work/shut/deeper", 0);
+      fs.chmodSync("/work/shut", 0);
+      fs.mkdirSync("/work/.pod");
+      fs.writeFileSync(process.env.POD_SAY, "{}");
+      fs.chmodSync(process.env.POD_SAY, 0);
+    '`;
+
+    const ran = await runInBox({ label: "handback", workspace, image: IMAGE, command: locksItselfIn });
+    expect(ran.code).toBe(0);
+
+    for (const made of ["shut", "shut/deeper", ".pod"]) {
+      expect((await stat(join(workspace, made))).mode & 0o777).toBe(0o777);
+    }
+    expect((await stat(join(workspace, "shut/deeper/left.txt"))).mode & 0o666).toBe(0o666);
+    expect((await stat(join(workspace, ".pod/say.json"))).mode & 0o666).toBe(0o666);
+    expect(await readFile(join(workspace, "shut/deeper/left.txt"), "utf8")).toBe("what it left");
+
+    await rm(workspace, { recursive: true });
+    expect(await Bun.file(workspace).exists()).toBe(false);
+  }, 120_000);
+
+  test("a link the agent leaves is never followed, so it cannot open a file outside the workspace", async () => {
+    const workspace = await writableByTheBox(await mkdtemp(join(tmpdir(), "pod-handback-")));
+    const outside = await mkdtemp(join(tmpdir(), "pod-outside-"));
+    const secret = join(outside, "secret");
+    await writeFile(secret, "not the agent's");
+    await chmod(secret, 0o600);
+    // Links an agent left, one at the top and one further down, pointing at a path that means
+    // nothing inside the box and exactly the secret on the host. They are laid here rather than by
+    // the box because on a Mac, Docker Desktop opens a link's target the moment a box makes the
+    // link, before anything of ours runs; that is Docker's to fix, and not what this is testing
+    await mkdir(join(workspace, "further"));
+    await symlink(secret, join(workspace, "looks-harmless"));
+    await symlink(secret, join(workspace, "further", "down"));
+    await writableByTheBox(join(workspace, "further"));
+
+    const ran = await runInBox({ label: "handback", workspace, image: IMAGE, command: "true" });
+    expect(ran.code).toBe(0);
+    expect((await lstat(join(workspace, "looks-harmless"))).isSymbolicLink()).toBe(true);
+    expect((await stat(secret)).mode & 0o777).toBe(0o600);
+
+    await rm(workspace, { recursive: true });
+    await rm(outside, { recursive: true });
+  }, 120_000);
 });
 
 describe.skipIf(!dockerAvailable)("the pod, working", () => {

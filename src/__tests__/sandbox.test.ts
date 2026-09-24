@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { dockerArguments, runSealed } from "../sandbox.ts";
+import { chmod, mkdir, mkdtemp, stat, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { dockerArguments, readableToTheBox, runSealed, writableByTheBox } from "../sandbox.ts";
 import { checkout } from "./support/checkout.ts";
 
 /** Pinned by digest, not by tag: the same image in September and in October. */
@@ -28,6 +31,42 @@ describe("the arguments that keep the box shut", () => {
     const args = dockerArguments({ source: "/x", command: "true", image: IMAGE }, "pod-test");
     expect(args).toContain(IMAGE);
     expect(IMAGE).toContain("@sha256:");
+  });
+});
+
+describe("opening a directory to the box", () => {
+  /**
+   * Code arrives with links in it, put there by whoever wrote it, and a link can point anywhere on
+   * the machine. Opening a directory to the box must open the directory, never where a link leads.
+   */
+  async function aSecretAndALinkToIt(): Promise<{ readonly directory: string; readonly secret: string; readonly folder: string }> {
+    const outside = await mkdtemp(join(tmpdir(), "pod-outside-"));
+    const secret = join(outside, "secret");
+    await writeFile(secret, "not the code's");
+    await chmod(secret, 0o600);
+    const folder = join(outside, "folder");
+    await mkdir(folder, { mode: 0o700 });
+    const directory = await mkdtemp(join(tmpdir(), "pod-code-"));
+    await writeFile(join(directory, "server.js"), "");
+    await symlink(secret, join(directory, "looks-harmless"));
+    await symlink(folder, join(directory, "a-folder"));
+    return { directory, secret, folder };
+  }
+
+  test("making it readable leaves what a link points at as it was", async () => {
+    const { directory, secret, folder } = await aSecretAndALinkToIt();
+    await readableToTheBox(directory);
+    expect((await stat(join(directory, "server.js"))).mode & 0o777).toBe(0o644);
+    expect((await stat(secret)).mode & 0o777).toBe(0o600);
+    expect((await stat(folder)).mode & 0o777).toBe(0o700);
+  });
+
+  test("making it writable leaves what a link points at as it was", async () => {
+    const { directory, secret, folder } = await aSecretAndALinkToIt();
+    await writableByTheBox(directory);
+    expect((await stat(join(directory, "server.js"))).mode & 0o777).toBe(0o666);
+    expect((await stat(secret)).mode & 0o777).toBe(0o600);
+    expect((await stat(folder)).mode & 0o777).toBe(0o700);
   });
 });
 
