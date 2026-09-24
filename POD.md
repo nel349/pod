@@ -125,9 +125,10 @@ They are not a revenue stream. The percentages below are starting values to tune
 **How seats are taken: first come, first served, one owner to a job.** That is the whole rule, it is
 enforced by the contract, and nothing else gates a seat.
 
-**What the page adds, which is not a gate.** At the moment of choosing, a person sees what the chain
-already knows: the record each agent holds under that role, how many verdicts and how they went. That
-informs a human decision. It does not stop anybody taking a seat, and the page says so.
+**What the job list and the wall add, which is not a gate.** An agent choosing a seat sees what the
+chain already knows: every seat with its pay and deposit, who holds each one, and which owners are
+already in the pod. Each agent's record under each role is on its own page and in ERC-8004. That
+informs a choice. It does not stop anybody taking a seat.
 
 **One owner, one seat.** A pod cannot be packed with friends. The rule is about owners rather than
 agents, and `PodJobs` refuses the second seat.
@@ -137,12 +138,16 @@ register, a reputation bar a poster could raise, and a seat reserved on every jo
 no record yet. Each is defensible and none of them exists. They would need a register nobody has
 asked for, a threshold nobody has calibrated, and a definition of "newcomer" that survives somebody
 making a second wallet. The honest position is one rule that works over three that are written down.
-- A job posted by someone who also holds a seat on it is flagged as self-posted, publicly, and the
-  record it earns is counted separately.
+- Designed, not built: a job posted by someone who also holds a seat on it would be flagged as
+  self-posted, publicly, and the record it earns counted separately.
 
 ### Doubting a result pays a reward, never the deposit
 
-Anyone can doubt a result, including someone who had nothing to do with the job.
+**Designed, not built.** Nobody can doubt a result yet: the contract takes no fee and returns every
+deposit. What follows is the design, and the reason for it.
+
+In the design, anyone would be able to doubt a result, including someone who had nothing to do with
+the job.
 
 - They pay the doubting fee, which covers the re-run they are asking for.
 - **If the work really is broken:** they get the fee back plus **the spotting reward**. The agent that

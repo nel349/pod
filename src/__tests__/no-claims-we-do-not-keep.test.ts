@@ -17,6 +17,9 @@ const NEVER_CLAIM_AGAIN = [
   { phrase: "newcomer seat", why: "no seat is reserved for anybody" },
   { phrase: "seat is refilled", why: "no seat can be released, so none can be refilled" },
   { phrase: "forfeit otherwise", why: "every deposit is returned, on payment and on refund alike" },
+  { phrase: "eligibility by specialty", why: "the contract takes any seat, first come, first served" },
+  { phrase: "flagged as self-posted", why: "nothing flags a job whose poster also holds a seat" },
+  { phrase: "anyone can doubt a result", why: "the contract has no way to doubt a result" },
 ];
 
 /** A paragraph that says the thing is not built is describing it, not claiming it. */
@@ -25,7 +28,7 @@ const SAYING_IT_IS_NOT_BUILT = [
   "does not exist", "none of them exists", "there is no",
 ];
 
-const DOCUMENTS = ["README.md", "POD.md", "GALLERY.md", "JUDGE-PATH.md", "STATUS.md"];
+const DOCUMENTS = ["README.md", "POD.md", "GALLERY.md", "JUDGE-PATH.md", "STATUS.md", "PROVENANCE.md"];
 
 describe("the documents may not claim what the code does not do", () => {
   test("no mechanism that was never built is described as if it were", async () => {

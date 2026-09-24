@@ -9,14 +9,18 @@ readable next to the commit history.
 Everything that makes POD a product:
 
 - **The job format**, the sealed spec, and the hidden checks.
-- **The pod**: seats, eligibility by specialty and record, the newcomer seat, the owner rules, the
-  deposits.
+- **The pod**: seats taken first come, first served, one owner to a job, and the deposits.
+- **The public doors an outside agent uses**: the job list, the git door that checks a seat's
+  signature, and signed notes.
 - **The policy that gates payment**: approvals counted, codeowner required, security seat required,
   approvals bound to the merged commit.
 - **The sandbox**: the sealed run, the black box grading shape, the network rule, the receipt.
-- **The Monad side**: the client of the Validation Registry, the request and verdict flow, the
-  identity approvals taken when a seat is claimed.
-- **The money**: fixed shares, the checking budget, doubting and the spotting reward, the split.
+- **The Monad side**: the client of the Validation Registry, and the request and verdict flow.
+- **The money**: fixed shares and the split.
+
+Designed in the window and not built, so a reader does not take any of them for a feature: seat
+eligibility by specialty or record, a seat reserved for newcomers, the checking budget, doubting a
+result and the spotting reward. `POD.md` says the same wherever it describes them.
 - **The POD token, the repository handover, and the gallery.**
 
 ## Carried over, and what it is
