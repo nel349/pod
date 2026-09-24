@@ -20,35 +20,17 @@
  */
 import { isAddress, recoverMessageAddress, type Address, type Hex } from "viem";
 import { z } from "zod";
-import { filesMatchSeal, KINDS, MODE_NAMES, sealSpec, type Spec } from "./job.ts";
+import { filesMatchSeal, sealSpec, type Spec } from "./job.ts";
 import { openJob } from "./publish.ts";
 import { isSafeName, isWallName } from "./routes.ts";
 import type { JobRecord, JobStore } from "./store.ts";
 import { SEATS } from "./seal.ts";
 import { postingMessage } from "./messages.ts";
+import { specFromTheWire, SpecOnTheWireSchema, type SpecOnTheWire } from "./specWire.ts";
 
 export { postingMessage };
 
 const HEX = /^0x[0-9a-fA-F]*$/;
-const FINGERPRINT = /^0x[0-9a-f]{64}$/;
-
-/** The spec as it travels. JSON has no bigint, and the price is money, so it moves as a string of wei. */
-const SpecOnTheWireSchema = z.object({
-  idea: z.string(),
-  kind: z.enum(KINDS).optional(),
-  mode: z.enum(MODE_NAMES),
-  price: z.string().regex(/^[0-9]+$/, "the price is a whole number of wei"),
-  checks: z.array(z.object({
-    says: z.string(),
-    run: z.string(),
-    hidden: z.boolean(),
-    file: z.string().optional(),
-    digest: z.string().refine((digest): digest is `0x${string}` => FINGERPRINT.test(digest), "a check's fingerprint is 32 bytes of hex").optional(),
-  })).readonly(),
-  allowed: z.array(z.object({ host: z.string(), why: z.string() })).readonly(),
-  salt: z.string(),
-});
-
 /**
  * A posting, as it arrives from anybody. Everything in it is read through this before anything else
  * is asked of it, so a missing field is a refusal that says which, not a crash.
@@ -65,7 +47,7 @@ export const PostingSchema = z.object({
   signature: z.string().refine((value): value is Hex => HEX.test(value), "the signature is not hex"),
 });
 
-export type SpecOnTheWire = z.input<typeof SpecOnTheWireSchema>;
+export type { SpecOnTheWire };
 export type Posting = z.input<typeof PostingSchema>;
 
 /** What the chain says about one job. Read, never assumed. */
@@ -104,7 +86,7 @@ export async function acceptPosting(store: JobStore, chain: ChainReader, asked: 
   if (!isWallName(posting.jobId)) return refuse(400, "a job's name is lower-case letters, numbers and dashes, from 3 to 64 of them");
   if (await store.read(posting.jobId)) return refuse(409, `there is already a job called ${posting.jobId}`);
 
-  const spec: Spec = { ...posting.spec, price: BigInt(posting.spec.price) };
+  const spec: Spec = specFromTheWire(posting.spec);
   if (spec.checks.length === 0) return refuse(400, "a job with no checks has nothing to decide it");
   const unsafeFile = spec.checks.find((check) => check.file !== undefined && !isSafeName(check.file));
   if (unsafeFile) return refuse(400, `a check's file name may use letters, numbers, dots, dashes and underscores: ${unsafeFile.file}`);
@@ -159,8 +141,10 @@ export async function acceptPosting(store: JobStore, chain: ChainReader, asked: 
     ...opened,
     chain: { network: "monad-testnet", jobId: posting.onChainId, jobs: chain.jobs },
   };
-  // the check files go in with the record. The store refuses to publish them while the job is open
+  // the check files go in with the record, and the spec beside them: while the job is open the store
+  // serves only the visible checks, and the spec is what says which those are
   await store.save(record, posting.files);
+  await store.saveSpec(posting.jobId, spec);
   return { ok: true, record };
 }
 

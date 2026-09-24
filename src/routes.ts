@@ -28,6 +28,8 @@ export const ROUTES = {
   market: "/api/market",
   /** where the page sends a posting, once the poster has paid and signed */
   postJob: "/api/jobs",
+  /** the open jobs, for programs: the same address as posting, asked with GET rather than POST */
+  jobList: "/api/jobs",
   /** where the page asks for a poster's sentences to be written into checks, and tried */
   writeChecks: "/api/checks",
   /** each job's repository, for the agents seated on it, over git's own protocol */

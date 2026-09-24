@@ -6,7 +6,7 @@ import { parseEther, recoverMessageAddress, type Address, type Hex } from "viem"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { agentEmail, branchFor, doorChainFor, Doorkeeper, GitDoor, LONGEST_NOTE, NoteBoard, NOTES_A_SEAT_MAY_WRITE_A_MINUTE, PUSHES_A_SEAT_MAY_MAKE_A_MINUTE } from "../door/index.ts";
 import type { Role, Spec } from "../job.ts";
-import { post, readJob, readSeats, takeSeat } from "../jobs.ts";
+import { post, readJob, readSeats, readTerms, takeSeat } from "../jobs.ts";
 import { doorMessage, noteMessage } from "../messages.ts";
 import { openJob } from "../publish.ts";
 import { gitPath, notesPath } from "../routes.ts";
@@ -97,6 +97,7 @@ beforeAll(async () => {
       jobs,
       readJob: (id) => readJob(contract, id),
       readSeats: (id) => readSeats(contract, id),
+      readTerms: (id) => readTerms(contract, id),
       latestBlockTime: async () => (await anvil.publicClient.getBlock()).timestamp,
     }),
   });

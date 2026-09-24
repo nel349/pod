@@ -68,7 +68,7 @@ jobs:
       - run: bun test src/__tests__/chain.test.ts src/__tests__/posting.test.ts
 
   door:
-    name: agents push through the git door, with real git against a real EVM
+    name: agents find work, push through the git door and write notes, against a real EVM
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -82,7 +82,7 @@ jobs:
       # the seats the door checks are the ones on this build's contract, deployed onto anvil
       - run: forge build
         working-directory: contracts
-      - run: bun test src/__tests__/door.test.ts
+      - run: bun test src/__tests__/door.test.ts src/__tests__/joblist.test.ts
 
   contracts:
     name: contract tests

@@ -15,7 +15,9 @@ import type { Address, Hex } from "viem";
 import type { Tile } from "./gallery.ts";
 import type { Approval } from "./jobpage.ts";
 import type { SignedReceipt } from "./receipt.ts";
+import type { Spec } from "./job.ts";
 import { isSafeName } from "./routes.ts";
+import { specFromTheWire, SpecOnTheWireSchema, specToTheWire } from "./specWire.ts";
 
 /**
  * What an open job tells a pod, and tells a reader, before there is any verdict.
@@ -92,6 +94,8 @@ const RECORD = "job.json";
 const CHECKS = "checks";
 /** one note to a line, in the order they arrived */
 const NOTES = "notes.jsonl";
+/** the spec as it was posted and sealed, hidden checks and salt included, so it is never served whole while the job runs */
+const SPEC = "spec.json";
 const HISTORY = "history.bundle";
 
 /** A verdict is what makes the checks publishable: before that, they are the sealed part of the job. */
@@ -181,26 +185,62 @@ export class JobStore {
     }
   }
 
-  /** The names of the checks this job was graded against, or nothing while it is still running. */
+  /**
+   * The names of the checks anybody may read: every one once the job has a verdict, and while it
+   * runs only the visible ones, which are the pod's to build against. A job with no spec kept has
+   * no way to tell which are which, so while it runs it shows none.
+   */
   async checkNames(jobId: string): Promise<readonly string[]> {
     const record = await this.read(jobId);
-    if (!record || !checksArePublished(record)) return [];
+    if (!record) return [];
+    let names: string[];
     try {
-      return (await readdir(join(this.root, jobId, CHECKS))).filter(isSafeName).sort();
+      names = (await readdir(join(this.root, jobId, CHECKS))).filter(isSafeName);
     } catch {
       return [];
     }
+    if (checksArePublished(record)) return names.sort();
+    const visible = await this.visibleCheckFiles(jobId);
+    return names.filter((name) => visible.includes(name)).sort();
   }
 
   async checkFile(jobId: string, name: string): Promise<string | undefined> {
     if (!isSafeName(jobId) || !isSafeName(name)) return undefined;
-    const record = await this.read(jobId);
-    if (!record || !checksArePublished(record)) return undefined;
+    if (!(await this.checkNames(jobId)).includes(name)) return undefined;
     try {
       return await readFile(join(this.root, jobId, CHECKS, name), "utf8");
     } catch {
       return undefined;
     }
+  }
+
+  /** The files of the checks the pod may see, by the spec that was sealed. */
+  private async visibleCheckFiles(jobId: string): Promise<readonly string[]> {
+    const spec = await this.spec(jobId);
+    return (spec?.checks ?? []).filter((check) => !check.hidden && check.file !== undefined).map((check) => check.file!);
+  }
+
+  /** Keep the spec a job was posted and sealed under. Nothing serves it whole: see `spec` */
+  async saveSpec(jobId: string, spec: Spec): Promise<void> {
+    if (!(await this.read(jobId))) throw new Error(`there is no job called ${jobId} to keep a spec for`);
+    await writeFile(join(this.root, jobId, SPEC), JSON.stringify(specToTheWire(spec), null, 2));
+  }
+
+  /**
+   * The spec a job was sealed under, hidden checks and salt included. For the server's own use:
+   * grading, and showing a pod the parts that are its to see. Never for sending as it is.
+   */
+  async spec(jobId: string): Promise<Spec | undefined> {
+    if (!isSafeName(jobId)) return undefined;
+    let text: string;
+    try {
+      text = await readFile(join(this.root, jobId, SPEC), "utf8");
+    } catch {
+      return undefined;
+    }
+    const parsed = SpecOnTheWireSchema.safeParse(JSON.parse(text));
+    if (!parsed.success) throw new Error(`the spec kept for ${jobId} cannot be read: ${parsed.error.issues[0]?.message}`);
+    return specFromTheWire(parsed.data);
   }
 
   /**

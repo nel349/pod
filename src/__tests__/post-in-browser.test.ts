@@ -233,7 +233,13 @@ describe.skipIf(!available)("a stranger posts a job from a browser", () => {
     expect(text).not.toContain(DRY.toLowerCase());
     expect(text).toContain("1 check is sealed until there is a verdict");
 
-    expect((await fetch(base + checksPath("the-exam-stays-sealed"))).status).toBe(409);
+    // while the job runs, the checks list holds the brief's check, which the builders build against,
+    // and never the exam's
+    const listed = await fetch(base + checksPath("the-exam-stays-sealed"));
+    expect(listed.status).toBe(200);
+    const names = await listed.text();
+    expect(names).toContain("check-1.mjs");
+    expect(names).not.toContain("check-2.mjs");
     // the exam's own file, which this page really posted, is not served either
     expect((await fetch(base + checkFilePath("the-exam-stays-sealed", "check-2.mjs"))).status).toBe(404);
   }, 300_000);

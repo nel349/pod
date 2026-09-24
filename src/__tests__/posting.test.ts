@@ -110,6 +110,10 @@ describe.skipIf(!available)("a stranger posts a job", () => {
     expect(record?.brief?.sealedChecks).toBe(1);
     // the hidden check is held, not published, while the job is open
     expect(await store.checkFile("a-coat", "cold.mjs")).toBeUndefined();
+    // and the spec it was sealed under is kept, which is what grading it later will need
+    expect(await store.spec("a-coat")).toEqual(spec);
+    const visible = spec.checks.filter((check) => !check.hidden).map((check) => check.file!);
+    expect(await store.checkNames("a-coat")).toEqual(visible);
   }, 60_000);
 
   test("somebody else's signature cannot attach a spec to money they did not put up", async () => {

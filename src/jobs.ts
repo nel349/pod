@@ -28,6 +28,19 @@ export const podJobsAbi = parseAbi([
   "event Posted(uint256 indexed jobId, address indexed poster, bytes32 seal, uint256 price, uint64 endsAt)",
   "event Settled(uint256 indexed jobId, bytes32 commitHash, uint256 paid)",
   "event Refunded(uint256 indexed jobId, uint256 amount, string why)",
+  // the contract's refusals, by name, so a reverted call says why rather than showing four bytes
+  "error NotPoster()",
+  "error NotValidator()",
+  "error WrongState()",
+  "error SeatFilled()",
+  "error SeatEmpty()",
+  "error OwnerAlreadySeated()",
+  "error WrongDeposit()",
+  "error NotTheSeat()",
+  "error CommitMismatch()",
+  "error PolicyNotMet()",
+  "error TooLate()",
+  "error TooEarly()",
 ]);
 
 /** The contract's enum order, named once so nothing else has to know it. */
@@ -91,6 +104,15 @@ export async function readSeats(at: Omit<Contract, "wallet">, jobId: bigint): Pr
     }));
   }));
   return rows.flat();
+}
+
+/** What each seat on a job pays and costs to take, read from the contract rather than worked out here. */
+export async function readTerms(at: Omit<Contract, "wallet">, jobId: bigint): Promise<Readonly<Record<Role, { readonly pay: bigint; readonly deposit: bigint }>>> {
+  const terms = await Promise.all(ROLES.map(async (role) => {
+    const [pay, deposit] = await Promise.all([seatPay(at, jobId, role), seatDeposit(at, jobId, role)]);
+    return [role, { pay, deposit }] as const;
+  }));
+  return Object.fromEntries(terms) as Record<Role, { readonly pay: bigint; readonly deposit: bigint }>;
 }
 
 export async function readJob(at: Omit<Contract, "wallet">, jobId: bigint): Promise<OnChainJob> {

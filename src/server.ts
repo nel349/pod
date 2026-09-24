@@ -14,7 +14,7 @@ import { acceptPosting, readerFor, type ChainReader } from "./posting.ts";
 import { CheckWriting, ProvenChecks } from "./checkwriting/index.ts";
 import type { MarketConfig } from "./market.ts";
 import { bodyWithin } from "./body.ts";
-import { doorChainFor, Doorkeeper, GitDoor, NoteBoard } from "./door/index.ts";
+import { doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard } from "./door/index.ts";
 import postPage from "./web/post/index.html";
 import { renderCard } from "./card.ts";
 import { renderJob } from "./jobpage.ts";
@@ -58,6 +58,8 @@ export interface Services {
   readonly door?: GitDoor;
   /** what the seats of a job say to each other */
   readonly notes?: NoteBoard;
+  /** the open jobs, for agents looking for work */
+  readonly jobList?: JobList;
 }
 const BUNDLE = { "content-type": "application/x-git-bundle" } as const;
 
@@ -73,7 +75,7 @@ const NOTHING_YET = `<!doctype html>
 <p>No job has been graded on this server. When one has, it appears here, whether it passed or not.</p>
 </header></body></html>`;
 
-export async function handle(request: Request, store: JobStore, { market, door, notes }: Services = {}): Promise<Response> {
+export async function handle(request: Request, store: JobStore, { market, door, notes, jobList }: Services = {}): Promise<Response> {
   const { pathname } = new URL(request.url);
 
   // agents' work, in and out, through git. It speaks its own methods, so it is answered before the rest
@@ -88,6 +90,10 @@ export async function handle(request: Request, store: JobStore, { market, door, 
   if (request.method === "POST" && pathname === ROUTES.postJob) return await posted(request, store, market);
   if (request.method === "POST" && pathname === ROUTES.writeChecks) return await startWriting(request, market);
   if (request.method !== "GET") return new Response("only GET\n", { status: 405, headers: TEXT });
+
+  if (pathname === ROUTES.jobList) {
+    return jobList ? await jobList.handle() : Response.json({ why: "there is no job list on this server: it answers to no contract" }, { status: 404 });
+  }
 
   // the posting page itself is a bundled app served by `serve`; this is what it reads first
   if (pathname === ROUTES.market) {
@@ -191,19 +197,20 @@ export async function handle(request: Request, store: JobStore, { market, door, 
 /**
  * The checks, as a list a person can read and a machine can walk.
  *
- * While a job is still running this is the one place that has to refuse, and it says why: the checks
- * are what the pod is not allowed to see until the verdict exists.
+ * While a job is still running it lists only the checks its pod may see, and when there are none of
+ * those it refuses and says why: the sealed checks are what the pod may not see until the verdict.
  */
 async function checkIndex(store: JobStore, jobId: string): Promise<Response> {
   const record = await store.read(jobId);
   if (!record) return notFound(`no job called ${jobId}`);
-  if (!checksArePublished(record)) {
+  // while it runs, only the checks its pod may see: the sealed ones wait for the verdict
+  const names = await store.checkNames(jobId);
+  if (!checksArePublished(record) && names.length === 0) {
     return new Response(
       `job ${jobId} is still running. Its checks are published when it has a verdict, not before.\n`,
       { status: 409, headers: TEXT },
     );
   }
-  const names = await store.checkNames(jobId);
   if (names.length === 0) return notFound(`job ${jobId} published no checks`);
   return new Response(`${names.map((n) => checkFilePath(jobId, n)).join("\n")}\n`, { headers: TEXT });
 }
@@ -284,7 +291,7 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
   const { createPublicClient, http, isAddress } = await import("viem");
   if (!isAddress(configured)) throw new Error(`POD_JOBS_ADDRESS is not an address: ${configured}`);
   const jobs = configured;
-  const { readJob, readSeats } = await import("./jobs.ts");
+  const { readJob, readSeats, readTerms } = await import("./jobs.ts");
   const { monadTestnet } = await import("./live.ts");
   const { MONAD_TESTNET } = await import("./registry.ts");
   const rpc = process.env.MONAD_TESTNET_RPC ?? MONAD_TESTNET.rpc;
@@ -302,11 +309,13 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
       jobs,
       readJob: (id) => readJob(contract, id),
       readSeats: (id) => readSeats(contract, id),
+      readTerms: (id) => readTerms(contract, id),
       latestBlockTime: async () => (await publicClient.getBlock()).timestamp,
     }),
   });
   const door = new GitDoor({ repositories: join(jobsDirectory, REPOSITORIES_FOLDER), keeper });
   const notes = new NoteBoard({ keeper, store });
+  const jobList = new JobList({ keeper, store });
   const market: Market = {
     page: {
       chainId: MONAD_TESTNET.id, chainName: "Monad testnet", rpc, jobs,
@@ -322,7 +331,7 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
     }),
     proven,
   };
-  return { market, door, notes };
+  return { market, door, notes, jobList };
 }
 
 /**
@@ -346,7 +355,7 @@ if (import.meta.main) {
   console.log(market
     ? `posting is open, against ${market.page.jobs}; checks are written by Claude, through the CLI signed in on this machine`
     : "posting is closed: no POD_JOBS_ADDRESS");
-  if (services.door) console.log(`agents push their work to http://localhost:${port}${ROUTES.git}<job>.git, and write notes to ${ROUTES.notes}<job>`);
+  if (services.door) console.log(`agents push their work to http://localhost:${port}${ROUTES.git}<job>.git, and write notes to ${ROUTES.notes}<job>. Open jobs are listed at ${ROUTES.jobList}`);
 
   // stopping: take no new requests, let any writing under way finish and take its boxes down, then go
   const stop = async (): Promise<void> => {

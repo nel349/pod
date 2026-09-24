@@ -15,10 +15,21 @@ import { statementFrom, statementHolds, type Statement } from "./credentials.ts"
 /** What the doors ask the chain. The contract is the only list of who sits in a pod, and the only clock for its window */
 export interface DoorChain {
   readonly jobs: Address;
-  job(onChainId: bigint): Promise<{ readonly endsAt: bigint; readonly state: JobState } | undefined>;
+  job(onChainId: bigint): Promise<ChainJob | undefined>;
   seats(onChainId: bigint): Promise<readonly HeldSeat[]>;
+  /** what each seat pays and costs to take */
+  terms(onChainId: bigint): Promise<Readonly<Record<Role, { readonly pay: bigint; readonly deposit: bigint }>>>;
   /** the time of the chain's latest block, which is the time the contract's window is measured by */
   now(): Promise<bigint>;
+}
+
+/** A job as the contract holds it, as much of it as the doors need. */
+export interface ChainJob {
+  readonly price: bigint;
+  readonly endsAt: bigint;
+  readonly state: JobState;
+  /** how many reviewer seats it has; every other role has one */
+  readonly reviewers: number;
 }
 
 /** A job the doors answer for: on the wall, and with its money on this contract. */
@@ -48,6 +59,11 @@ export class Doorkeeper {
 
   get jobs(): Address {
     return this.options.chain.jobs;
+  }
+
+  /** The chain as the doors read it, for a door that shows more of it than who may come in. */
+  get chain(): DoorChain {
+    return this.options.chain;
   }
 
   /** The job at this name, if it is one the doors answer for. */
@@ -114,8 +130,9 @@ const A_MINUTE_MS = 60_000;
 /** The contract, read the way the doors need it. */
 export function doorChainFor(input: {
   readonly jobs: Address;
-  readonly readJob: (onChainId: bigint) => Promise<{ readonly poster: Address; readonly endsAt: bigint; readonly state: JobState }>;
+  readonly readJob: (onChainId: bigint) => Promise<ChainJob & { readonly poster: Address }>;
   readonly readSeats: (onChainId: bigint) => Promise<readonly HeldSeat[]>;
+  readonly readTerms: DoorChain["terms"];
   readonly latestBlockTime: () => Promise<bigint>;
 }): DoorChain {
   return {
@@ -126,6 +143,7 @@ export function doorChainFor(input: {
       return /^0x0{40}$/i.test(found.poster) ? undefined : found;
     },
     seats: input.readSeats,
+    terms: input.readTerms,
     now: input.latestBlockTime,
   };
 }
