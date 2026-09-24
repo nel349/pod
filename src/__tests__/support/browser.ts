@@ -15,6 +15,11 @@ import { join } from "node:path";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const LINUX_CHROME = ["/usr/bin/google-chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium"];
+/** how long Chrome has to open its debugging port. A cold start on a shared CI machine can pass ten seconds */
+const CHROME_MAY_TAKE_MS = 30_000;
+const ASK_EVERY_MS = 100;
+/** how much of what Chrome printed goes into the error when it never answers: the end, where the reason is */
+const LAST_OF_WHAT_IT_SAID = 1200;
 
 async function chromePath(): Promise<string | undefined> {
   if (await Bun.file(CHROME).exists()) return CHROME;
@@ -64,19 +69,23 @@ export class Browser {
 
     // the debugging port takes a moment; ask until it answers rather than sleeping a guess
     let target: { webSocketDebuggerUrl: string } | undefined;
-    for (let i = 0; i < 100 && !target; i++) {
+    const deadline = Date.now() + CHROME_MAY_TAKE_MS;
+    while (!target && Date.now() < deadline) {
       try {
         const port = (await Bun.file(join(profile, "DevToolsActivePort")).text()).split("\n")[0];
         const pages = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json() as
           { type: string; webSocketDebuggerUrl: string }[];
         target = pages.find((page) => page.type === "page");
       } catch { /* not up yet: no port written, or not answering */ }
-      if (!target) await Bun.sleep(100);
+      if (!target) await Bun.sleep(ASK_EVERY_MS);
     }
     if (!target) {
-      const said = await new Response(process.stderr as ReadableStream).text();
+      // killed first: what it printed can only be read to the end once it has stopped printing, and a
+      // Chrome left running kept this waiting until the test timed out and took the chain down with it
       process.kill();
-      throw new Error(`Chrome never opened its debugging port. It said: ${said.slice(0, 400)}`);
+      await process.exited;
+      const said = await new Response(process.stderr as ReadableStream).text();
+      throw new Error(`Chrome never opened its debugging port in ${CHROME_MAY_TAKE_MS / 1000}s. The end of what it said: ${said.slice(-LAST_OF_WHAT_IT_SAID)}`);
     }
 
     const waiting = new Map<number, Waiting>();
