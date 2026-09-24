@@ -67,6 +67,23 @@ jobs:
         working-directory: contracts
       - run: bun test src/__tests__/chain.test.ts src/__tests__/posting.test.ts
 
+  door:
+    name: agents push through the git door, with real git against a real EVM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      # the seats the door checks are the ones on this build's contract, deployed onto anvil
+      - run: forge build
+        working-directory: contracts
+      - run: bun test src/__tests__/door.test.ts
+
   contracts:
     name: contract tests
     runs-on: ubuntu-latest

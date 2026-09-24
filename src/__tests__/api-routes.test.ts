@@ -47,7 +47,7 @@ describe("the market the page reads first", () => {
   });
 
   test("a server with a contract hands the page exactly its chain, contract and coin", async () => {
-    const answer = await handle(get(ROUTES.market), await aStore(), await aMarket());
+    const answer = await handle(get(ROUTES.market), await aStore(), { market: await aMarket() });
     expect(answer.status).toBe(200);
     expect(await answer.json()).toEqual(MARKET_PAGE);
   });
@@ -62,35 +62,35 @@ describe("asking for checks to be written", () => {
   test("a request that declares itself too large is refused before it is read", async () => {
     const answer = await handle(
       post(ROUTES.writeChecks, "{}", { "content-length": String(MOST_A_REQUEST_TO_WRITE_MAY_WEIGH + 1) }),
-      await aStore(), await aMarket(),
+      await aStore(), { market: await aMarket() },
     );
     expect(answer.status).toBe(413);
   });
 
   test("a request that is too large, whatever it declares, is refused", async () => {
-    const answer = await handle(post(ROUTES.writeChecks, "x".repeat(MOST_A_REQUEST_TO_WRITE_MAY_WEIGH + 1)), await aStore(), await aMarket());
+    const answer = await handle(post(ROUTES.writeChecks, "x".repeat(MOST_A_REQUEST_TO_WRITE_MAY_WEIGH + 1)), await aStore(), { market: await aMarket() });
     expect(answer.status).toBe(413);
   });
 
   test("something that is not JSON is refused as not a request", async () => {
-    const answer = await handle(post(ROUTES.writeChecks, "write me some checks"), await aStore(), await aMarket());
+    const answer = await handle(post(ROUTES.writeChecks, "write me some checks"), await aStore(), { market: await aMarket() });
     expect(answer.status).toBe(400);
     expect(await answer.json()).toEqual({ why: "that is not a request to write checks" });
   });
 
   test("a request missing what would prove it is refused in the same words the page uses", async () => {
-    const answer = await handle(post(ROUTES.writeChecks, JSON.stringify({ ...COAT_REQUEST, statements: [] })), await aStore(), await aMarket());
+    const answer = await handle(post(ROUTES.writeChecks, JSON.stringify({ ...COAT_REQUEST, statements: [] })), await aStore(), { market: await aMarket() });
     expect(answer.status).toBe(400);
     expect(await answer.json()).toEqual({ why: "say at least one thing that would prove it works" });
   });
 
   test("a full server says so with 429 and starts nothing", async () => {
-    const answer = await handle(post(ROUTES.writeChecks, JSON.stringify(COAT_REQUEST)), await aStore(), await aMarket(0));
+    const answer = await handle(post(ROUTES.writeChecks, JSON.stringify(COAT_REQUEST)), await aStore(), { market: await aMarket(0) });
     expect(answer.status).toBe(429);
   });
 
   test("asking after writing the server has never heard of, or has forgotten, is a 404 with a reason", async () => {
-    const answer = await handle(get(writingPath("not-a-real-id")), await aStore(), await aMarket());
+    const answer = await handle(get(writingPath("not-a-real-id")), await aStore(), { market: await aMarket() });
     expect(answer.status).toBe(404);
     expect(await answer.json()).toEqual({ why: "those checks are not being written here any more" });
   });
@@ -122,13 +122,13 @@ describe("a posting at the door", () => {
   test("one that declares itself larger than any set of checks is refused before it is read", async () => {
     const answer = await handle(
       post(ROUTES.postJob, "{}", { "content-length": String(MOST_A_POSTING_MAY_WEIGH + 1) }),
-      await aStore(), await aMarket(),
+      await aStore(), { market: await aMarket() },
     );
     expect(answer.status).toBe(413);
   });
 
   test("one in the wrong shape is a 400 that says what is wrong, not a crash", async () => {
-    const answer = await handle(post(ROUTES.postJob, JSON.stringify({ jobId: "a-coat" })), await aStore(), await aMarket());
+    const answer = await handle(post(ROUTES.postJob, JSON.stringify({ jobId: "a-coat" })), await aStore(), { market: await aMarket() });
     expect(answer.status).toBe(400);
     expect((await answer.json() as { why: string }).why.length).toBeGreaterThan(0);
   });

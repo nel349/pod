@@ -13,6 +13,7 @@ import { renderAgent } from "./agentpage.ts";
 import { acceptPosting, readerFor, type ChainReader } from "./posting.ts";
 import { CheckWriting, ProvenChecks } from "./checkwriting/index.ts";
 import type { MarketConfig } from "./market.ts";
+import { doorChainFor, GitDoor } from "./door/index.ts";
 import postPage from "./web/post/index.html";
 import { renderCard } from "./card.ts";
 import { renderJob } from "./jobpage.ts";
@@ -48,6 +49,13 @@ export interface Market {
   /** the checks the writer proved, which every posting's checks must be among */
   readonly proven: ProvenChecks;
 }
+
+/** What this server opens beyond the wall, each only when it has a chain to answer to. */
+export interface Services {
+  readonly market?: Market;
+  /** the git door agents clone, fetch and push through */
+  readonly door?: GitDoor;
+}
 const BUNDLE = { "content-type": "application/x-git-bundle" } as const;
 
 const style = new URL("../public/wall.css", import.meta.url);
@@ -62,8 +70,13 @@ const NOTHING_YET = `<!doctype html>
 <p>No job has been graded on this server. When one has, it appears here, whether it passed or not.</p>
 </header></body></html>`;
 
-export async function handle(request: Request, store: JobStore, market?: Market): Promise<Response> {
+export async function handle(request: Request, store: JobStore, { market, door }: Services = {}): Promise<Response> {
   const { pathname } = new URL(request.url);
+
+  // agents' work, in and out, through git. It speaks its own methods, so it is answered before the rest
+  if (pathname.startsWith(ROUTES.git)) {
+    return door ? await door.handle(request) : new Response("pushing work is not open on this server\n", { status: 404, headers: TEXT });
+  }
 
   // the one thing a stranger can change: posting a job they have already paid for
   if (request.method === "POST" && pathname === ROUTES.postJob) return await posted(request, store, market);
@@ -260,23 +273,23 @@ function notFound(why: string): Response {
  * is asked for, so nothing built is ever committed. While developing it also reloads as the source
  * changes; in production it is bundled once and kept.
  */
-export function serve(store: JobStore, port: number, market?: Market): ReturnType<typeof Bun.serve> {
+export function serve(store: JobStore, port: number, services: Services = {}): ReturnType<typeof Bun.serve> {
   return Bun.serve({
     port,
     development: process.env.NODE_ENV === "production" ? false : { hmr: true, console: true },
     routes: { [ROUTES.post]: postPage },
-    fetch: (request) => handle(request, store, market),
+    fetch: (request) => handle(request, store, services),
   });
 }
 
-/** The market this server takes postings for, from the environment, or none — and it says which. */
-async function marketFromTheEnvironment(jobsDirectory: string): Promise<Market | undefined> {
+/** The market this server takes postings for, and the door its agents push through, from the environment, or neither, and it says which. */
+async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string): Promise<Services> {
   const configured = process.env.POD_JOBS_ADDRESS;
-  if (!configured) return undefined;
+  if (!configured) return {};
   const { createPublicClient, http, isAddress } = await import("viem");
   if (!isAddress(configured)) throw new Error(`POD_JOBS_ADDRESS is not an address: ${configured}`);
   const jobs = configured;
-  const { readJob } = await import("./jobs.ts");
+  const { readJob, readSeats } = await import("./jobs.ts");
   const { monadTestnet } = await import("./live.ts");
   const { MONAD_TESTNET } = await import("./registry.ts");
   const rpc = process.env.MONAD_TESTNET_RPC ?? MONAD_TESTNET.rpc;
@@ -286,14 +299,25 @@ async function marketFromTheEnvironment(jobsDirectory: string): Promise<Market |
   const { join } = await import("node:path");
   // beside the jobs, so a poster who paid can still publish after the server restarts
   const proven = new ProvenChecks(join(jobsDirectory, PROVEN_FOLDER));
-  return {
+  const contract = { address: jobs, publicClient: publicClient as never };
+  const door = new GitDoor({
+    repositories: join(jobsDirectory, REPOSITORIES_FOLDER),
+    store,
+    chain: doorChainFor({
+      jobs,
+      readJob: (id) => readJob(contract, id),
+      readSeats: (id) => readSeats(contract, id),
+      latestBlockTime: async () => (await publicClient.getBlock()).timestamp,
+    }),
+  });
+  const market: Market = {
     page: {
       chainId: MONAD_TESTNET.id, chainName: "Monad testnet", rpc, jobs,
       explorer: "https://testnet.monadscan.com", coin: MONAD_TESTNET.coin,
     },
     chain: readerFor({
       jobs,
-      read: (id) => readJob({ address: jobs, publicClient: publicClient as never }, id),
+      read: (id) => readJob(contract, id),
     }),
     writing: new CheckWriting({
       writer: { model: claudeOnThisMachine(), image: IMAGE, agents: new URL("../agents", import.meta.url).pathname },
@@ -301,6 +325,7 @@ async function marketFromTheEnvironment(jobsDirectory: string): Promise<Market |
     }),
     proven,
   };
+  return { market, door };
 }
 
 /**
@@ -309,16 +334,22 @@ async function marketFromTheEnvironment(jobsDirectory: string): Promise<Market |
  */
 export const PROVEN_FOLDER = ".proven";
 
+/** Where every job's repository is kept, inside the jobs folder, as a dot folder for the same reason. */
+export const REPOSITORIES_FOLDER = ".repositories";
+
 if (import.meta.main) {
   const directory = process.env.POD_JOBS;
   if (!directory) throw new Error("POD_JOBS has to name the directory the runner writes jobs to");
   const port = Number(process.env.PORT ?? 3000);
-  const market = await marketFromTheEnvironment(directory);
-  const server = serve(new JobStore(directory), port, market);
+  const store = new JobStore(directory);
+  const services = await servicesFromTheEnvironment(store, directory);
+  const { market } = services;
+  const server = serve(store, port, services);
   console.log(`the wall is at http://localhost:${port}${ROUTES.wall}, reading ${directory}`);
   console.log(market
     ? `posting is open, against ${market.page.jobs}; checks are written by Claude, through the CLI signed in on this machine`
     : "posting is closed: no POD_JOBS_ADDRESS");
+  if (services.door) console.log(`agents push their work to http://localhost:${port}${ROUTES.git}<job>.git`);
 
   // stopping: take no new requests, let any writing under way finish and take its boxes down, then go
   const stop = async (): Promise<void> => {

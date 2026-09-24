@@ -55,17 +55,17 @@ describe.skipIf(!withDocker)("the route the page starts writing with", () => {
     };
     const store = new JobStore(await mkdtemp(join(tmpdir(), "pod-routes-")));
     const started = await handle(
-      new Request(`http://pod.test${ROUTES.writeChecks}`, { method: "POST", body: JSON.stringify(COAT_REQUEST) }), store, market,
+      new Request(`http://pod.test${ROUTES.writeChecks}`, { method: "POST", body: JSON.stringify(COAT_REQUEST) }), store, { market },
     );
     expect(started.status).toBe(202);
     const { id, url } = await started.json() as { id: string; url: string };
     expect(url).toBe(writingPath(id));
 
     const deadline = Date.now() + 180_000;
-    let writing = WritingSchema.parse(await (await handle(new Request(`http://pod.test${url}`), store, market)).json());
+    let writing = WritingSchema.parse(await (await handle(new Request(`http://pod.test${url}`), store, { market })).json());
     while (isStillWriting(writing) && Date.now() < deadline) {
       await Bun.sleep(250);
-      writing = WritingSchema.parse(await (await handle(new Request(`http://pod.test${url}`), store, market)).json());
+      writing = WritingSchema.parse(await (await handle(new Request(`http://pod.test${url}`), store, { market })).json());
     }
     expect(writing.stage).toBe("written");
     expect(writing.stage === "written" && writing.ready).toBe(true);

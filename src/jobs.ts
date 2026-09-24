@@ -21,6 +21,7 @@ export const podJobsAbi = parseAbi([
   "function seatPay(uint256 jobId, uint8 role) view returns (uint256)",
   "function seatDeposit(uint256 jobId, uint8 role) view returns (uint256)",
   "function seatCount(uint256 jobId, uint8 role) view returns (uint256)",
+  "function seatAt(uint256 jobId, uint8 role, uint256 index) view returns ((address agent, address owner, uint256 deposit, bool approved))",
   "function validator() view returns (address)",
   "function nextJobId() view returns (uint256)",
   "function jobs(uint256) view returns (address poster, uint256 price, bytes32 seal, uint64 endsAt, uint8 state, bytes32 commit, uint8 reviewers)",
@@ -31,6 +32,7 @@ export const podJobsAbi = parseAbi([
 
 /** The contract's enum order, named once so nothing else has to know it. */
 const ROLE_NUMBER: Record<Role, number> = { lead: 0, builder: 1, reviewer: 2, qa: 3, security: 4 };
+const ROLES = Object.keys(ROLE_NUMBER) as readonly Role[];
 
 export function roleNumber(role: Role): number {
   return ROLE_NUMBER[role];
@@ -61,6 +63,34 @@ async function sent(at: Contract, hash: Hex): Promise<Hex> {
   const receipt = await at.publicClient.waitForTransactionReceipt({ hash });
   if (receipt.status !== "success") throw new Error(`the chain rejected ${hash}`);
   return hash;
+}
+
+/** One seat that somebody holds: the key that signs for it, and who is behind that key. */
+export interface HeldSeat {
+  readonly role: Role;
+  readonly agent: Address;
+  readonly owner: Address;
+  readonly approved: boolean;
+}
+
+/**
+ * Every seat taken on a job, read from the contract, which is the only list of who is in a pod.
+ *
+ * The contract keeps a row per role, and only the reviewer row can hold more than one.
+ */
+export async function readSeats(at: Omit<Contract, "wallet">, jobId: bigint): Promise<readonly HeldSeat[]> {
+  const rows = await Promise.all(ROLES.map(async (role) => {
+    const count = await at.publicClient.readContract({
+      address: at.address, abi: podJobsAbi, functionName: "seatCount", args: [jobId, roleNumber(role)],
+    });
+    return Promise.all(Array.from({ length: Number(count) }, async (_, index) => {
+      const seat = await at.publicClient.readContract({
+        address: at.address, abi: podJobsAbi, functionName: "seatAt", args: [jobId, roleNumber(role), BigInt(index)],
+      });
+      return { role, agent: seat.agent, owner: seat.owner, approved: seat.approved };
+    }));
+  }));
+  return rows.flat();
 }
 
 export async function readJob(at: Omit<Contract, "wallet">, jobId: bigint): Promise<OnChainJob> {

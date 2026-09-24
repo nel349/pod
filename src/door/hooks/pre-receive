@@ -1,0 +1,3 @@
+#!/bin/sh
+# The rules for what a push may change are in ../preReceive.ts. The door sets both of these.
+exec "$POD_BUN" "$POD_PRE_RECEIVE"

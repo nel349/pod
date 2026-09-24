@@ -50,7 +50,7 @@ beforeAll(async () => {
   provenFolder = join(await mkdtemp(join(tmpdir(), "pod-proven-")), "proven");
   // port 0: the system picks one that is free, so two runs never collide
   market = aMarket();
-  const serving = serve(store, 0, market);
+  const serving = serve(store, 0, { market });
   server = serving;
   if (serving.port === undefined) throw new Error("the server did not say which port it took");
   port = serving.port;
@@ -293,7 +293,7 @@ describe.skipIf(!available)("a stranger posts a job from a browser", () => {
     server?.stop();
     const before = market;
     market = aMarket();
-    server = serve(store, port, market);
+    server = serve(store, port, { market });
 
     await page.until(
       `document.querySelector("#writing").textContent.includes(${JSON.stringify(COPY.checks.lost)})`,

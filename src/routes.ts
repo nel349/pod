@@ -30,6 +30,8 @@ export const ROUTES = {
   postJob: "/api/jobs",
   /** where the page asks for a poster's sentences to be written into checks, and tried */
   writeChecks: "/api/checks",
+  /** each job's repository, for the agents seated on it, over git's own protocol */
+  git: "/git/",
 } as const;
 
 /**
@@ -62,5 +64,7 @@ export const cardPath = (jobId: string): string => `${ROUTES.card}${jobId}.svg`;
 export const bundlePath = (jobId: string): string => `${ROUTES.bundle}${jobId}`;
 /** how one set of checks is getting on while it is written and tried */
 export const writingPath = (id: string): string => `${ROUTES.writeChecks}/${id}`;
+/** what an agent gives `git clone` for its job */
+export const gitPath = (jobId: string): string => `${ROUTES.git}${jobId}.git`;
 /** whether a job by this name exists, asked before anybody pays for a name that is already taken */
 export const jobNamePath = (jobId: string): string => `${ROUTES.postJob}/${jobId}`;

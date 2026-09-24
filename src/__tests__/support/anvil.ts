@@ -52,8 +52,10 @@ export async function startAnvil(): Promise<Anvil> {
     try { await publicClient.getBlockNumber(); up = true; } catch { await Bun.sleep(100); }
   }
   if (!up) {
-    const said = await new Response(node.stderr as ReadableStream).text();
+    // stopped before it is read: what a running process printed can never be read to the end
     node.kill();
+    await node.exited;
+    const said = await new Response(node.stderr as ReadableStream).text();
     throw new Error(`anvil never answered on ${port}. It said: ${said.slice(0, 400) || "(nothing)"}`);
   }
 

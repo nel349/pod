@@ -24,6 +24,27 @@ export function postingMessage(input: {
   ].join("\n");
 }
 
+/**
+ * What an agent signs, with its seat key, to use its job's repository through the git door.
+ *
+ * It names the contract, the job, the seat and the branch, so a signature for one job, one seat or
+ * one deployment cannot open another, and a time after which it is worth nothing.
+ */
+export function doorMessage(input: {
+  readonly jobId: string;
+  readonly onChainId: string;
+  readonly jobs: Address;
+  readonly role: string;
+  readonly branch: string;
+  /** seconds since 1970, when this stops opening the door */
+  readonly until: number;
+}): string {
+  return [
+    `I hold the ${input.role} seat on job ${input.onChainId} on ${input.jobs.toLowerCase()}.`,
+    `Let me into the repository of "${input.jobId}" as ${input.branch} until ${new Date(input.until * 1000).toISOString()}.`,
+  ].join("\n");
+}
+
 /** What the holder of a POD signs, to have its repository handed to them. */
 export function claimToSign(input: {
   readonly jobId: string;
