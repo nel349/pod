@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseEther, type Address, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { doorChainFor, Doorkeeper, JOB_LIST_VERSION, JobList, type JobListing, type ListedJob } from "../door/index.ts";
+import { doorChainFor, Doorkeeper, JOB_LIST_VERSION, JobList, JobListingSchema, type JobListing, type ListedJob } from "../door/index.ts";
 import { sealSpec, type Role, type Spec } from "../job.ts";
 import { podJobsAbi, post, readJob, readSeats, readTerms, seatDeposit, seatPay, takeSeat } from "../jobs.ts";
 import { openJob } from "../publish.ts";
@@ -122,6 +122,8 @@ describe.skipIf(!available)("the job list, as an outside agent reads it", () => 
   test("an open job is there, with what each seat pays and costs read from the contract", async () => {
     const onChainId = await aPostedJob("a-coat-given-the-rain");
     const listing = await theList();
+    // what the server writes is what an agent reading it through the schema will accept
+    expect(JobListingSchema.safeParse(listing).success).toBe(true);
     expect(listing.version).toBe(JOB_LIST_VERSION);
     expect(listing.market).toBe(ROUTES.market);
 
@@ -131,6 +133,7 @@ describe.skipIf(!available)("the job list, as an outside agent reads it", () => 
     expect(job.idea).toBe(SPEC.idea);
     expect(job.visibleChecks).toEqual([{ says: VISIBLE_SAYS, run: "node check-1.mjs", file: "check-1.mjs", url: `${checksPath("a-coat-given-the-rain")}/check-1.mjs` }]);
     expect(job.sealedChecks).toBe(1);
+    expect(job.allowedHosts).toEqual([]);
 
     for (const role of ["lead", "builder", "reviewer", "qa", "security"] as const satisfies readonly Role[]) {
       const seat = job.seats.find((one) => one.role === role)!;

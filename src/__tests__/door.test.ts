@@ -229,6 +229,13 @@ describe.skipIf(!available)("the git door", () => {
     expect(written.out.trim()).toBe(`${agentEmail(builder.address)} ${agentEmail(builder.address)}`);
   }, 60_000);
 
+  test("a pod arriving all at once finds the repository, however many ask first", async () => {
+    const work = await mkdtemp(join(tmpdir(), "pod-door-together-"));
+    const together = await Promise.all(Array.from({ length: 6 }, async () =>
+      git(work, ["ls-remote", remote(elsewhere, await password(elsewhere, "builder", SECOND), SECOND.jobId)])));
+    for (const answer of together) expect(answer.code).toBe(0);
+  }, 60_000);
+
   test("any seat on the job reads every branch of it", async () => {
     const work = await mkdtemp(join(tmpdir(), "pod-door-read-"));
     const listed = await git(work, ["ls-remote", remote(lead, await password(lead, "lead", FIRST))]);

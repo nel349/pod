@@ -12,7 +12,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { grade, type CheckToRun } from "../blackbox.ts";
-import { PORT } from "../job.ts";
+import { PORT, START } from "../job.ts";
 import { readableToTheBox } from "../sandbox.ts";
 import { firstLine } from "../errors.ts";
 import { textFromTheBox } from "./fromTheBox.ts";
@@ -28,9 +28,6 @@ export interface Outcome {
 
 /** how much of what a check printed is kept, which is the line that explains it and no more */
 const LONGEST_SAID = 300;
-
-/** Every version a check is tried against (working, near miss, nothing) is a server.js, started the same way. */
-const START_A_VERSION = "node server.js";
 
 /** The versions every check is tried against, as directories holding a server.js each. */
 export interface Versions {
@@ -144,7 +141,7 @@ async function tryAgainst(
   const outcomes = new Map<string, Outcome>();
   let notRun = "the grading never reported on it";
   try {
-    const graded = await grade({ artefact, start: START_A_VERSION, checks, toRun, image });
+    const graded = await grade({ artefact, start: START, checks, toRun, image });
     for (const check of graded.checks) {
       const said = lastLine(check.output);
       outcomes.set(check.command, NEVER_RAN.has(check.exitCode)

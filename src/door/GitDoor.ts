@@ -51,6 +51,11 @@ const DOOR_PATH = /^([^/]+)\.git\/(.+)$/;
 export class GitDoor {
   private readonly limits: PushLimits;
   private readonly pushes: PerMinute;
+  /**
+   * Each job's repository is made once, by the first request for it. A pod arrives together, and
+   * five agents asking at once would otherwise all try to make it, and all but one fail.
+   */
+  private readonly opened = new Map<string, Promise<unknown>>();
 
   constructor(private readonly options: GitDoorOptions) {
     this.limits = options.limits ?? LIMITS;
@@ -82,7 +87,7 @@ export class GitDoor {
       }
     }
 
-    await openRepository(this.options.repositories, jobId);
+    await this.repositoryFor(jobId);
     return gitHttpBackend({
       request,
       projectRoot: this.options.repositories,
@@ -102,6 +107,17 @@ export class GitDoor {
         POD_EMAIL: agentEmail(statement.agent),
       },
     });
+  }
+
+  private repositoryFor(jobId: string): Promise<unknown> {
+    let opening = this.opened.get(jobId);
+    if (!opening) {
+      opening = openRepository(this.options.repositories, jobId);
+      // a failure is not remembered: the next request tries again rather than failing forever
+      opening.catch(() => this.opened.delete(jobId));
+      this.opened.set(jobId, opening);
+    }
+    return opening;
   }
 }
 

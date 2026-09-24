@@ -9,9 +9,9 @@
  * What it never holds: the exam. The hidden checks are counted, never shown; the pod sees them when
  * the job has a verdict, like everybody else.
  */
-import type { Address } from "viem";
-import type { Kind, Mode, Role } from "../job.ts";
-import { publicSpec } from "../job.ts";
+import { isAddress, type Address } from "viem";
+import { z } from "zod";
+import { KINDS, MODE_NAMES, publicSpec } from "../job.ts";
 import { checkFilePath, gitPath, jobPath, notesPath, ROUTES } from "../routes.ts";
 import { SEATS } from "../seal.ts";
 import type { JobStore } from "../store.ts";
@@ -20,46 +20,57 @@ import type { Doorkeeper } from "./Doorkeeper.ts";
 /** Raised only when the shape changes in a way an agent reading the old one would misread */
 export const JOB_LIST_VERSION = 1;
 
+const AddressSchema = z.string().refine((value): value is Address => isAddress(value), "an address");
 /** Money travels as whole numbers of wei, in strings, because JSON has no integers that large */
-type Wei = string;
+const WeiSchema = z.string().regex(/^[0-9]+$/, "a whole number of wei");
 
-export interface ListedSeat {
-  readonly role: Role;
-  readonly pay: Wei;
+/**
+ * The list's shape, as a schema: the server writes it, and an agent reads it through this rather
+ * than trusting it, which is what the reference agent does.
+ */
+export const ListedSeatSchema = z.object({
+  role: z.enum(SEATS),
+  pay: WeiSchema,
   /** what taking it puts down, returned whether the work passes or not */
-  readonly deposit: Wei;
+  deposit: WeiSchema,
   /** who holds it, or nothing if it is free */
-  readonly heldBy?: { readonly agent: Address; readonly owner: Address };
-}
+  heldBy: z.object({ agent: AddressSchema, owner: AddressSchema }).optional(),
+});
 
-export interface ListedJob {
-  readonly jobId: string;
+export const ListedJobSchema = z.object({
+  jobId: z.string(),
   /** where things are, as paths on this server */
-  readonly at: { readonly page: string; readonly git: string; readonly notes: string };
+  at: z.object({ page: z.string(), git: z.string(), notes: z.string() }),
   /** the contract to take a seat on, and the job's number there. The chain itself is at `market` */
-  readonly contract: { readonly address: Address; readonly jobId: string };
-  readonly price: Wei;
-  readonly endsAt: string;
-  readonly idea: string;
-  readonly kind?: Kind;
-  readonly mode: Mode;
+  contract: z.object({ address: AddressSchema, jobId: z.string().regex(/^[0-9]+$/) }),
+  price: WeiSchema,
+  endsAt: z.string(),
+  idea: z.string(),
+  kind: z.enum(KINDS).optional(),
+  mode: z.enum(MODE_NAMES),
+  /** the hosts the work may reach, and why. Anything else is refused when it runs */
+  allowedHosts: z.array(z.object({ host: z.string(), why: z.string() })),
   /** the checks the pod builds against, with where to fetch each one */
-  readonly visibleChecks: readonly { readonly says: string; readonly run: string; readonly file?: string; readonly url?: string }[];
+  visibleChecks: z.array(z.object({ says: z.string(), run: z.string(), file: z.string().optional(), url: z.string().optional() })),
   /** how many checks are sealed until the verdict. Counted, never shown */
-  readonly sealedChecks: number;
-  readonly seats: readonly ListedSeat[];
+  sealedChecks: z.number().int().nonnegative(),
+  seats: z.array(ListedSeatSchema),
   /** the owners already in the pod. One owner to a job, so an owner here has nothing left to take */
-  readonly owners: readonly Address[];
+  owners: z.array(AddressSchema),
   /** the roles that still have a free seat. The contract pays nobody until every one is filled */
-  readonly free: readonly Role[];
-}
+  free: z.array(z.enum(SEATS)),
+});
 
-export interface JobListing {
-  readonly version: typeof JOB_LIST_VERSION;
+export const JobListingSchema = z.object({
+  version: z.literal(JOB_LIST_VERSION),
   /** where to read the chain, the contract and the coin from */
-  readonly market: string;
-  readonly jobs: readonly ListedJob[];
-}
+  market: z.string(),
+  jobs: z.array(ListedJobSchema),
+});
+
+export type ListedSeat = z.infer<typeof ListedSeatSchema>;
+export type ListedJob = z.infer<typeof ListedJobSchema>;
+export type JobListing = z.infer<typeof JobListingSchema>;
 
 export class JobList {
   constructor(private readonly options: { readonly keeper: Doorkeeper; readonly store: JobStore }) {}
@@ -104,6 +115,7 @@ export class JobList {
         idea: shown.idea,
         ...(shown.kind ? { kind: shown.kind } : {}),
         mode: shown.mode,
+        allowedHosts: shown.allowed.map((allowed) => ({ host: allowed.host, why: allowed.why })),
         visibleChecks: shown.checks.map((check) => ({
           says: check.says, run: check.run,
           ...(check.file ? { file: check.file, url: checkFilePath(jobId, check.file) } : {}),
