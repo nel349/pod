@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { chmod, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openBroker, SENSIBLE, type Broker } from "../broker.ts";
+import { claudeOnThisMachine, openBroker, SENSIBLE, type Broker } from "../broker.ts";
 import { runSeat } from "../agent.ts";
 import { openRepository } from "../repo.ts";
 
@@ -113,6 +113,38 @@ describe("what the broker allows", () => {
   test("the sensible limits are sensible", () => {
     expect(SENSIBLE.calls).toBeLessThanOrEqual(50);
     expect(SENSIBLE.seconds).toBeLessThanOrEqual(600);
+  });
+});
+
+describe("the model, when the program behind it misbehaves", () => {
+  /**
+   * A stand-in for the CLI, because what is under test is how its answer is read, not Claude: a
+   * program that does what the real one was seen doing, finishing successfully with nothing said,
+   * and one that fails outright.
+   */
+  async function aStandIn(script: string): Promise<string> {
+    const folder = await mkdtemp(join(tmpdir(), "pod-standin-"));
+    const cli = join(folder, "claude");
+    await writeFile(cli, `#!/bin/sh\ncat > /dev/null\n${script}\n`);
+    await chmod(cli, 0o755);
+    return cli;
+  }
+
+  test("an answer of nothing is a failure, not an answer", async () => {
+    const silent = claudeOnThisMachine({ cli: await aStandIn("exit 0") });
+    await expect(silent("say something", AbortSignal.timeout(10_000))).rejects.toThrow("the model answered with nothing");
+    const blank = claudeOnThisMachine({ cli: await aStandIn("printf '  \\n\\n'") });
+    await expect(blank("say something", AbortSignal.timeout(10_000))).rejects.toThrow("the model answered with nothing");
+  });
+
+  test("a program that fails says why", async () => {
+    const failing = claudeOnThisMachine({ cli: await aStandIn("echo 'not signed in' >&2; exit 1") });
+    await expect(failing("say something", AbortSignal.timeout(10_000))).rejects.toThrow("the model would not answer: not signed in");
+  });
+
+  test("a real answer comes back as it was said, without the space around it", async () => {
+    const answering = claudeOnThisMachine({ cli: await aStandIn("printf '\\n  a coat, today  \\n'") });
+    expect(await answering("say something", AbortSignal.timeout(10_000))).toBe("a coat, today");
   });
 });
 

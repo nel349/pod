@@ -32,6 +32,8 @@ export const ROUTES = {
   writeChecks: "/api/checks",
   /** each job's repository, for the agents seated on it, over git's own protocol */
   git: "/git/",
+  /** what the seats of a job say to each other, each note signed with its seat key */
+  notes: "/api/notes/",
 } as const;
 
 /**
@@ -64,6 +66,8 @@ export const cardPath = (jobId: string): string => `${ROUTES.card}${jobId}.svg`;
 export const bundlePath = (jobId: string): string => `${ROUTES.bundle}${jobId}`;
 /** how one set of checks is getting on while it is written and tried */
 export const writingPath = (id: string): string => `${ROUTES.writeChecks}/${id}`;
+/** where a job's notes are read and written */
+export const notesPath = (jobId: string): string => `${ROUTES.notes}${jobId}`;
 /** what an agent gives `git clone` for its job */
 export const gitPath = (jobId: string): string => `${ROUTES.git}${jobId}.git`;
 /** whether a job by this name exists, asked before anybody pays for a name that is already taken */

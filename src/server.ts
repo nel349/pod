@@ -13,7 +13,8 @@ import { renderAgent } from "./agentpage.ts";
 import { acceptPosting, readerFor, type ChainReader } from "./posting.ts";
 import { CheckWriting, ProvenChecks } from "./checkwriting/index.ts";
 import type { MarketConfig } from "./market.ts";
-import { doorChainFor, GitDoor } from "./door/index.ts";
+import { bodyWithin } from "./body.ts";
+import { doorChainFor, Doorkeeper, GitDoor, NoteBoard } from "./door/index.ts";
 import postPage from "./web/post/index.html";
 import { renderCard } from "./card.ts";
 import { renderJob } from "./jobpage.ts";
@@ -55,6 +56,8 @@ export interface Services {
   readonly market?: Market;
   /** the git door agents clone, fetch and push through */
   readonly door?: GitDoor;
+  /** what the seats of a job say to each other */
+  readonly notes?: NoteBoard;
 }
 const BUNDLE = { "content-type": "application/x-git-bundle" } as const;
 
@@ -70,12 +73,15 @@ const NOTHING_YET = `<!doctype html>
 <p>No job has been graded on this server. When one has, it appears here, whether it passed or not.</p>
 </header></body></html>`;
 
-export async function handle(request: Request, store: JobStore, { market, door }: Services = {}): Promise<Response> {
+export async function handle(request: Request, store: JobStore, { market, door, notes }: Services = {}): Promise<Response> {
   const { pathname } = new URL(request.url);
 
   // agents' work, in and out, through git. It speaks its own methods, so it is answered before the rest
   if (pathname.startsWith(ROUTES.git)) {
     return door ? await door.handle(request) : new Response("pushing work is not open on this server\n", { status: 404, headers: TEXT });
+  }
+  if (pathname.startsWith(ROUTES.notes)) {
+    return notes ? await notes.handle(request) : Response.json({ why: "notes are not open on this server" }, { status: 404 });
   }
 
   // the one thing a stranger can change: posting a job they have already paid for
@@ -233,17 +239,6 @@ async function posted(request: Request, store: JobStore, market?: Market): Promi
   return Response.json({ url: jobPath(accepted.record.jobId) }, { status: 201 });
 }
 
-/**
- * A request's body, if it is within what that route should ever be sent. The declared length is
- * checked before anything is read, so a sender cannot make the server hold a large body in memory
- * just to be told it was too large; the actual length is checked too, because the declaration can lie.
- */
-async function bodyWithin(request: Request, most: number): Promise<string | undefined> {
-  if (Number(request.headers.get("content-length") ?? "0") > most) return undefined;
-  const body = await request.text();
-  return body.length > most ? undefined : body;
-}
-
 /** A poster's sentences arrive, to be written into checks and tried. The page asks after them later. */
 async function startWriting(request: Request, market?: Market): Promise<Response> {
   if (!market) return Response.json({ why: "posting is not open on this server" }, { status: 503 });
@@ -300,8 +295,8 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
   // beside the jobs, so a poster who paid can still publish after the server restarts
   const proven = new ProvenChecks(join(jobsDirectory, PROVEN_FOLDER));
   const contract = { address: jobs, publicClient: publicClient as never };
-  const door = new GitDoor({
-    repositories: join(jobsDirectory, REPOSITORIES_FOLDER),
+  // one doorkeeper for both of an agent's doors, so a seat is the same seat at each
+  const keeper = new Doorkeeper({
     store,
     chain: doorChainFor({
       jobs,
@@ -310,6 +305,8 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
       latestBlockTime: async () => (await publicClient.getBlock()).timestamp,
     }),
   });
+  const door = new GitDoor({ repositories: join(jobsDirectory, REPOSITORIES_FOLDER), keeper });
+  const notes = new NoteBoard({ keeper, store });
   const market: Market = {
     page: {
       chainId: MONAD_TESTNET.id, chainName: "Monad testnet", rpc, jobs,
@@ -325,7 +322,7 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
     }),
     proven,
   };
-  return { market, door };
+  return { market, door, notes };
 }
 
 /**
@@ -349,7 +346,7 @@ if (import.meta.main) {
   console.log(market
     ? `posting is open, against ${market.page.jobs}; checks are written by Claude, through the CLI signed in on this machine`
     : "posting is closed: no POD_JOBS_ADDRESS");
-  if (services.door) console.log(`agents push their work to http://localhost:${port}${ROUTES.git}<job>.git`);
+  if (services.door) console.log(`agents push their work to http://localhost:${port}${ROUTES.git}<job>.git, and write notes to ${ROUTES.notes}<job>`);
 
   // stopping: take no new requests, let any writing under way finish and take its boxes down, then go
   const stop = async (): Promise<void> => {

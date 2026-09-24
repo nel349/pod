@@ -2,20 +2,20 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseEther, type Address, type Hex } from "viem";
+import { parseEther, recoverMessageAddress, type Address, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { agentEmail, branchFor, doorChainFor, GitDoor, PUSHES_A_SEAT_MAY_MAKE_A_MINUTE } from "../door/index.ts";
+import { agentEmail, branchFor, doorChainFor, Doorkeeper, GitDoor, LONGEST_NOTE, NoteBoard, NOTES_A_SEAT_MAY_WRITE_A_MINUTE, PUSHES_A_SEAT_MAY_MAKE_A_MINUTE } from "../door/index.ts";
 import type { Role, Spec } from "../job.ts";
 import { post, readJob, readSeats, takeSeat } from "../jobs.ts";
-import { doorMessage } from "../messages.ts";
+import { doorMessage, noteMessage } from "../messages.ts";
 import { openJob } from "../publish.ts";
-import { gitPath } from "../routes.ts";
+import { gitPath, notesPath } from "../routes.ts";
 import { serve } from "../server.ts";
 import { JobStore } from "../store.ts";
 import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
 
 /**
- * The git door, with a real git client, against a real chain.
+ * The doors an agent uses, the git door and the notes, against a real chain, git with a real git client.
  *
  * Every refusal here is one the plan names: another branch, a key with no seat, a force push, a
  * deleted branch, a commit written as somebody else, a push after the window. Each is made the way an
@@ -91,8 +91,8 @@ beforeAll(async () => {
   SECOND.onChainId = await aPostedJob(SECOND.jobId, [["builder", elsewhere]]);
 
   const contract = { address: jobs, publicClient: anvil.publicClient };
-  const door = new GitDoor({
-    repositories, store, limits: LIMITS,
+  const keeper = new Doorkeeper({
+    store,
     chain: doorChainFor({
       jobs,
       readJob: (id) => readJob(contract, id),
@@ -100,7 +100,8 @@ beforeAll(async () => {
       latestBlockTime: async () => (await anvil.publicClient.getBlock()).timestamp,
     }),
   });
-  const serving = serve(store, 0, { door });
+  const door = new GitDoor({ repositories, keeper, limits: LIMITS });
+  const serving = serve(store, 0, { door, notes: new NoteBoard({ keeper, store }) });
   server = serving;
   base = `http://127.0.0.1:${serving.port}`;
 }, 120_000);
@@ -186,6 +187,29 @@ async function onTopOf(
 
 /** written, and committed, as the seat: what every commit pushed from a seat has to say */
 const asSeat = (agent: Agent) => ({ author: agentEmail(agent.address) });
+
+/** A note as a seat sends it: what it says, signed with its seat key, or with somebody else's to forge one. */
+async function aNote(
+  agent: Agent, role: Role, job: { readonly jobId: string; readonly onChainId: bigint },
+  content: { readonly says: string; readonly about?: string; readonly at?: number }, signer: Agent = agent,
+): Promise<{ agent: Address; role: Role; about?: string; says: string; at: number; signature: Hex }> {
+  const at = content.at ?? Math.floor(Date.now() / 1000);
+  const signature = await privateKeyToAccount(signer.key).signMessage({
+    message: noteMessage({ jobId: job.jobId, onChainId: String(job.onChainId), jobs, role, about: content.about, says: content.says, at }),
+  });
+  return { agent: agent.address, role, ...(content.about === undefined ? {} : { about: content.about }), says: content.says, at, signature };
+}
+
+const writeNote = (job: { readonly jobId: string }, note: object): Promise<Response> =>
+  fetch(`${base}${notesPath(job.jobId)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(note) });
+
+/** Read a job's notes as a seat does: with the same signed statement the git door takes. */
+async function readNotes(job: { readonly jobId: string; readonly onChainId: bigint }, agent: Agent, role: Role): Promise<Response> {
+  const statement = btoa(`${agent.address}:${await password(agent, role, job)}`);
+  return fetch(`${base}${notesPath(job.jobId)}`, { headers: { authorization: `Basic ${statement}` } });
+}
+
+const why = async (answer: Response): Promise<string> => ((await answer.json()) as { why: string }).why;
 
 /** What the bare repository holds, read straight from disk rather than through the door. */
 async function onTheServer(args: readonly string[]): Promise<Ran> {
@@ -349,9 +373,108 @@ describe.skipIf(!available)("the git door", () => {
     // the pushes before the limit were real pushes, and went in
     expect(accepted).toBeGreaterThan(0);
   }, 120_000);
+});
 
-  // last, because it moves the chain's clock past both jobs' windows
-  test("after the window closes nothing more can be pushed, and everything can still be read", async () => {
+describe.skipIf(!available)("notes, signed by the seat that wrote them", () => {
+  test("a seat writes a note about a commit, and the rest of the pod reads it back, signature and all", async () => {
+    const about = (await onTheServer(["rev-parse", branchFor("builder", builder.address)])).out.trim();
+    const note = await aNote(builder, "builder", FIRST, { about, says: "The server answers on 3000 and says take a coat when it rains." });
+    const written = await writeNote(FIRST, note);
+    expect(written.status).toBe(201);
+
+    const read = await readNotes(FIRST, lead, "lead");
+    expect(read.status).toBe(200);
+    const { notes } = (await read.json()) as { notes: typeof note[] };
+    const kept = notes.find((one) => one.signature === note.signature);
+    expect(kept).toEqual(note);
+    // anybody can check who said it, from the note alone
+    const signer = await recoverMessageAddress({
+      message: noteMessage({ jobId: FIRST.jobId, onChainId: String(FIRST.onChainId), jobs, role: kept!.role, about: kept!.about, says: kept!.says, at: kept!.at }),
+      signature: kept!.signature,
+    });
+    expect(signer).toBe(builder.address);
+  }, 60_000);
+
+  test("a note can be about the job as a whole, with no commit", async () => {
+    const note = await aNote(lead, "lead", FIRST, { says: "Builder, please keep the answer to one sentence." });
+    expect((await writeNote(FIRST, note)).status).toBe(201);
+  }, 60_000);
+
+  test("a note signed by one key in another's name is refused", async () => {
+    const forged = await aNote(builder, "builder", FIRST, { says: "I approve of everything." }, stranger);
+    const written = await writeNote(FIRST, forged);
+    expect(written.status).toBe(401);
+    expect(await why(written)).toContain("not from the agent the note names");
+  }, 60_000);
+
+  test("a key with no seat, or claiming a seat it does not hold, cannot write", async () => {
+    const outsider = await writeNote(FIRST, await aNote(stranger, "reviewer", FIRST, { says: "Let me in." }));
+    expect(outsider.status).toBe(403);
+    expect(await why(outsider)).toContain(`that key holds no seat on job ${FIRST.onChainId}`);
+
+    const posing = await writeNote(FIRST, await aNote(builder, "lead", FIRST, { says: "As the lead, I say ship it." }));
+    expect(posing.status).toBe(403);
+    expect(await why(posing)).toContain("that key holds the builder seat");
+  }, 60_000);
+
+  test("a note cannot say it was written at another time", async () => {
+    const yesterday = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+    const backdated = await writeNote(FIRST, await aNote(builder, "builder", FIRST, { says: "I said this first.", at: yesterday }));
+    expect(backdated.status).toBe(400);
+    expect(await why(backdated)).toContain("which is not now");
+  }, 60_000);
+
+  test("a note is a few paragraphs at most, and about a commit named in full", async () => {
+    const long = await writeNote(FIRST, await aNote(builder, "builder", FIRST, { says: "a".repeat(LONGEST_NOTE + 1) }));
+    expect(long.status).toBe(400);
+    expect(await why(long)).toContain(`at most ${LONGEST_NOTE} characters`);
+
+    const vague = await writeNote(FIRST, await aNote(builder, "builder", FIRST, { about: "abc123", says: "This one." }));
+    expect(vague.status).toBe(400);
+    expect(await why(vague)).toContain("named by its full id");
+  }, 60_000);
+
+  test("while the job runs, only its seats read the notes", async () => {
+    const nobody = await fetch(`${base}${notesPath(FIRST.jobId)}`);
+    expect(nobody.status).toBe(401);
+    expect(nobody.headers.get("www-authenticate")).toContain("Basic");
+
+    const outsider = await readNotes(FIRST, stranger, "builder");
+    expect(outsider.status).toBe(403);
+    expect(await why(outsider)).toContain("holds no seat");
+  }, 60_000);
+
+  test("once the job has a verdict, anybody reads them", async () => {
+    const note = await aNote(elsewhere, "builder", SECOND, { says: "Done, and it answers in one sentence." });
+    expect((await writeNote(SECOND, note)).status).toBe(201);
+    expect((await fetch(`${base}${notesPath(SECOND.jobId)}`)).status).toBe(401);
+
+    const record = (await store.read(SECOND.jobId))!;
+    await store.save({ ...record, tile: { ...record.tile, verdict: "passed" } });
+    const published = await fetch(`${base}${notesPath(SECOND.jobId)}`);
+    expect(published.status).toBe(200);
+    expect(((await published.json()) as { notes: unknown[] }).notes).toContainEqual(note);
+  }, 60_000);
+
+  test("a seat that writes too often is told to wait", async () => {
+    let refused: Response | undefined;
+    for (let i = 0; i <= NOTES_A_SEAT_MAY_WRITE_A_MINUTE && !refused; i++) {
+      const written = await writeNote(FIRST, await aNote(lead, "lead", FIRST, { says: `Note ${i}.` }));
+      if (written.status !== 201) refused = written;
+    }
+    expect(refused?.status).toBe(429);
+    expect(await why(refused!)).toContain(`${NOTES_A_SEAT_MAY_WRITE_A_MINUTE} notes a minute`);
+  }, 60_000);
+
+  test("there are no notes for a job that is not there", async () => {
+    const missing = await writeNote({ jobId: "nobody-posted-this" }, await aNote(builder, "builder", FIRST, { says: "Hello?" }));
+    expect(missing.status).toBe(404);
+  }, 60_000);
+});
+
+// last, because it moves the chain's clock past both jobs' windows
+describe.skipIf(!available)("once the window has closed", () => {
+  test("nothing more can be pushed or written, and everything can still be read", async () => {
     const job = await readJob({ address: jobs, publicClient: anvil.publicClient }, FIRST.onChainId);
     const now = (await anvil.publicClient.getBlock()).timestamp;
     await anvil.publicClient.request({ method: "evm_increaseTime" as never, params: [Number(job.endsAt - now) + 1] as never });
@@ -362,8 +485,11 @@ describe.skipIf(!available)("the git door", () => {
     const late = await git(work, ["push", url, `HEAD:refs/heads/${branchFor("builder", builder.address)}`]);
     expect(late.code).not.toBe(0);
     expect(late.out).toContain(`job ${FIRST.onChainId}'s window closed at`);
+    expect((await git(work, ["ls-remote", url])).code).toBe(0);
 
-    const read = await git(work, ["ls-remote", url]);
-    expect(read.code).toBe(0);
+    const lateNote = await writeNote(FIRST, await aNote(builder, "builder", FIRST, { says: "One more thing." }));
+    expect(lateNote.status).toBe(403);
+    expect(await why(lateNote)).toContain("window closed at");
+    expect((await readNotes(FIRST, builder, "builder")).status).toBe(200);
   }, 60_000);
 });

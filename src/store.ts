@@ -9,7 +9,7 @@
  * verdict. Hiding them during the build is what stops a pod writing to the test; hiding them
  * afterwards would stop a stranger repeating the run, which is the whole promise.
  */
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Address, Hex } from "viem";
 import type { Tile } from "./gallery.ts";
@@ -30,6 +30,23 @@ export interface Brief {
   /** how many checks are sealed until there is a verdict */
   readonly sealedChecks: number;
   readonly seats: readonly { readonly role: string; readonly taken: boolean }[];
+}
+
+/**
+ * What one seat said to its pod, signed with its seat key: the review comments of this world.
+ *
+ * The signature is over the sentence `noteMessage` builds from the rest, so anybody can check who
+ * said it without asking us, for as long as the job is published.
+ */
+export interface Note {
+  readonly agent: Address;
+  readonly role: string;
+  /** the commit it is about, or nothing when it is about the job as a whole */
+  readonly about?: string;
+  readonly says: string;
+  /** seconds since 1970, as the seat signed it */
+  readonly at: number;
+  readonly signature: Hex;
 }
 
 export interface CheckSaid {
@@ -73,6 +90,8 @@ export interface JobRecord {
 
 const RECORD = "job.json";
 const CHECKS = "checks";
+/** one note to a line, in the order they arrived */
+const NOTES = "notes.jsonl";
 const HISTORY = "history.bundle";
 
 /** A verdict is what makes the checks publishable: before that, they are the sealed part of the job. */
@@ -193,6 +212,25 @@ export class JobStore {
     if (!isSafeName(jobId)) return undefined;
     const file = Bun.file(join(this.root, jobId, HISTORY));
     return (await file.exists()) ? file : undefined;
+  }
+
+  /** Add a note to a job that exists. The doors decide who may; this only keeps it. */
+  async addNote(jobId: string, note: Note): Promise<void> {
+    if (!(await this.read(jobId))) throw new Error(`there is no job called ${jobId} to add a note to`);
+    await appendFile(join(this.root, jobId, NOTES), `${JSON.stringify(note)}\n`);
+  }
+
+  /** A job's notes, oldest first. Who may read them is the doors' to decide, as with adding them. */
+  async notes(jobId: string): Promise<readonly Note[]> {
+    if (!isSafeName(jobId)) return [];
+    let text: string;
+    try {
+      text = await readFile(join(this.root, jobId, NOTES), "utf8");
+    } catch {
+      return [];
+    }
+    // written only by addNote, after the door that took each one checked every field of it
+    return text.split("\n").filter(Boolean).map((line) => JSON.parse(line) as Note);
   }
 
   /** Every job an agent sat on, whichever seat it held. */

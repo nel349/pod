@@ -78,11 +78,19 @@ const LONGEST_COMPLAINT = 300;
  * it is a subscription rather than a key, a run costs what the subscription costs, and the call cap
  * above is what stops a bad agent spending it. When the broker gives up waiting, the process is
  * killed rather than left to finish a call nobody will read.
+ *
+ * An empty answer is a failure, not an answer. The CLI can finish, successfully by its own account,
+ * having printed nothing: with no tools, the model sometimes writes out a call to a tool it does not
+ * have and stops there. Passed on, that would reach an agent as if the model had said something.
+ *
+ * `cli` is the program to run, which is Claude's everywhere but in the test of what happens when
+ * that program misbehaves.
  */
-export function claudeOnThisMachine(): Model {
+export function claudeOnThisMachine(options: { readonly cli?: string } = {}): Model {
+  const cli = options.cli ?? "claude";
   return async (prompt, signal) => {
     const nowhere = await mkdtemp(join(tmpdir(), "pod-model-"));
-    const child = Bun.spawn(["claude", ...LOCKED_DOWN_FLAGS], {
+    const child = Bun.spawn([cli, ...LOCKED_DOWN_FLAGS], {
       cwd: nowhere, stdin: new Blob([prompt]), stdout: "pipe", stderr: "pipe",
     });
     const stop = (): void => child.kill();
@@ -93,6 +101,7 @@ export function claudeOnThisMachine(): Model {
         new Response(child.stderr).text(),
       ]);
       if ((await child.exited) !== 0) throw new Error(`the model would not answer: ${said.slice(0, LONGEST_COMPLAINT)}`);
+      if (answer.trim() === "") throw new Error("the model answered with nothing");
       return answer.trim();
     } finally {
       signal.removeEventListener("abort", stop);

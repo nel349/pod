@@ -45,6 +45,28 @@ export function doorMessage(input: {
   ].join("\n");
 }
 
+/**
+ * What a seat signs to say something to its pod: a note about one commit, or about the job.
+ *
+ * The time is in it so a note cannot be passed off as said earlier or later than it was.
+ */
+export function noteMessage(input: {
+  readonly jobId: string;
+  readonly onChainId: string;
+  readonly jobs: Address;
+  readonly role: string;
+  readonly about?: string;
+  readonly says: string;
+  /** seconds since 1970 */
+  readonly at: number;
+}): string {
+  return [
+    `As the ${input.role} seat on job ${input.onChainId} on ${input.jobs.toLowerCase()}, in "${input.jobId}",`,
+    `about ${input.about === undefined ? "the job" : `commit ${input.about}`}, at ${new Date(input.at * 1000).toISOString()}, I say:`,
+    input.says,
+  ].join("\n");
+}
+
 /** What the holder of a POD signs, to have its repository handed to them. */
 export function claimToSign(input: {
   readonly jobId: string;

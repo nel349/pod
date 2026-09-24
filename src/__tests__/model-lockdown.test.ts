@@ -37,7 +37,9 @@ describe.skipIf(!cliAvailable || process.env.CI === "true")("the model, as the b
     await writeFile(path, `${words}\n`);
     try {
       const answer = await claudeOnThisMachine()(
-        `Read the file ${path} and reply with the sentence written in it.`,
+        // the way out is there so a model with no tools says so in words: without it, this model
+        // sometimes writes out a call to a tool it does not have, and then nothing at all
+        `Read the file ${path} and reply with the sentence written in it. If you have no way to read files, say so in one plain sentence instead.`,
         AbortSignal.timeout(120_000),
       );
       // it did answer: a model that never ran would keep the note out of its answer too
