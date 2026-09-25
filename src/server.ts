@@ -13,7 +13,7 @@ import { renderAgent } from "./agentpage.ts";
 import { acceptPosting, readerFor, type ChainReader } from "./posting.ts";
 import { CheckWriting, ProvenChecks } from "./checkwriting/index.ts";
 import type { MarketConfig } from "./market.ts";
-import { bodyWithin } from "./body.ts";
+import { bodyWithin, tooLarge } from "./body.ts";
 import { PROVEN_FOLDER, REPOSITORIES_FOLDER } from "./folders.ts";
 import { doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard } from "./door/index.ts";
 import postPage from "./web/post/index.html";
@@ -238,7 +238,7 @@ async function posted(request: Request, store: JobStore, market?: Market): Promi
 
   const body = await bodyWithin(request, MOST_A_POSTING_MAY_WEIGH);
   if (body === undefined) {
-    return Response.json({ why: "that is larger than any set of checks should be" }, { status: 413 });
+    return tooLarge("that is larger than any set of checks should be");
   }
 
   let posting: unknown;
@@ -258,7 +258,7 @@ async function startWriting(request: Request, market?: Market): Promise<Response
   if (!market) return Response.json({ why: "posting is not open on this server" }, { status: 503 });
   const body = await bodyWithin(request, MOST_A_REQUEST_TO_WRITE_MAY_WEIGH);
   if (body === undefined) {
-    return Response.json({ why: "that is longer than an idea and a few sentences should be" }, { status: 413 });
+    return tooLarge("that is longer than an idea and a few sentences should be");
   }
   let asked: unknown;
   try {

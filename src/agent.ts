@@ -14,12 +14,13 @@
  *
  * `.pod` never reaches a commit: it is the conversation with the platform, not part of the work.
  */
-import { chmod, lstat, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Role } from "./job.ts";
 import type { Broker } from "./broker.ts";
 import { checkout, commitIfChanged, head, type Repository } from "./repo.ts";
+import { textFromTheBox } from "./checkwriting/fromTheBox.ts";
 import { writableByTheBox } from "./sandbox.ts";
 
 /** What an agent says it did, or decided. A seat that says nothing has not done its job. */
@@ -230,7 +231,10 @@ export async function runSeat(run: SeatRun): Promise<SeatOutcome> {
 
 async function readSaid(workspace: string): Promise<Said | undefined> {
   try {
-    const parsed = JSON.parse(await readFile(join(workspace, SAY), "utf8")) as Said;
+    // read the way anything a box left is read: no links, no pipes, nothing larger than a file should be
+    const text = await textFromTheBox(join(workspace, SAY));
+    if (text === undefined) return undefined;
+    const parsed = JSON.parse(text) as Said;
     if (!["shipped", "approve", "refuse"].includes(parsed.decision)) return undefined;
     return { decision: parsed.decision, why: String(parsed.why ?? "") };
   } catch {

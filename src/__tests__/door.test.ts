@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseEther, recoverMessageAddress, type Address, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { agentEmail, branchFor, doorChainFor, Doorkeeper, GitDoor, LONGEST_NOTE, NoteBoard, NOTES_A_SEAT_MAY_WRITE_A_MINUTE, PUSHES_A_SEAT_MAY_MAKE_A_MINUTE } from "../door/index.ts";
+import { agentEmail, branchFor, doorChainFor, Doorkeeper, GitDoor, LONGEST_NOTE, MOST_A_REPOSITORY_MAY_WEIGH, NoteBoard, NOTES_A_SEAT_MAY_WRITE_A_MINUTE, PUSHES_A_SEAT_MAY_MAKE_A_MINUTE } from "../door/index.ts";
 import type { Role, Spec } from "../job.ts";
 import { post, readJob, readSeats, readTerms, takeSeat } from "../jobs.ts";
 import { doorMessage, noteMessage } from "../messages.ts";
@@ -35,7 +35,11 @@ let server: { stop: () => void } | undefined;
 const POSTER = ANVIL_KEYS[1];
 const PRICE = parseEther("1");
 /** the real limit on how often, and a small one on weight, so it can be shown to bite without pushing 50MB */
-const LIMITS = { mostAPushMayWeigh: 64 * 1024, pushesASeatMayMakeAMinute: PUSHES_A_SEAT_MAY_MAKE_A_MINUTE };
+const LIMITS = { mostAPushMayWeigh: 64 * 1024, pushesASeatMayMakeAMinute: PUSHES_A_SEAT_MAY_MAKE_A_MINUTE, mostARepositoryMayWeigh: MOST_A_REPOSITORY_MAY_WEIGH };
+/** a second door, with limits small enough to reach in a test, on a server of its own */
+const TIGHT = { mostAPushMayWeigh: 64 * 1024, pushesASeatMayMakeAMinute: 3, mostARepositoryMayWeigh: 1 };
+let tightBase = "";
+let tightServer: { stop: () => void } | undefined;
 
 interface Agent {
   readonly key: Hex;
@@ -105,10 +109,15 @@ beforeAll(async () => {
   const serving = serve(store, 0, { door, notes: new NoteBoard({ keeper, store }) });
   server = serving;
   base = `http://127.0.0.1:${serving.port}`;
+
+  const tight = serve(store, 0, { door: new GitDoor({ repositories: await mkdtemp(join(tmpdir(), "pod-door-tight-")), keeper, limits: TIGHT }) });
+  tightServer = tight;
+  tightBase = `http://127.0.0.1:${tight.port}`;
 }, 120_000);
 
 afterAll(() => {
   server?.stop();
+  tightServer?.stop();
   anvil?.stop();
 });
 
@@ -211,6 +220,11 @@ async function readNotes(job: { readonly jobId: string; readonly onChainId: bigi
 }
 
 const why = async (answer: Response): Promise<string> => ((await answer.json()) as { why: string }).why;
+
+/** The notes as the pod reads them. */
+async function pod$Notes(job: { readonly jobId: string; readonly onChainId: bigint }): Promise<readonly { readonly says: string }[]> {
+  return ((await (await readNotes(job, lead, "lead")).json()) as { notes: { says: string }[] }).notes;
+}
 
 /** What the bare repository holds, read straight from disk rather than through the door. */
 async function onTheServer(args: readonly string[]): Promise<Ran> {
@@ -383,6 +397,57 @@ describe.skipIf(!available)("the git door", () => {
   }, 120_000);
 });
 
+describe.skipIf(!available)("the git door, against what a hand-made request can do", () => {
+  test("a commit whose address hides a second one, to pass off somebody else as its committer, is refused", async () => {
+    const mine = agentEmail(builder.address);
+    // written as "<me me>", committed as the lead: read by spaces, this looked like the seat's own twice
+    const hiding = await onTopOf(builder, "builder", { file: "hiding.txt", contents: "x\n", who: { author: `${mine} ${mine}`, committer: agentEmail(lead.address) } });
+    const before = await onTheServer(["rev-parse", "--verify", "--quiet", hiding.branch]);
+    const pushed = await git(hiding.work, ["push", hiding.url, `HEAD:refs/heads/${hiding.branch}`]);
+    expect(pushed.code).not.toBe(0);
+    expect((await onTheServer(["rev-parse", "--verify", "--quiet", hiding.branch])).out).toBe(before.out);
+  }, 60_000);
+
+  test("a push sent without first asking what is there is counted all the same", async () => {
+    const statement = btoa(`${lead.address}:${await password(lead, "lead", FIRST)}`);
+    const sent: number[] = [];
+    for (let i = 0; i <= TIGHT.pushesASeatMayMakeAMinute; i++) {
+      const answer = await fetch(`${tightBase}${gitPath(FIRST.jobId)}/git-receive-pack`, {
+        method: "POST", body: "0000",
+        headers: { authorization: `Basic ${statement}`, "content-type": "application/x-git-receive-pack-request" },
+      });
+      await answer.arrayBuffer();
+      sent.push(answer.status);
+    }
+    expect(sent.at(-1)).toBe(429);
+    expect(sent.slice(0, TIGHT.pushesASeatMayMakeAMinute).every((status) => status === 200)).toBe(true);
+  }, 60_000);
+
+  test("a job's repository that has reached the most it may weigh takes no more pushes", async () => {
+    const url = new URL(`${tightBase}${gitPath(SECOND.jobId)}`);
+    url.username = elsewhere.address;
+    url.password = await password(elsewhere, "builder", SECOND);
+    const branch = branchFor("builder", elsewhere.address);
+    const work = await aCommit(asSeat(elsewhere), "first.txt");
+    expect((await git(work, ["push", url.toString(), `HEAD:refs/heads/${branch}`])).code).toBe(0);
+    await writeFile(join(work, "second.txt"), "more\n");
+    await git(work, ["add", "."]);
+    await git(work, ["commit", "--quiet", "-m", "more"], asSeat(elsewhere));
+    const full = await git(work, ["push", url.toString(), `HEAD:refs/heads/${branch}`]);
+    expect(full.code).not.toBe(0);
+    expect(full.out).toContain("has reached the most it may weigh");
+  }, 60_000);
+
+  test("a statement good until the end of time is refused in words, not with a crash", async () => {
+    const work = await mkdtemp(join(tmpdir(), "pod-door-read-"));
+    // signed over anything: no sentence can be built for such a time, and the door must refuse before it tries
+    const signature = await privateKeyToAccount(builder.key).signMessage({ message: "any words at all" });
+    const forever = await git(work, ["ls-remote", remote(builder, `builder.99999999999999.${signature}`)]);
+    expect(forever.code).not.toBe(0);
+    expect(forever.out).toContain("good for an hour at most");
+  }, 60_000);
+});
+
 describe.skipIf(!available)("notes, signed by the seat that wrote them", () => {
   test("a seat writes a note about a commit, and the rest of the pod reads it back, signature and all", async () => {
     const about = (await onTheServer(["rev-parse", branchFor("builder", builder.address)])).out.trim();
@@ -472,6 +537,40 @@ describe.skipIf(!available)("notes, signed by the seat that wrote them", () => {
     }
     expect(refused?.status).toBe(429);
     expect(await why(refused!)).toContain(`${NOTES_A_SEAT_MAY_WRITE_A_MINUTE} notes a minute`);
+  }, 60_000);
+
+  test("a note is said once: sent again, by anybody, it is refused, and its writer can still write", async () => {
+    const note = await aNote(builder, "builder", FIRST, { says: "Refused: it never says take a coat." });
+    expect((await writeNote(FIRST, note)).status).toBe(201);
+    const replayed = await writeNote(FIRST, note);
+    expect(replayed.status).toBe(409);
+    expect(await why(replayed)).toContain("already been written");
+    expect((await writeNote(FIRST, await aNote(builder, "builder", FIRST, { says: "And now it does." }))).status).toBe(201);
+  }, 60_000);
+
+  test("a note is checked exactly as it was signed, spaces and all", async () => {
+    const note = await aNote(builder, "builder", FIRST, { says: "It answers in one sentence.  " });
+    expect((await writeNote(FIRST, note)).status).toBe(201);
+    expect((await pod$Notes(FIRST)).some((kept) => kept.says === "It answers in one sentence.  ")).toBe(true);
+  }, 60_000);
+
+  test("a note from the end of time is refused in words, not with a crash", async () => {
+    // signed over anything: no sentence can be built for such a time, and the notes must refuse before they try
+    const signature = await privateKeyToAccount(builder.key).signMessage({ message: "any words at all" });
+    const farOff = await writeNote(FIRST, { agent: builder.address, role: "builder", says: "Later.", at: 9_000_000_000_000_000, signature });
+    expect(farOff.status).toBe(400);
+    expect(await why(farOff)).toContain("which is not now");
+  }, 60_000);
+
+  test("a note that never ends, sent with no length declared, is refused as it arrives rather than waited for", async () => {
+    const chunk = new TextEncoder().encode("x".repeat(64 * 1024));
+    const endless = new ReadableStream<Uint8Array>({ pull: (controller) => controller.enqueue(chunk) });
+    // a connection of its own: a sender refused part way still has the rest of its body in flight.
+    // A server that read to the end first would never answer, and this would run out of time
+    const answer = await fetch(`${base}${notesPath(FIRST.jobId)}`, {
+      method: "POST", body: endless, duplex: "half", keepalive: false, signal: AbortSignal.timeout(15_000),
+    } as RequestInit);
+    expect(answer.status).toBe(413);
   }, 60_000);
 
   test("there are no notes for a job that is not there", async () => {

@@ -142,6 +142,18 @@ describe.skipIf(!dockerAvailable)("a seat, worked by an agent", () => {
     expect(await Bun.file(join(laid, ".pod/say.json")).exists()).toBe(false);
   }, 240_000);
 
+  test("what a seat says is read from its workspace, never through a link it left pointing elsewhere", async () => {
+    const repo = await aRepository();
+    // a decision sitting outside the workspace, which the host would read if it followed the link
+    const decoy = join(await mkdtemp(join(tmpdir(), "pod-decoy-")), "said.json");
+    await writeFile(decoy, JSON.stringify({ decision: "shipped", why: "read from outside the workspace" }));
+    const outcome = await runSeat({
+      role: "builder", repo, brief: BRIEF, image: IMAGE, command: `ln -s ${decoy} /work/.pod/say.json`,
+      name: "builder-one", email: "builder@pod.invalid",
+    });
+    expect(outcome.said).toBeUndefined();
+  }, 240_000);
+
   test("an agent that says nothing is a seat that has not done its job", async () => {
     const repo = await aRepository();
     const silent = `node -e 'require("fs").writeFileSync("/work/something.txt", "hello")'`;

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseEther, type Address, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { doorChainFor, Doorkeeper, JOB_LIST_VERSION, JobList, JobListingSchema, type JobListing, type ListedJob } from "../door/index.ts";
+import { doorChainFor, Doorkeeper, JOB_LIST_VERSION, JobList, JobListingSchema, LIST_FRESH_FOR_MS, type JobListing, type ListedJob } from "../door/index.ts";
 import { sealSpec, type Role, type Spec } from "../job.ts";
 import { podJobsAbi, post, readJob, readSeats, readTerms, seatDeposit, seatPay, takeSeat } from "../jobs.ts";
 import { openJob } from "../publish.ts";
@@ -118,6 +118,20 @@ async function listed(jobId: string): Promise<ListedJob | undefined> {
   return (await theList()).jobs.find((job) => job.jobId === jobId);
 }
 
+/**
+ * The job as the list shows it once it shows what is wanted. The list is served from a copy up to
+ * LIST_FRESH_FOR_MS old, so a seat taken a moment ago shows a moment later, which is what an agent sees.
+ */
+async function listedOnce(jobId: string, shows: (job: ListedJob | undefined) => boolean): Promise<ListedJob | undefined> {
+  const deadline = Date.now() + LIST_FRESH_FOR_MS * 5;
+  let job = await listed(jobId);
+  while (!shows(job) && Date.now() < deadline) {
+    await Bun.sleep(LIST_FRESH_FOR_MS / 4);
+    job = await listed(jobId);
+  }
+  return job;
+}
+
 describe.skipIf(!available)("the job list, as an outside agent reads it", () => {
   test("an open job is there, with what each seat pays and costs read from the contract", async () => {
     const onChainId = await aPostedJob("a-coat-given-the-rain");
@@ -154,7 +168,7 @@ describe.skipIf(!available)("the job list, as an outside agent reads it", () => 
     await takeSeat(contractAs(finder.key), BigInt(job.contract.jobId), seat.role, finder.address);
 
     expect(await anvil.publicClient.getBalance({ address: jobs })).toBe(before + BigInt(seat.deposit));
-    const after = (await listed("a-coat-given-the-rain"))!;
+    const after = (await listedOnce("a-coat-given-the-rain", (job) => job?.owners.length === 1))!;
     expect(after.seats.find((one) => one.role === "builder")!.heldBy).toEqual({ agent: finder.address, owner: finder.address });
     expect(after.owners).toEqual([finder.address]);
     expect(after.free).not.toContain("builder");
@@ -169,7 +183,7 @@ describe.skipIf(!available)("the job list, as an outside agent reads it", () => 
 
   test("a job with two reviewer seats lists two", async () => {
     await aPostedJob("an-umbrella-with-two-reviewers", 2);
-    const job = (await listed("an-umbrella-with-two-reviewers"))!;
+    const job = (await listedOnce("an-umbrella-with-two-reviewers", (found) => found !== undefined))!;
     expect(job.seats.filter((seat) => seat.role === "reviewer")).toHaveLength(2);
     expect(job.seats).toHaveLength(6);
   }, 60_000);
@@ -197,12 +211,48 @@ describe.skipIf(!available)("the job list, as an outside agent reads it", () => 
     expect(ours).toEqual(theContracts);
   });
 
+  test("however often anybody asks, the chain is read once every little while, not once an ask", async () => {
+    let reads = 0;
+    const counting = new Doorkeeper({
+      store,
+      chain: doorChainFor({
+        jobs,
+        readJob: (id) => { reads++; return readJob(reading(), id); },
+        readSeats: (id) => readSeats(reading(), id),
+        readTerms: (id) => readTerms(reading(), id),
+        latestBlockTime: async () => (await anvil.publicClient.getBlock()).timestamp,
+      }),
+    });
+    const list = new JobList({ keeper: counting, store });
+    await list.handle();
+    const once = reads;
+    expect(once).toBeGreaterThan(0);
+    await Promise.all(Array.from({ length: 20 }, () => list.handle()));
+    expect(reads).toBe(once);
+  }, 60_000);
+
+  test("a knock from a key nobody has seen is not a read of the chain each time", async () => {
+    let seatReads = 0;
+    const chain = doorChainFor({
+      jobs,
+      readJob: (id) => readJob(reading(), id),
+      readSeats: (id) => { seatReads++; return readSeats(reading(), id); },
+      readTerms: (id) => readTerms(reading(), id),
+      latestBlockTime: async () => (await anvil.publicClient.getBlock()).timestamp,
+    });
+    const keeper = new Doorkeeper({ store, chain });
+    const job = await keeper.job("a-coat-given-the-rain");
+    if (!job.ok) throw new Error(job.why);
+    for (let i = 0; i < 20; i++) expect(await keeper.notSeated(anAgent().address, "builder", job.value.onChainId)).toContain("holds no seat");
+    expect(seatReads).toBe(1);
+  }, 60_000);
+
   // last, because it moves the chain's clock past every job's window
   test("a job whose window has closed is no longer listed", async () => {
     const job = await readJob(reading(), BigInt((await listed("a-coat-given-the-rain"))!.contract.jobId));
     const now = (await anvil.publicClient.getBlock()).timestamp;
     await anvil.publicClient.request({ method: "evm_increaseTime" as never, params: [Number(job.endsAt - now) + 1] as never });
     await anvil.publicClient.request({ method: "evm_mine" as never, params: [] as never });
-    expect(await listed("a-coat-given-the-rain")).toBeUndefined();
+    expect(await listedOnce("a-coat-given-the-rain", (job) => job === undefined)).toBeUndefined();
   }, 60_000);
 });

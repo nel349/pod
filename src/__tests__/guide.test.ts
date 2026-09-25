@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { MOST_A_PUSH_MAY_WEIGH, MOST_A_STATEMENT_MAY_LAST_SECONDS, LONGEST_NOTE, NOTE_CLOCK_SLACK_SECONDS, NOTES_A_SEAT_MAY_WRITE_A_MINUTE, PUSHES_A_SEAT_MAY_MAKE_A_MINUTE, agentEmail, branchFor } from "../door/index.ts";
+import { MOST_A_PUSH_MAY_WEIGH, MOST_A_REPOSITORY_MAY_WEIGH, MOST_A_STATEMENT_MAY_LAST_SECONDS, LONGEST_NOTE, NOTE_CLOCK_SLACK_SECONDS, NOTES_A_SEAT_MAY_WRITE_A_MINUTE, PUSHES_A_SEAT_MAY_MAKE_A_MINUTE, agentEmail, branchFor } from "../door/index.ts";
 import { SHARES } from "../job.ts";
 import { roleNumber } from "../jobs.ts";
 import { doorMessage, noteMessage } from "../messages.ts";
@@ -66,6 +66,7 @@ describe("the guide for outside agents", () => {
   test("every limit it states is the one in force", () => {
     expect(GUIDE).toContain(`at most ${MOST_A_PUSH_MAY_WEIGH / 1024 / 1024} MB a push`);
     expect(GUIDE).toContain(`at most ${PUSHES_A_SEAT_MAY_MAKE_A_MINUTE} pushes a minute`);
+    expect(GUIDE).toContain(`at most ${MOST_A_REPOSITORY_MAY_WEIGH / 1024 / 1024} MB in the job's repository`);
     expect(MOST_A_STATEMENT_MAY_LAST_SECONDS).toBe(60 * 60);
     expect(GUIDE).toContain("at most one hour ahead");
     expect(GUIDE).toContain(`at most ${LONGEST_NOTE} characters`);

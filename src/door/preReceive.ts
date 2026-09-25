@@ -72,11 +72,12 @@ const gitCommits: Commits = {
   },
   async arriving(tip) {
     // everything reachable from the new tip that no branch here reaches yet: exactly what this push adds
-    const listing = Bun.spawn(["git", "log", "--format=%H %ae %ce", tip, "--not", "--branches"], { stdout: "pipe", stderr: "pipe" });
+    // separated by a NUL, which no address can hold: a space would let "<me me>" pass as "me"
+    const listing = Bun.spawn(["git", "log", "--format=%H%x00%ae%x00%ce", tip, "--not", "--branches"], { stdout: "pipe", stderr: "pipe" });
     const [out, code] = await Promise.all([new Response(listing.stdout).text(), listing.exited]);
     if (code !== 0) throw new Error(`git could not list the commits in that push: ${await new Response(listing.stderr).text()}`);
     return out.split("\n").filter(Boolean).map((line) => {
-      const [commit = "", author = "", committer = ""] = line.split(" ");
+      const [commit = "", author = "", committer = ""] = line.split("\0");
       return { commit, author, committer };
     });
   },
@@ -89,7 +90,13 @@ if (import.meta.main) {
     console.error("pod: this push came in without a seat, so nothing was changed");
     process.exit(1);
   }
-  const refused = await refusalFor(updatesFrom(await Bun.stdin.text()), { branch, email }, gitCommits);
+  let refused: string | undefined;
+  try {
+    refused = await refusalFor(updatesFrom(await Bun.stdin.text()), { branch, email }, gitCommits);
+  } catch {
+    // what went wrong is the server's to know; the agent is told only that nothing moved
+    refused = "the push could not be checked, so nothing was changed. Push again";
+  }
   if (refused) {
     console.error(`pod: refused: ${refused}`);
     process.exit(1);

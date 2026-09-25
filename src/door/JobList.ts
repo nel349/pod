@@ -74,11 +74,29 @@ export type ListedSeat = z.infer<typeof ListedSeatSchema>;
 export type ListedJob = z.infer<typeof ListedJobSchema>;
 export type JobListing = z.infer<typeof JobListingSchema>;
 
+/**
+ * How long the list, read from the chain, is served before it is read again. Anybody may ask for it,
+ * and each reading is several reads of the chain for every job, so a flood of asking is a flood of
+ * paid reads without this; a seat taken a moment ago shows a moment later.
+ */
+export const LIST_FRESH_FOR_MS = 2_000;
+
 export class JobList {
+  private kept?: { readonly at: number; readonly listing: Promise<JobListing> };
+
   constructor(private readonly options: { readonly keeper: Doorkeeper; readonly store: JobStore }) {}
 
   async handle(): Promise<Response> {
-    return Response.json(await this.listing(), { headers: { "cache-control": "no-store" } });
+    return Response.json(await this.fresh(), { headers: { "cache-control": "no-store" } });
+  }
+
+  private fresh(): Promise<JobListing> {
+    if (this.kept && Date.now() - this.kept.at < LIST_FRESH_FOR_MS) return this.kept.listing;
+    const listing = this.listing();
+    this.kept = { at: Date.now(), listing };
+    // a reading that failed is not kept: the next ask reads again
+    listing.catch(() => { this.kept = undefined; });
+    return listing;
   }
 
   /** Every job a seat can still be taken on: posted here, with its money on this contract, and its window open. */

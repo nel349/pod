@@ -280,6 +280,11 @@ export class JobStore {
     await appendFile(join(this.root, jobId, NOTES), `${JSON.stringify(note)}\n`);
   }
 
+  /** Whether a note with this signature is already kept: each is said once. */
+  async hasNote(jobId: string, signature: string): Promise<boolean> {
+    return (await this.notes(jobId)).some((note) => note.signature.toLowerCase() === signature.toLowerCase());
+  }
+
   /** A job's notes, oldest first. Who may read them is the doors' to decide, as with adding them. */
   async notes(jobId: string): Promise<readonly Note[]> {
     if (!isSafeName(jobId)) return [];

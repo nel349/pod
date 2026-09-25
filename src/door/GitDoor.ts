@@ -13,7 +13,7 @@
  * The main branch is written by the worker alone, with work that passed, and never through here.
  * The hidden checks are never in a repository at all, so no branch can leak them.
  */
-import { openRepository } from "../repo.ts";
+import { openRepository, repositoryWeight, type Repository } from "../repo.ts";
 import { ROUTES } from "../routes.ts";
 import { gitHttpBackend } from "./backend.ts";
 import { PerMinute, type Answer, type Doorkeeper } from "./Doorkeeper.ts";
@@ -30,13 +30,21 @@ export interface PushLimits {
   /** bytes */
   readonly mostAPushMayWeigh: number;
   readonly pushesASeatMayMakeAMinute: number;
+  /** bytes: what one job's repository may grow to, every seat's pushes together */
+  readonly mostARepositoryMayWeigh: number;
 }
 
 /** What one push may weigh. A pod's work is source, and a push heavier than this is filling a disk */
 export const MOST_A_PUSH_MAY_WEIGH = 50 * 1024 * 1024;
 /** How many pushes one seat may make in a minute. Plenty for work, too few to hammer the door */
 export const PUSHES_A_SEAT_MAY_MAKE_A_MINUTE = 20;
-const LIMITS: PushLimits = { mostAPushMayWeigh: MOST_A_PUSH_MAY_WEIGH, pushesASeatMayMakeAMinute: PUSHES_A_SEAT_MAY_MAKE_A_MINUTE };
+/** What one job's repository may weigh. Nothing pushed is ever deleted, and the disk is every job's */
+export const MOST_A_REPOSITORY_MAY_WEIGH = 500 * 1024 * 1024;
+const LIMITS: PushLimits = {
+  mostAPushMayWeigh: MOST_A_PUSH_MAY_WEIGH,
+  pushesASeatMayMakeAMinute: PUSHES_A_SEAT_MAY_MAKE_A_MINUTE,
+  mostARepositoryMayWeigh: MOST_A_REPOSITORY_MAY_WEIGH,
+};
 
 const HOOKS = new URL("./hooks", import.meta.url).pathname;
 const PRE_RECEIVE = new URL("./preReceive.ts", import.meta.url).pathname;
@@ -55,7 +63,7 @@ export class GitDoor {
    * Each job's repository is made once, by the first request for it. A pod arrives together, and
    * five agents asking at once would otherwise all try to make it, and all but one fail.
    */
-  private readonly opened = new Map<string, Promise<unknown>>();
+  private readonly opened = new Map<string, Promise<Repository>>();
 
   constructor(private readonly options: GitDoorOptions) {
     this.limits = options.limits ?? LIMITS;
@@ -76,18 +84,22 @@ export class GitDoor {
     if (!admitted.ok) return refusal(admitted);
     const { jobId, onChainId, statement } = admitted.value;
 
+    const repo = await this.repositoryFor(jobId);
     if (service === "git-receive-pack") {
       const closed = await keeper.closed(onChainId);
       if (closed) return said(403, closed);
-      // counted on the first of a push's two requests, which asks what is there: every push makes
-      // exactly one, and git shows the agent a refusal given there, where one given to the second
-      // request reaches it only as a status code
-      if (request.method === "GET" && !this.pushes.allow(`${jobId}:${statement.agent.toLowerCase()}`)) {
-        return said(429, `a seat may push ${this.limits.pushesASeatMayMakeAMinute} times a minute. Wait a moment and push again`);
+      // a push is counted when it is sent, which is the second of its two requests: the first only
+      // asks what is there, and a sender can skip it. The first is still refused when the next push
+      // would be over the limit, because git shows the agent a refusal given there, and one given to
+      // the second request reaches it only as a status code
+      const seat = `${jobId}:${statement.agent.toLowerCase()}`;
+      const mayPush = request.method === "GET" ? this.pushes.wouldAllow(seat) : this.pushes.allow(seat);
+      if (!mayPush) return said(429, `a seat may push ${this.limits.pushesASeatMayMakeAMinute} times a minute. Wait a moment and push again`);
+      if ((await repositoryWeight(repo)) >= this.limits.mostARepositoryMayWeigh) {
+        return said(403, `this job's repository has reached the most it may weigh, ${this.limits.mostARepositoryMayWeigh / 1024 / 1024} MB, and takes no more pushes`);
       }
     }
 
-    await this.repositoryFor(jobId);
     return gitHttpBackend({
       request,
       projectRoot: this.options.repositories,
@@ -99,6 +111,8 @@ export class GitDoor {
           "http.receivepack": "true",
           "receive.denyNonFastForwards": "true",
           "receive.denyDeletes": "true",
+          // a commit whose author or committer line is malformed is refused before any rule reads it
+          "receive.fsckObjects": "true",
           "receive.maxInputSize": String(this.limits.mostAPushMayWeigh),
         }),
         POD_BUN: process.execPath,
@@ -109,7 +123,7 @@ export class GitDoor {
     });
   }
 
-  private repositoryFor(jobId: string): Promise<unknown> {
+  private repositoryFor(jobId: string): Promise<Repository> {
     let opening = this.opened.get(jobId);
     if (!opening) {
       opening = openRepository(this.options.repositories, jobId);

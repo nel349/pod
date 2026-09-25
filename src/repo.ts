@@ -159,6 +159,22 @@ export async function putOnMain(repo: Repository, commit: string): Promise<void>
   await must([`--git-dir=${repo.path}`, "update-ref", `refs/heads/${BRANCH}`, commit]);
 }
 
+/**
+ * What a repository weighs on disk, in bytes: its packs and its loose objects, as git counts them.
+ * The git door caps it, because nothing pushed is ever deleted and a disk is shared by every job.
+ */
+export async function repositoryWeight(repo: Repository): Promise<number> {
+  const counted = await must([`--git-dir=${repo.path}`, "count-objects", "-v"]);
+  const kib = (name: string): number => Number(new RegExp(`^${name}: (\\d+)$`, "m").exec(counted)?.[1] ?? 0);
+  return (kib("size") + kib("size-pack")) * 1024;
+}
+
+/** Whether a commit is on a branch, which is where every commit anybody may approve has to be. */
+export async function onBranch(repo: Repository, commit: string, branch: string): Promise<boolean> {
+  const ran = await git([`--git-dir=${repo.path}`, "merge-base", "--is-ancestor", commit, `refs/heads/${branch}`]);
+  return ran.code === 0;
+}
+
 /** The tip of the branch, or nothing at all if the pod has not committed yet. */
 export async function head(repo: Repository): Promise<string | undefined> {
   const ran = await git([`--git-dir=${repo.path}`, "rev-parse", `refs/heads/${BRANCH}`]);

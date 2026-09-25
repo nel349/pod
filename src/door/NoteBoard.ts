@@ -12,7 +12,7 @@
  */
 import { isAddress, isHex, recoverMessageAddress, type Address } from "viem";
 import { z } from "zod";
-import { bodyWithin } from "../body.ts";
+import { bodyWithin, tooLarge } from "../body.ts";
 import { noteMessage } from "../messages.ts";
 import { ROUTES } from "../routes.ts";
 import { SEATS } from "../seal.ts";
@@ -34,8 +34,9 @@ export const NoteSchema = z.object({
   agent: z.string().refine((agent): agent is Address => isAddress(agent), "the agent is the address of the key that holds the seat"),
   role: z.enum(SEATS),
   about: z.string().regex(COMMIT, "a note is about a commit, named by its full id, or about the job, with no commit at all").optional(),
-  says: z.string().trim().min(1, "a note says something").max(LONGEST_NOTE, `a note is at most ${LONGEST_NOTE} characters`),
-  at: z.number().int().positive(),
+  // checked, never changed: the signature is over the note exactly as it was sent
+  says: z.string().max(LONGEST_NOTE, `a note is at most ${LONGEST_NOTE} characters`).refine((says) => says.trim() !== "", "a note says something"),
+  at: z.number().int().positive().max(Number.MAX_SAFE_INTEGER, "a note's time is in seconds since 1970"),
   signature: z.string().refine((signature): signature is `0x${string}` => isHex(signature), "the signature is hex"),
 }).strict();
 
@@ -59,7 +60,7 @@ export class NoteBoard {
     if (request.method !== "POST") return Response.json({ why: "notes are read with GET and written with POST" }, { status: 405 });
 
     const body = await bodyWithin(request, MOST_A_NOTE_MAY_WEIGH);
-    if (body === undefined) return Response.json({ why: `a note is at most ${LONGEST_NOTE} characters` }, { status: 413 });
+    if (body === undefined) return tooLarge(`a note is at most ${LONGEST_NOTE} characters`);
     let asked: unknown;
     try {
       asked = JSON.parse(body);
@@ -72,8 +73,9 @@ export class NoteBoard {
     const { jobId, onChainId } = job.value;
 
     const now = Math.floor(Date.now() / 1000);
+    // said without turning the time into a date: a time far enough off is no date at all
     if (Math.abs(note.at - now) > NOTE_CLOCK_SLACK_SECONDS) {
-      return Response.json({ why: `that note says it was written at ${new Date(note.at * 1000).toISOString()}, which is not now` }, { status: 400 });
+      return Response.json({ why: `that note says it was written ${note.at} seconds after 1970, which is not now` }, { status: 400 });
     }
     let signer: Address;
     try {
@@ -91,6 +93,11 @@ export class NoteBoard {
     if (notSeated) return Response.json({ why: notSeated }, { status: 403 });
     const closed = await keeper.closed(onChainId);
     if (closed) return Response.json({ why: closed }, { status: 403 });
+    // a note is said once: sent again, by anybody, it would reorder what the pod said and use up the
+    // writer's own allowance, so it is refused before it is counted
+    if (await this.options.store.hasNote(jobId, note.signature)) {
+      return Response.json({ why: "that note has already been written" }, { status: 409 });
+    }
     if (!this.written.allow(`${jobId}:${note.agent.toLowerCase()}`)) {
       return Response.json({ why: `a seat may write ${NOTES_A_SEAT_MAY_WRITE_A_MINUTE} notes a minute. Wait a moment and write again` }, { status: 429 });
     }

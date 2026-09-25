@@ -58,8 +58,9 @@ export async function statementHolds(
   nowSeconds: number,
 ): Promise<Checked<Statement>> {
   if (statement.until <= nowSeconds) return { ok: false, why: "that statement has run out: sign a new one" };
+  // said without turning the time into a date: a time far enough ahead is no date at all
   if (statement.until > nowSeconds + MOST_A_STATEMENT_MAY_LAST_SECONDS) {
-    return { ok: false, why: `a statement may be good for an hour at most, and that one is good until ${new Date(statement.until * 1000).toISOString()}` };
+    return { ok: false, why: "a statement may be good for an hour at most, and that one is good for longer" };
   }
   const message = doorMessage({ ...about, role: statement.role, branch: branchFor(statement.role, statement.agent), until: statement.until });
   let signer: Address;

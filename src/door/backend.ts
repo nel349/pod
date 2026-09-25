@@ -22,7 +22,7 @@ export interface BackendCall {
   readonly env: Readonly<Record<string, string>>;
 }
 
-/** how much of what the backend printed to its error stream goes into a failure */
+/** how much of what the backend printed to its error stream goes into the server's log */
 const LONGEST_COMPLAINT = 600;
 
 export async function gitHttpBackend(call: BackendCall): Promise<Response> {
@@ -66,8 +66,10 @@ export async function gitHttpBackend(call: BackendCall): Promise<Response> {
   while (split === -1) {
     const { done, value } = await reader.read();
     if (done) {
+      // what git said names paths on this server, so it goes to the log and not to the agent
       const said = (await complaint).slice(0, LONGEST_COMPLAINT);
-      return new Response(`git could not answer that: ${said || `it stopped with code ${await child.exited}`}\n`, { status: 500 });
+      console.error(`git http-backend stopped with code ${await child.exited}: ${said}`);
+      return new Response("git could not answer that. Try again\n", { status: 500 });
     }
     held = joined(held, value);
     split = endOfHeaders(held);

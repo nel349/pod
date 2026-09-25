@@ -117,15 +117,31 @@ export class PerMinute {
 
   /** Whether this seat may do it now, and if so, counts it. */
   allow(seat: string): boolean {
-    const now = Date.now();
-    const recent = (this.times.get(seat) ?? []).filter((at) => now - at < A_MINUTE_MS);
+    const recent = this.recent(seat);
     const allowed = recent.length < this.most;
-    this.times.set(seat, allowed ? [...recent, now] : recent);
+    this.times.set(seat, allowed ? [...recent, Date.now()] : recent);
     return allowed;
+  }
+
+  /** Whether this seat could do it now, without counting it. */
+  wouldAllow(seat: string): boolean {
+    return this.recent(seat).length < this.most;
+  }
+
+  private recent(seat: string): number[] {
+    const now = Date.now();
+    return (this.times.get(seat) ?? []).filter((at) => now - at < A_MINUTE_MS);
   }
 }
 
 const A_MINUTE_MS = 60_000;
+
+/**
+ * How long a job's seats, read from the chain, are used before they are read again. Anybody can make
+ * up a key and knock, so without this every knock would be a paid read of the chain; seats are only
+ * ever added, so a copy this old can at worst keep a seat taken a moment ago waiting that moment.
+ */
+export const SEATS_FRESH_FOR_MS = 2_000;
 
 /** The contract, read the way the doors need it. */
 export function doorChainFor(input: {
@@ -135,6 +151,7 @@ export function doorChainFor(input: {
   readonly readTerms: DoorChain["terms"];
   readonly latestBlockTime: () => Promise<bigint>;
 }): DoorChain {
+  const seatsRead = new Map<bigint, { readonly at: number; readonly seats: Promise<readonly HeldSeat[]> }>();
   return {
     jobs: input.jobs,
     async job(onChainId) {
@@ -142,7 +159,15 @@ export function doorChainFor(input: {
       // the contract answers zeroes for a job that was never posted, rather than refusing
       return /^0x0{40}$/i.test(found.poster) ? undefined : found;
     },
-    seats: input.readSeats,
+    seats(onChainId) {
+      const kept = seatsRead.get(onChainId);
+      if (kept && Date.now() - kept.at < SEATS_FRESH_FOR_MS) return kept.seats;
+      const seats = input.readSeats(onChainId);
+      seatsRead.set(onChainId, { at: Date.now(), seats });
+      // a read that failed is not kept: the next knock reads again
+      seats.catch(() => seatsRead.delete(onChainId));
+      return seats;
+    },
     terms: input.readTerms,
     now: input.latestBlockTime,
   };
