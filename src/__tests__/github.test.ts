@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { credentialAvailable, repositoryName } from "../github.ts";
+import { chmod, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { credentialAvailable, push, repositoryName } from "../github.ts";
+import { commitWork, head, openRepository } from "../repo.ts";
 
 /**
  * A job's repository on GitHub.
@@ -20,6 +24,39 @@ describe("a job's repository on GitHub", () => {
     // either is fine; silence is not. A run that publishes nothing should say so out loud
     expect(typeof can).toBe("boolean");
     if (!can) console.log("  (no GitHub credential here, so the publishing half is not exercised)");
+  });
+
+  test("pushing keeps the token off git's command line, where anybody on the machine can list it", async () => {
+    const folder = await mkdtemp(join(tmpdir(), "pod-github-push-"));
+    const repo = await openRepository(folder, "a-coat");
+    const workspace = await mkdtemp(join(tmpdir(), "pod-github-work-"));
+    await writeFile(join(workspace, "server.js"), "// the work\n");
+    const commit = await commitWork(repo, { workspace, message: "the work", agent: "builder", email: "b@agents.pod.invalid" });
+    const target = await openRepository(folder, "on-github");
+
+    // a git that writes down how it was started, and then is git
+    const shim = await mkdtemp(join(tmpdir(), "pod-git-shim-"));
+    const started = join(shim, "started");
+    const realGit = Bun.which("git");
+    if (!realGit) throw new Error("git is not installed");
+    await writeFile(join(shim, "git"), `#!/bin/sh\nprintf '%s\\n' "$*" >> '${started}'\nexec '${realGit}' "$@"\n`);
+    await chmod(join(shim, "git"), 0o755);
+    const secret = "the-token-nobody-may-see";
+    const was = { path: process.env.PATH, token: process.env.POD_GITHUB_TOKEN };
+    process.env.PATH = `${shim}:${was.path ?? "/usr/bin:/bin"}`;
+    process.env.POD_GITHUB_TOKEN = secret;
+    try {
+      await push(repo, { owner: "pod", name: "on-github", url: "https://example.invalid", cloneUrl: `file://${target.path}` }, "every branch");
+    } finally {
+      process.env.PATH = was.path;
+      if (was.token === undefined) delete process.env.POD_GITHUB_TOKEN;
+      else process.env.POD_GITHUB_TOKEN = was.token;
+    }
+    expect(await head(target)).toBe(commit);
+    const commands = await readFile(started, "utf8");
+    expect(commands).toContain("push");
+    expect(commands).not.toContain(secret);
+    expect(commands).not.toContain(btoa(`x-access-token:${secret}`));
   });
 
   test("a token never reaches an argument, so it cannot reach a log", async () => {

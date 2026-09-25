@@ -12,7 +12,11 @@
  * What it can do is deliberately small: make a repository, push to it, read it back, and — for the
  * handover — archive or transfer one. It cannot delete anything.
  */
+import { PLAIN_GIT } from "./plainGit.ts";
 import type { Repository } from "./repo.ts";
+
+/** The setting that names the GitHub account or organisation passing work is published under */
+export const GITHUB_OWNER_SETTING = "POD_GITHUB_OWNER";
 
 /** GitHub's API, which every call here, and the credit check's read of a gist, goes to */
 export const GITHUB_API = "https://api.github.com";
@@ -108,22 +112,31 @@ export async function ensureRepository(owner: string, jobId: string, idea: strin
 }
 
 /**
- * Push what the pod has committed.
+ * Push one branch of what the pod has committed, or every branch, which is the whole record: the
+ * work that passed on main and every seat's attempts beside it.
  *
- * The credential goes into the URL for the length of one command and never into a remote that is
- * stored, so it cannot leak out of a repository somebody clones later.
+ * The credential goes to git as a header in its environment, for the length of one command: never in
+ * the address, which git puts on its command line where anybody on the machine can list it, and
+ * never in a remote that is stored, so it cannot leak out of a repository somebody clones later.
  */
-export async function push(repo: Repository, to: Published, branch: string): Promise<void> {
-  const authenticated = to.cloneUrl.replace("https://", `https://x-access-token:${await token()}@`);
-  const pushing = Bun.spawn(
-    ["git", `--git-dir=${repo.path}`, "push", "--quiet", authenticated, `refs/heads/${branch}:refs/heads/${branch}`],
-    { stdout: "ignore", stderr: "pipe", env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } },
-  );
+export async function push(repo: Repository, to: Published, branch: string | "every branch"): Promise<void> {
+  const secret = await token();
+  const header = `Authorization: Basic ${btoa(`x-access-token:${secret}`)}`;
+  const refspec = branch === "every branch" ? "refs/heads/*:refs/heads/*" : `refs/heads/${branch}:refs/heads/${branch}`;
+  const pushing = Bun.spawn(["git", `--git-dir=${repo.path}`, "push", "--quiet", to.cloneUrl, refspec], {
+    stdout: "ignore", stderr: "pipe",
+    env: { ...process.env, ...PLAIN_GIT, GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "http.extraHeader", GIT_CONFIG_VALUE_0: header },
+  });
   if ((await pushing.exited) !== 0) {
     const said = await new Response(pushing.stderr as ReadableStream).text();
     // never let a token reach a log, however the push failed
-    throw new Error(`could not push ${to.owner}/${to.name}: ${said.replaceAll(await token(), "…")}`);
+    throw new Error(`could not push ${to.owner}/${to.name}: ${said.replaceAll(secret, "…").replaceAll(header, "…")}`);
   }
+}
+
+/** Make a branch the one a repository opens on, which is also the one GitHub counts contributions on. */
+export async function setDefaultBranch(to: Published, branch: string): Promise<void> {
+  await call(`/repos/${to.owner}/${to.name}`, { method: "PATCH", body: JSON.stringify({ default_branch: branch }) });
 }
 
 /** Whether a commit is on GitHub, which is the question the audit asks about a published job. */

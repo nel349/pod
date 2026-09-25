@@ -25,7 +25,8 @@ import { policyMet, readApprovals, readJob, readSeats, settle, type Contract, ty
 import { pause } from "../pause.ts";
 import { gradeCommit } from "../pipeline.ts";
 import { publish } from "../publish.ts";
-import { bytes32ToCommit, commitToBytes32, has, onBranch, openRepository, putOnMain, shortCommit } from "../repo.ts";
+import { ensureRepository, push as pushToGitHub, setDefaultBranch } from "../github.ts";
+import { BRANCH, bytes32ToCommit, commitToBytes32, has, onBranch, openRepository, putOnMain, shortCommit } from "../repo.ts";
 import { moneyMove } from "../runner.ts";
 import { jobPath } from "../routes.ts";
 import { SEATS } from "../seal.ts";
@@ -67,6 +68,12 @@ export interface WorkerOptions {
   readonly gradeAgainAfterMs?: number;
   /** how many times the whole set of checks runs, which have to agree. Two at least */
   readonly times?: number;
+  /**
+   * The GitHub account or organisation work that passed is published under, as a repository of its
+   * own: what the POD's holder claims, and where GitHub counts the pod's commits. Left out, nothing
+   * leaves this server.
+   */
+  readonly publishTo?: { readonly owner: string };
   readonly say?: (what: string) => void;
 }
 
@@ -208,7 +215,10 @@ export class Worker {
    */
   private isFinished(record: JobRecord): boolean {
     if (!record.chain?.settled || !record.signed) return false;
-    return record.signed.receipt.verdict !== "passed" || !this.options.token || record.chain.tokenId !== undefined;
+    if (record.signed.receipt.verdict !== "passed") return true;
+    const titled = !this.options.token || record.chain.tokenId !== undefined;
+    const published = !this.options.publishTo || record.repository !== undefined;
+    return titled && published;
   }
 
   private async now(): Promise<bigint> {
@@ -313,6 +323,19 @@ export class Worker {
       await this.remember(record.jobId, { ...(minted ? { minted } : {}), tokenId: tokenId.toString() });
       if (minted) this.say(`${record.jobId}: POD #${tokenId} minted to whoever paid`);
     }
+    // last, and apart from the money and the title: GitHub having a bad moment holds up neither, and
+    // publishing is tried again on the next look until it is done
+    if (this.options.publishTo && record.repository === undefined) await this.publish(record.jobId, record.tile.idea, this.options.publishTo.owner);
+  }
+
+  /** The job's whole repository on GitHub, opening on the work that passed, and where it is kept on the record. */
+  private async publish(jobId: string, idea: string, owner: string): Promise<void> {
+    const published = await ensureRepository(owner, jobId, idea);
+    await pushToGitHub(await openRepository(this.options.repositories, jobId), published, "every branch");
+    await setDefaultBranch(published, BRANCH);
+    const record = await this.options.store.read(jobId);
+    if (record) await this.options.store.save({ ...record, repository: published.url });
+    this.say(`${jobId}: published at ${published.url}`);
   }
 
   /** Keep what the chain did in the job's record, read fresh so nothing written meanwhile is lost. */

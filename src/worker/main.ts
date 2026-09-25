@@ -11,6 +11,7 @@
 import { join } from "node:path";
 import { isHex } from "viem";
 import { JOBS_FOLDER_SETTING, REPOSITORIES_FOLDER, WORKER_FOLDER } from "../folders.ts";
+import { GITHUB_OWNER_SETTING } from "../github.ts";
 import { live } from "../live.ts";
 import { MONAD_REGISTRIES } from "../registry.ts";
 import { IMAGE } from "../sandbox.ts";
@@ -24,6 +25,7 @@ const key = process.env.POD_VALIDATOR_KEY;
 if (!key || !isHex(key)) throw new Error("POD_VALIDATOR_KEY is not set. It is the key verdicts are signed and settled with");
 // live() checks the key against the validator the contracts were deployed with, and says so if not
 const contracts = live();
+const publishTo = process.env[GITHUB_OWNER_SETTING];
 
 const worker = new Worker({
   store: new JobStore(directory),
@@ -34,6 +36,7 @@ const worker = new Worker({
   image: IMAGE,
   ...(process.env.POD_SITE ? { site: process.env.POD_SITE } : {}),
   registry: { registries: MONAD_REGISTRIES, stateFolder: join(directory, WORKER_FOLDER) },
+  ...(publishTo ? { publishTo: { owner: publishTo } } : {}),
 });
 
 const lock = await holdTheLock(join(directory, WORKER_FOLDER));
@@ -41,6 +44,9 @@ const stop = new AbortController();
 process.once("SIGINT", () => stop.abort());
 process.once("SIGTERM", () => stop.abort());
 console.log(`the worker is watching ${contracts.jobs.address}, grading as ${contracts.validator}`);
+console.log(publishTo
+  ? `work that passes is published on GitHub under ${publishTo}`
+  : `work that passes stays on this server: ${GITHUB_OWNER_SETTING} names no GitHub account to publish it under`);
 try {
   await worker.run(stop.signal);
 } finally {

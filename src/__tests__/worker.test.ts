@@ -185,11 +185,12 @@ async function onTheSeatsBranches(jobId: string, workspace: string, pod: Readonl
   return commit;
 }
 
-function aWorker(said: string[] = [], jobsKey: Hex = VALIDATOR, gradeAgainAfterMs?: number): Worker {
+function aWorker(said: string[] = [], jobsKey: Hex = VALIDATOR, gradeAgainAfterMs?: number, publishTo?: { readonly owner: string }): Worker {
   return new Worker({
     store, repositories, jobs: contractAs(jobsKey), token: tokenAs(VALIDATOR), runnerKey: VALIDATOR, image: IMAGE, times: 2,
     site: SITE, registry: { registries, stateFolder: workerState },
     ...(gradeAgainAfterMs === undefined ? {} : { gradeAgainAfterMs }),
+    ...(publishTo ? { publishTo } : {}),
     say: (what) => said.push(what),
   });
 }
@@ -386,6 +387,30 @@ describe.skipIf(!available)("the worker", () => {
     expect(await tokenOfJob(tokenAs(VALIDATOR), job.onChainId)).not.toBe(0n);
     expect(await head(await openRepository(repositories, job.jobId))).toBe(job.commit);
   }, 300_000);
+
+  test("GitHub refusing to publish holds up neither the money nor the title, and publishing is tried again", async () => {
+    const job = await aJob("a-coat-github-refuses", WORKING, SEATS);
+    const said: string[] = [];
+    // a token GitHub does not know: GitHub itself refuses, the way it would when it is down or the token has lapsed
+    const was = process.env.POD_GITHUB_TOKEN;
+    process.env.POD_GITHUB_TOKEN = "not-a-token-github-knows";
+    try {
+      const worker = aWorker(said, VALIDATOR, undefined, { owner: "pod-an-owner-nobody-has" });
+      const refusals = (): number => said.filter((line) => line.startsWith(`[worker] ${job.jobId}: GitHub said 401`)).length;
+      await untilSettled(worker, said, async () => (await tokenOfJob(tokenAs(VALIDATOR), job.onChainId)) !== 0n && refusals() > 0);
+
+      // paid and titled all the same, and not finished: the next look publishes again
+      expect((await readJob(reading(), job.onChainId)).state).toBe("settled");
+      const before = refusals();
+      await worker.tick();
+      await worker.whenIdle();
+      expect(refusals()).toBe(before + 1);
+      expect((await store.read(job.jobId))?.repository).toBeUndefined();
+    } finally {
+      if (was === undefined) delete process.env.POD_GITHUB_TOKEN;
+      else process.env.POD_GITHUB_TOKEN = was;
+    }
+  }, 240_000);
 
   test("a pod that has not met the policy is not graded", async () => {
     const early = await aJob("a-coat-not-yet-agreed", WORKING, ["lead", "builder", "reviewer", "qa"]);
