@@ -4,18 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dockerArguments, readableToTheBox, runSealed, writableByTheBox } from "../sandbox.ts";
 import { checkout } from "./support/checkout.ts";
+import { dockerAvailable } from "./support/tools.ts";
 
 /** Pinned by digest, not by tag: the same image in September and in October. */
 const IMAGE = "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944";
 const FIXTURE = new URL("../../fixtures/honest", import.meta.url).pathname;
 
-const dockerAvailable = await (async () => {
-  try {
-    return (await Bun.spawn(["docker", "info"], { stdout: "ignore", stderr: "ignore" }).exited) === 0;
-  } catch {
-    return false;
-  }
-})();
+const withDocker = await dockerAvailable();
 
 describe("the arguments that keep the box shut", () => {
   test("no route out, no capabilities, nothing writable that matters", () => {
@@ -70,7 +65,7 @@ describe("opening a directory to the box", () => {
   });
 });
 
-describe.skipIf(!dockerAvailable)("sandbox, against a real container", () => {
+describe.skipIf(!withDocker)("sandbox, against a real container", () => {
   test("an honest run finishes, and both escapes are refused", async () => {
     const outcome = await runSealed({ source: FIXTURE, command: "sh run.sh", image: IMAGE, timeoutSeconds: 90 });
     expect(outcome.exitCode).toBe(0);
@@ -99,7 +94,7 @@ describe.skipIf(!dockerAvailable)("sandbox, against a real container", () => {
   }, 60_000);
 });
 
-describe.skipIf(!dockerAvailable)("the install phase", () => {
+describe.skipIf(!withDocker)("the install phase", () => {
   test("it has a route out, and what it installs lands where the graded run will find it", async () => {
     const { chmod, mkdir, writeFile } = await import("node:fs/promises");
     const { join } = await import("node:path");

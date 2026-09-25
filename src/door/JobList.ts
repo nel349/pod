@@ -15,6 +15,7 @@ import { KINDS, MODE_NAMES, publicSpec } from "../job.ts";
 import { checkFilePath, gitPath, isSafeName, jobPath, notesPath, ROUTES } from "../routes.ts";
 import { SEATS } from "../seal.ts";
 import type { JobStore } from "../store.ts";
+import { NO_STORE } from "../headers.ts";
 import type { Doorkeeper } from "./Doorkeeper.ts";
 
 /** Raised only when the shape changes in a way an agent reading the old one would misread */
@@ -92,7 +93,7 @@ export class JobList {
   constructor(private readonly options: { readonly keeper: Doorkeeper; readonly store: JobStore }) {}
 
   async handle(): Promise<Response> {
-    return Response.json(await this.fresh(), { headers: { "cache-control": "no-store" } });
+    return Response.json(await this.fresh(), { headers: NO_STORE });
   }
 
   private fresh(): Promise<JobListing> {

@@ -9,6 +9,7 @@
  * It gets a clean environment. Hooks run inside it, and the server's own environment holds the keys
  * that sign verdicts: nothing in it is anything a push needs.
  */
+import { PLAIN_GIT } from "../plainGit.ts";
 
 export interface BackendCall {
   readonly request: Request;
@@ -38,8 +39,7 @@ export async function gitHttpBackend(call: BackendCall): Promise<Response> {
     env: {
       PATH: process.env.PATH ?? "/usr/bin:/bin",
       // no machine's git settings, only the ones given here
-      GIT_CONFIG_GLOBAL: "/dev/null",
-      GIT_CONFIG_SYSTEM: "/dev/null",
+      ...PLAIN_GIT,
       GIT_PROJECT_ROOT: call.projectRoot,
       GIT_HTTP_EXPORT_ALL: "1",
       PATH_INFO: call.pathInfo,

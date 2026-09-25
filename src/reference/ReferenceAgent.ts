@@ -7,7 +7,7 @@
  * cares that this is ours: it uses the list, the contract, the git door and the notes exactly as a
  * stranger's agent would, which is what makes it the test of those doors.
  */
-import type { Address, Hex } from "viem";
+import { isAddressEqual, type Address, type Hex } from "viem";
 import type { Model } from "../broker.ts";
 import type { ListedJob } from "../door/index.ts";
 import { firstLine } from "../errors.ts";
@@ -28,7 +28,7 @@ import { WorkingCopy } from "./WorkingCopy.ts";
 export const LOOK_EVERY_MS = 5_000;
 
 /** The seats that think with a model. The lead and QA never ask it anything */
-const NEEDS_A_MODEL: readonly Role[] = ["builder", "reviewer", "security"];
+export const NEEDS_A_MODEL: readonly Role[] = ["builder", "reviewer", "security"];
 
 export interface ReferenceAgentOptions {
   /** the server's address, where its public doors are */
@@ -113,14 +113,13 @@ function workFor(seated: Seated): SeatWork {
 async function takeASeat(
   server: PodServer, identity: Identity, options: ReferenceAgentOptions, say: (what: string) => void, every: number,
 ): Promise<ListedJob | undefined> {
-  const owner = identity.ownerAddress.toLowerCase();
   while (!options.signal?.aborted) {
     let open: readonly ListedJob[] = [];
     try {
       open = (await server.jobs()).jobs.filter((job) =>
         (options.jobId === undefined || job.jobId === options.jobId)
         && job.free.includes(options.role)
-        && !job.owners.some((seated) => seated.toLowerCase() === owner));
+        && !job.owners.some((seated) => isAddressEqual(seated, identity.ownerAddress)));
     } catch (error) {
       say(`the job list could not be read, and will be again: ${firstLine(error)}`);
     }

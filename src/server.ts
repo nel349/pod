@@ -14,7 +14,8 @@ import { acceptPosting, readerFor, type ChainReader } from "./posting.ts";
 import { CheckWriting, ProvenChecks } from "./checkwriting/index.ts";
 import type { MarketConfig } from "./market.ts";
 import { bodyWithin, tooLarge } from "./body.ts";
-import { PROVEN_FOLDER, REPOSITORIES_FOLDER } from "./folders.ts";
+import { NO_STORE } from "./headers.ts";
+import { JOBS_FOLDER_SETTING, PROVEN_FOLDER, REPOSITORIES_FOLDER } from "./folders.ts";
 import { doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard } from "./door/index.ts";
 import postPage from "./web/post/index.html";
 import { renderCard } from "./card.ts";
@@ -108,14 +109,14 @@ export async function handle(request: Request, store: JobStore, { market, door, 
   if (pathname.startsWith(`${ROUTES.postJob}/`)) {
     const jobId = pathname.slice(ROUTES.postJob.length + 1);
     if (!isSafeName(jobId)) return Response.json({ why: `${jobId} is not a name a job can have` }, { status: 400 });
-    return Response.json({ taken: (await store.read(jobId)) !== undefined }, { headers: { "cache-control": "no-store" } });
+    return Response.json({ taken: (await store.read(jobId)) !== undefined }, { headers: NO_STORE });
   }
 
   if (pathname.startsWith(`${ROUTES.writeChecks}/`)) {
     const id = pathname.slice(ROUTES.writeChecks.length + 1);
     const writing = market?.writing.read(id);
     if (!writing) return Response.json({ why: "those checks are not being written here any more" }, { status: 404 });
-    return Response.json(writing, { headers: { "cache-control": "no-store" } });
+    return Response.json(writing, { headers: NO_STORE });
   }
 
   if (pathname === ROUTES.wall) {
@@ -344,8 +345,8 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
 
 
 if (import.meta.main) {
-  const directory = process.env.POD_JOBS;
-  if (!directory) throw new Error("POD_JOBS has to name the directory the runner writes jobs to");
+  const directory = process.env[JOBS_FOLDER_SETTING];
+  if (!directory) throw new Error(`${JOBS_FOLDER_SETTING} has to name the directory the runner writes jobs to`);
   const port = Number(process.env.PORT ?? 3000);
   const store = new JobStore(directory);
   const services = await servicesFromTheEnvironment(store, directory);

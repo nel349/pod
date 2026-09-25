@@ -17,7 +17,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { privateKeyToAccount } from "viem/accounts";
-import { isAddressEqual, type Address, type Hex } from "viem";
+import { isAddressEqual, zeroHash, type Address, type Hex } from "viem";
 import { branchFor } from "../door/seat.ts";
 import { firstLine } from "../errors.ts";
 import { START } from "../job.ts";
@@ -25,12 +25,13 @@ import { policyMet, readApprovals, readJob, readSeats, settle, type Contract, ty
 import { pause } from "../pause.ts";
 import { gradeCommit } from "../pipeline.ts";
 import { publish } from "../publish.ts";
-import { bytes32ToCommit, commitToBytes32, has, onBranch, openRepository, putOnMain } from "../repo.ts";
+import { bytes32ToCommit, commitToBytes32, has, onBranch, openRepository, putOnMain, shortCommit } from "../repo.ts";
 import { moneyMove } from "../runner.ts";
 import { jobPath } from "../routes.ts";
 import { SEATS } from "../seal.ts";
 import type { Registries } from "../registry.ts";
 import { readableToTheBox } from "../sandbox.ts";
+import type { SignedReceipt } from "../receipt.ts";
 import type { JobRecord, JobStore, OnChain } from "../store.ts";
 import { mintPod, tokenOfJob } from "../token.ts";
 import { RegistryAnswers } from "./RegistryAnswers.ts";
@@ -69,7 +70,6 @@ export interface WorkerOptions {
   readonly say?: (what: string) => void;
 }
 
-const NO_COMMIT = /^0x0{64}$/i;
 
 export class Worker {
   private readonly grading = new Map<string, Promise<void>>();
@@ -134,35 +134,36 @@ export class Worker {
   private async advance(jobId: string): Promise<void> {
     const { store, jobs } = this.options;
     const record = await store.read(jobId);
-    if (!record?.chain || record.chain.jobs.toLowerCase() !== jobs.address.toLowerCase()) return;
+    if (!record?.chain || !isAddressEqual(record.chain.jobs, jobs.address)) return;
     if (this.grading.has(jobId) || this.isFinished(record)) return;
     const onChainId = BigInt(record.chain.jobId);
     const onChain = await readJob(jobs, onChainId);
 
-    const graded = record.signed?.receipt;
-    if (graded && record.tile.verdict !== "running") {
-      if (onChain.state === "working" && !NO_COMMIT.test(onChain.commit) && bytes32ToCommit(onChain.commit) === graded.commit) {
+    const signed = record.signed;
+    if (signed && record.tile.verdict !== "running") {
+      const graded = signed.receipt;
+      if (onChain.state === "working" && onChain.commit !== zeroHash && bytes32ToCommit(onChain.commit) === graded.commit) {
         // the contract settles nothing after the window, so a verdict that came too late is said, not sent
         if ((await this.now()) >= onChain.endsAt) {
           const why = "the verdict came after the job's window closed, and the contract settles nothing after it: the poster takes the money back";
           if (record.waitingBecause !== why) await store.save({ ...record, waitingBecause: why });
           return;
         }
-        await this.settle(record, onChainId);
+        await this.settle(record.jobId, signed, onChainId);
         // and straight on to the title and main for work that passed, rather than a look later: a
         // worker stopped between the two would leave a paid job with no title until it started again
         if (graded.verdict === "passed" && (await readJob(jobs, onChainId)).state === "settled") {
-          await this.titleAndMain((await store.read(jobId)) ?? record, onChainId, graded.commit);
+          await this.titleAndMain((await store.read(jobId)) ?? record, signed, onChainId);
         }
         return;
       }
       if (onChain.state === "settled" && graded.verdict === "passed") {
-        await this.titleAndMain(record, onChainId, graded.commit);
+        await this.titleAndMain(record, signed, onChainId);
         return;
       }
       // a verdict that did not settle (the runs disagreed) leaves the job to the pod: if it approves
       // another commit, that one is graded; otherwise the poster takes the money back at the deadline
-      if (onChain.state !== "working" || NO_COMMIT.test(onChain.commit) || bytes32ToCommit(onChain.commit) === graded.commit) return;
+      if (onChain.state !== "working" || onChain.commit === zeroHash || bytes32ToCommit(onChain.commit) === graded.commit) return;
     }
 
     const ready = await this.readyToGrade(onChain, onChainId);
@@ -216,7 +217,7 @@ export class Worker {
 
   /** The commit to grade, if the chain says the pod is done with one and there is still time to settle it. */
   private async readyToGrade(onChain: OnChainJob, onChainId: bigint): Promise<string | undefined> {
-    if (onChain.state !== "working" || NO_COMMIT.test(onChain.commit)) return undefined;
+    if (onChain.state !== "working" || onChain.commit === zeroHash) return undefined;
     // the contract refuses a settlement after the window, so a verdict then would change nothing
     if ((await this.now()) >= onChain.endsAt) return undefined;
     if (!(await policyMet(this.options.jobs, onChainId, onChain.commit))) return undefined;
@@ -230,7 +231,7 @@ export class Worker {
       await store.save({ ...record, waitingBecause: "the spec this job was sealed under is not kept here, so it cannot be graded" });
       return;
     }
-    this.say(`${record.jobId}: grading ${commit.slice(0, 12)}`);
+    this.say(`${record.jobId}: grading ${shortCommit(commit)}`);
     const checks = await mkdtemp(join(tmpdir(), "pod-worker-checks-"));
     try {
       for (const [name, contents] of Object.entries(await store.allCheckFiles(record.jobId))) await writeFile(join(checks, name), contents);
@@ -271,11 +272,10 @@ export class Worker {
   }
 
   /** Move the money the way the verdict says, once. A held verdict moves nothing. */
-  private async settle(record: JobRecord, onChainId: bigint): Promise<void> {
-    const verdict = record.signed!.receipt.verdict;
-    const move = moneyMove(verdict);
+  private async settle(jobId: string, signed: SignedReceipt, onChainId: bigint): Promise<void> {
+    const move = moneyMove(signed.receipt.verdict);
     if (move === "hold") return;
-    const commit = commitToBytes32(record.signed!.receipt.commit);
+    const commit = commitToBytes32(signed.receipt.commit);
     const hash = await this.onTheChain(async () => {
       // read again inside the queue: another look may have settled it while this one waited, or the
       // pod moved to another commit, which a refund would otherwise take no notice of
@@ -284,23 +284,24 @@ export class Worker {
       return settle(this.options.jobs, onChainId, commit, move === "pay");
     });
     if (!hash) return;
-    await this.remember(record.jobId, { settled: hash });
-    this.say(`${record.jobId}: settled, ${move === "pay" ? "the pod is paid" : "the poster is refunded"}`);
+    await this.remember(jobId, { settled: hash });
+    this.say(`${jobId}: settled, ${move === "pay" ? "the pod is paid" : "the poster is refunded"}`);
   }
 
   /**
    * On a job that passed and settled: the work on the main branch, then the title to whoever paid.
    * Main first: once the title is written down the job is finished and not looked at again.
    */
-  private async titleAndMain(record: JobRecord, onChainId: bigint, commit: string): Promise<void> {
+  private async titleAndMain(record: JobRecord, signed: SignedReceipt, onChainId: bigint): Promise<void> {
     const { token, jobs } = this.options;
+    const commit = signed.receipt.commit;
     await putOnMain(await openRepository(this.options.repositories, record.jobId), commit);
     if (token && record.chain?.tokenId === undefined) {
       const minted = await this.onTheChain(async () => {
         if ((await tokenOfJob(token, onChainId)) !== 0n) return undefined;
         return mintPod(token, {
           jobs, jobId: onChainId, seal: record.seal, commit: commitToBytes32(commit),
-          receiptHash: record.signed!.hash,
+          receiptHash: signed.hash,
           crew: record.tile.pod.flatMap((seat) => {
             const role = SEATS.find((named) => named === seat.role);
             return role ? [{ role, agent: seat.agent }] : [];

@@ -1,12 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { parseEther } from "viem";
 import { claudeOnThisMachine } from "../broker.ts";
-import type { Role, Spec } from "../job.ts";
-import { runReferenceAgent, APPROVED, type Finished } from "../reference/index.ts";
+import type { Spec } from "../job.ts";
+import { APPROVED, NEEDS_A_MODEL, runReferenceAgent, type Finished } from "../reference/index.ts";
 import { IMAGE } from "../sandbox.ts";
+import { SEATS } from "../seal.ts";
 import { anvilAvailable } from "./support/anvil.ts";
-import { COAT_IDEA, dockerAvailable, DRY, good, WET } from "./support/coat.ts";
-import { aPod, aPodServer, untilThePolicyIsMet, type Agent, type RunningPodServer } from "./support/podServer.ts";
+import { COAT_IDEA, DRY, good, WET } from "./support/coat.ts";
+import { aPod, aPodServer, untilThePolicyIsMet, type RunningPodServer } from "./support/podServer.ts";
+import { dockerAvailable } from "./support/tools.ts";
 
 /**
  * The same pod as reference.test.ts, with the real model.
@@ -58,9 +60,9 @@ describe.skipIf(!available)("a pod of reference agents, thinking with the real m
     const model = claudeOnThisMachine();
     const said: string[] = [];
     const stop = new AbortController();
-    const agents: Promise<Finished>[] = (Object.entries(pod) as [Role, Agent][]).map(([role, agent]) => runReferenceAgent({
-      server: server.base, key: agent.key, role, image: IMAGE, every: 1_000, signal: stop.signal,
-      ...(role === "lead" || role === "qa" ? {} : { model }),
+    const agents: Promise<Finished>[] = SEATS.map((role) => runReferenceAgent({
+      server: server.base, key: pod[role].key, role, image: IMAGE, every: 1_000, signal: stop.signal,
+      ...(NEEDS_A_MODEL.includes(role) ? { model } : {}),
       say: (what) => said.push(what),
     }));
 

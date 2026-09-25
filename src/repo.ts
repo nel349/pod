@@ -16,6 +16,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Hex } from "viem";
+import { PLAIN_GIT } from "./plainGit.ts";
 
 export interface Ran {
   readonly code: number;
@@ -29,10 +30,7 @@ async function git(args: readonly string[], cwd?: string, extra: Record<string, 
     stderr: "pipe",
     env: {
       ...process.env,
-      // a commit needs an author, and a machine has no ~/.gitconfig worth trusting
-      GIT_CONFIG_GLOBAL: "/dev/null",
-      GIT_CONFIG_SYSTEM: "/dev/null",
-      GIT_TERMINAL_PROMPT: "0",
+      ...PLAIN_GIT,
       ...extra,
     },
   });
@@ -238,6 +236,11 @@ export async function bundle(repo: Repository, to: string): Promise<string> {
  * hash. Both fit in the field, left-aligned and zero-padded, so the id can be read straight back off
  * the chain rather than hashed into something nobody can look up.
  */
+/** A commit as people read it in a log line: its first twelve characters, enough to tell it apart */
+export function shortCommit(commit: string): string {
+  return commit.slice(0, 12);
+}
+
 export function commitToBytes32(commit: string): Hex {
   const hex = commit.toLowerCase();
   if (!/^[0-9a-f]{40}$|^[0-9a-f]{64}$/.test(hex)) throw new Error(`${commit} is not an object id`);

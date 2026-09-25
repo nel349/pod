@@ -10,9 +10,17 @@
  *   nothing rewritten          a push only adds to what is already there
  *   only their own commits     every new commit is written, and committed, as the seat that pushes it
  *
- * The door hands it the seat's branch and address in POD_BRANCH and POD_EMAIL.
+ * The door hands it the seat's branch and address in the settings named below.
  */
+import { shortCommit } from "../repo.ts";
 
+/** What the door sets for the hook: which program runs it, the rules, and the seat that pushes. hooks/pre-receive names the first two */
+export const HOOK_SETTINGS = {
+  bun: "POD_BUN",
+  rules: "POD_PRE_RECEIVE",
+  branch: "POD_BRANCH",
+  email: "POD_EMAIL",
+} as const;
 export interface Update {
   readonly old: string;
   readonly new: string;
@@ -53,7 +61,7 @@ export async function refusalFor(updates: readonly Update[], pusher: Pusher, com
       return `history is never rewritten here: that push would drop commits already on ${pusher.branch}`;
     }
     for (const arriving of await commits.arriving(update.new)) {
-      const short = arriving.commit.slice(0, 12);
+      const short = shortCommit(arriving.commit);
       if (arriving.author.toLowerCase() !== pusher.email) {
         return `${short} says it was written by ${arriving.author}, and commits pushed from this seat are written as ${pusher.email}`;
       }
@@ -84,8 +92,8 @@ const gitCommits: Commits = {
 };
 
 if (import.meta.main) {
-  const branch = process.env.POD_BRANCH;
-  const email = process.env.POD_EMAIL;
+  const branch = process.env[HOOK_SETTINGS.branch];
+  const email = process.env[HOOK_SETTINGS.email];
   if (!branch || !email) {
     console.error("pod: this push came in without a seat, so nothing was changed");
     process.exit(1);

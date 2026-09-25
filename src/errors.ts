@@ -14,6 +14,11 @@ export function firstLine(error: unknown): string {
   return (text.split("\n")[0] ?? "").slice(0, LONGEST_LINE);
 }
 
+/** The system's code for what went wrong, such as ENOENT, when it gave one. */
+export function errorCode(error: unknown): string | undefined {
+  return typeof error === "object" && error !== null ? hasText(error, "code") : undefined;
+}
+
 function hasText(value: object, key: string): string | undefined {
   const found: unknown = Reflect.get(value, key);
   return typeof found === "string" && found.length > 0 ? found : undefined;

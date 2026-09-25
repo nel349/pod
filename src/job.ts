@@ -39,8 +39,11 @@ export type Kind = (typeof KINDS)[number];
 /** Where the work answers inside its box, which is what every check is pointed at. */
 export const PORT = 3000;
 
+/** The one file posted work is */
+export const WORK_FILE = "server.js";
+
 /** How posted work is started in its box: one file, run by node, answering on PORT. */
-export const START = "node server.js";
+export const START = `node ${WORK_FILE}`;
 
 /** One thing that must be true before anyone is paid. Objective, or it does not belong here. */
 export interface Check {

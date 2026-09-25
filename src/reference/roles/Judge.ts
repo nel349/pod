@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { APPROVED, REFUSED, type Verdict } from "../protocol.ts";
 import { candidateOf, leadBranchOf, tellThePod, type Seated, type SeatWork } from "../Seated.ts";
+import { shortCommit } from "../../repo.ts";
 
 /** How one seat judges a candidate, given its files laid out in a folder of their own. */
 export type Judgement = (seated: Seated, files: string) => Promise<Verdict>;
@@ -46,17 +47,17 @@ export class Judge implements SeatWork {
     }
     if (!verdict.approve) {
       this.done.add(candidate);
-      seated.say(`refused ${candidate.slice(0, 12)}: ${verdict.why}`);
+      seated.say(`refused ${shortCommit(candidate)}: ${verdict.why}`);
       return;
     }
     if ((await candidateOf(seated)) !== candidate) {
-      seated.say(`${candidate.slice(0, 12)} stopped being the candidate while it was judged; judging the new one instead`);
+      seated.say(`${shortCommit(candidate)} stopped being the candidate while it was judged; judging the new one instead`);
       return;
     }
     // counted done only once the chain has it: a transaction that failed is sent again on the next look
     await seated.identity.approve(seated.job, seated.role, candidate);
     this.done.add(candidate);
-    seated.say(`approved ${candidate.slice(0, 12)}: ${verdict.why}`);
+    seated.say(`approved ${shortCommit(candidate)}: ${verdict.why}`);
   }
 
   /** The seat's judgement of one candidate, or nothing if the lead's branch does not have it yet. */

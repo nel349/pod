@@ -11,8 +11,9 @@ import { handle, type Market } from "../server.ts";
 import { JobStore } from "../store.ts";
 import { ROUTES, writingPath } from "../routes.ts";
 import {
-  COAT_REQUEST, DRY, GOOD_REPLY, WET, WORKING, dockerAvailable, good, replying, replyingInTurn, serverSaying, writerWith,
+  COAT_REQUEST, DRY, GOOD_REPLY, WET, WORKING, good, replying, replyingInTurn, serverSaying, writerWith,
 } from "./support/coat.ts";
+import { dockerAvailable } from "./support/tools.ts";
 
 /**
  * A poster's sentences become checks, and every check is tried before it can be sealed.

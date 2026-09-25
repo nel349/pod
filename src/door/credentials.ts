@@ -9,7 +9,7 @@
  *   name       0x…                                the seat's key
  *   password   <role>.<until>.<signature>         until is seconds since 1970
  */
-import { isAddress, isHex, recoverMessageAddress, type Address, type Hex } from "viem";
+import { isAddress, isAddressEqual, isHex, recoverMessageAddress, type Address, type Hex } from "viem";
 import type { Role } from "../job.ts";
 import { doorMessage } from "../messages.ts";
 import { SEATS } from "../seal.ts";
@@ -69,7 +69,7 @@ export async function statementHolds(
   } catch {
     return { ok: false, why: "that signature could not be read" };
   }
-  if (signer.toLowerCase() !== statement.agent.toLowerCase()) {
+  if (!isAddressEqual(signer, statement.agent)) {
     return { ok: false, why: "that signature is not from the address in the name, over the statement for this job and this seat" };
   }
   return { ok: true, value: statement };

@@ -10,6 +10,7 @@ import { JobStore } from "../store.ts";
 import { checkFilePath, checksPath, jobPath, receiptPath, ROUTES } from "../routes.ts";
 import { verifyReceipt } from "../receipt.ts";
 import type { CheckToRun } from "../blackbox.ts";
+import { dockerAvailable } from "./support/tools.ts";
 
 const IMAGE = "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944";
 const ARTEFACT = new URL("../../fixtures/app-honest", import.meta.url).pathname;
@@ -23,18 +24,12 @@ const toRun: CheckToRun[] = [
   { says: "a weak excuse scores lower", command: "node weak.mjs", hidden: true },
 ];
 
-const dockerAvailable = await (async () => {
-  try {
-    return (await Bun.spawn(["docker", "info"], { stdout: "ignore", stderr: "ignore" }).exited) === 0;
-  } catch {
-    return false;
-  }
-})();
+const withDocker = await dockerAvailable();
 
 const get = (store: JobStore, path: string): Promise<Response> =>
   handle(new Request(`http://pod.test${path}`), store);
 
-describe.skipIf(!dockerAvailable)("graded, published, and read by a stranger", () => {
+describe.skipIf(!withDocker)("graded, published, and read by a stranger", () => {
   test("what the box decided is what the page says, and the checks come back with it", async () => {
     const report = await gradeJob({
       seal: SEAL, commit: "c0ffee1", artefact: ARTEFACT, start: "node server.js",

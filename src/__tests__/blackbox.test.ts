@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { grade, type CheckToRun } from "../blackbox.ts";
 import { checkout } from "./support/checkout.ts";
+import { dockerAvailable } from "./support/tools.ts";
 
 const IMAGE = "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944";
 const ARTEFACT = new URL("../../fixtures/app-honest", import.meta.url).pathname;
@@ -11,15 +12,9 @@ const toRun: CheckToRun[] = [
   { says: "a weak excuse scores lower than a strong one", command: "node weak.mjs", hidden: true },
 ];
 
-const dockerAvailable = await (async () => {
-  try {
-    return (await Bun.spawn(["docker", "info"], { stdout: "ignore", stderr: "ignore" }).exited) === 0;
-  } catch {
-    return false;
-  }
-})();
+const withDocker = await dockerAvailable();
 
-describe.skipIf(!dockerAvailable)("grading from outside the box", () => {
+describe.skipIf(!withDocker)("grading from outside the box", () => {
   test("an artefact that works passes both the visible and the hidden check", async () => {
     const outcome = await grade({ artefact: ARTEFACT, start: "node server.js", checks: CHECKS, toRun, image: IMAGE });
     expect(outcome.passed).toBe(true);

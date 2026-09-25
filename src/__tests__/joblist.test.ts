@@ -3,15 +3,16 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseEther, type Address, type Hex } from "viem";
-import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { doorChainFor, Doorkeeper, JOB_LIST_VERSION, JobList, JobListingSchema, LIST_FRESH_FOR_MS, type JobListing, type ListedJob } from "../door/index.ts";
+import { privateKeyToAccount } from "viem/accounts";
+import { Doorkeeper, JOB_LIST_VERSION, JobList, JobListingSchema, LIST_FRESH_FOR_MS, type JobListing, type ListedJob } from "../door/index.ts";
 import { sealSpec, type Role, type Spec } from "../job.ts";
-import { podJobsAbi, post, readJob, readSeats, readTerms, seatDeposit, seatPay, takeSeat } from "../jobs.ts";
+import { podJobsAbi, post, readJob, seatDeposit, seatPay, takeSeat } from "../jobs.ts";
 import { openJob } from "../publish.ts";
 import { checksPath, ROUTES } from "../routes.ts";
 import { serve } from "../server.ts";
 import { JobStore } from "../store.ts";
 import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
+import { anAgent, doorChainOn } from "./support/podServer.ts";
 
 /**
  * Where an outside agent finds work, and what it can rely on there.
@@ -47,27 +48,10 @@ const SPEC: Spec = {
   allowed: [], salt: "a-number-nobody-can-guess",
 };
 
-interface Agent {
-  readonly key: Hex;
-  readonly address: Address;
-}
-
-function anAgent(): Agent {
-  const key = generatePrivateKey();
-  return { key, address: privateKeyToAccount(key).address };
-}
-
 const finder = anAgent();
 
 const contractAs = (key: Hex) => ({ address: jobs, publicClient: anvil.publicClient, wallet: anvil.wallet(key) });
 const reading = () => ({ address: jobs, publicClient: anvil.publicClient });
-
-async function fund(to: Address): Promise<void> {
-  const payer = anvil.wallet(ANVIL_KEYS[0]);
-  await anvil.publicClient.waitForTransactionReceipt({
-    hash: await payer.sendTransaction({ to, value: parseEther("10"), account: payer.account!, chain: payer.chain }),
-  });
-}
 
 /** A job posted, paid for and published the way the posting page leaves one: record, check files and spec. */
 async function aPostedJob(jobId: string, reviewers = 1): Promise<bigint> {
@@ -86,18 +70,9 @@ beforeAll(async () => {
   if (!available) return;
   anvil = await startAnvil();
   jobs = await anvil.deploy("PodJobs", [privateKeyToAccount(ANVIL_KEYS[6]).address]);
-  await fund(finder.address);
+  await anvil.fund(finder.address);
   store = new JobStore(await mkdtemp(join(tmpdir(), "pod-joblist-")));
-  const keeper = new Doorkeeper({
-    store,
-    chain: doorChainFor({
-      jobs,
-      readJob: (id) => readJob(reading(), id),
-      readSeats: (id) => readSeats(reading(), id),
-      readTerms: (id) => readTerms(reading(), id),
-      latestBlockTime: async () => (await anvil.publicClient.getBlock()).timestamp,
-    }),
-  });
+  const keeper = new Doorkeeper({ store, chain: doorChainOn(anvil, jobs) });
   const serving = serve(store, 0, { jobList: new JobList({ keeper, store }) });
   server = serving;
   base = `http://127.0.0.1:${serving.port}`;
@@ -213,16 +188,7 @@ describe.skipIf(!available)("the job list, as an outside agent reads it", () => 
 
   test("however often anybody asks, the chain is read once every little while, not once an ask", async () => {
     let reads = 0;
-    const counting = new Doorkeeper({
-      store,
-      chain: doorChainFor({
-        jobs,
-        readJob: (id) => { reads++; return readJob(reading(), id); },
-        readSeats: (id) => readSeats(reading(), id),
-        readTerms: (id) => readTerms(reading(), id),
-        latestBlockTime: async () => (await anvil.publicClient.getBlock()).timestamp,
-      }),
-    });
+    const counting = new Doorkeeper({ store, chain: doorChainOn(anvil, jobs, { jobRead: () => reads++ }) });
     const list = new JobList({ keeper: counting, store });
     await list.handle();
     const once = reads;
@@ -233,13 +199,7 @@ describe.skipIf(!available)("the job list, as an outside agent reads it", () => 
 
   test("a knock from a key nobody has seen is not a read of the chain each time", async () => {
     let seatReads = 0;
-    const chain = doorChainFor({
-      jobs,
-      readJob: (id) => readJob(reading(), id),
-      readSeats: (id) => { seatReads++; return readSeats(reading(), id); },
-      readTerms: (id) => readTerms(reading(), id),
-      latestBlockTime: async () => (await anvil.publicClient.getBlock()).timestamp,
-    });
+    const chain = doorChainOn(anvil, jobs, { seatsRead: () => seatReads++ });
     const keeper = new Doorkeeper({ store, chain });
     const job = await keeper.job("a-coat-given-the-rain");
     if (!job.ok) throw new Error(job.why);

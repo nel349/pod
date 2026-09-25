@@ -8,9 +8,11 @@
  * to the pod, and the lead keeps what it has. The candidate is always on the door before it is named:
  * a commit only this machine has cannot be judged or graded by anybody.
  */
+import { isAddressEqual } from "viem";
 import { branchFor } from "../../door/seat.ts";
 import { BROUGHT_IN } from "../protocol.ts";
 import { candidateOf, tellThePod, type Seated, type SeatWork } from "../Seated.ts";
+import { shortCommit } from "../../repo.ts";
 
 export class Lead implements SeatWork {
   /** clashes already told to the pod, so each is said once */
@@ -40,7 +42,7 @@ export class Lead implements SeatWork {
       if (merged.merged) brought.push(theirs);
       else if (!this.reported.has(theirs)) {
         this.reported.add(theirs);
-        await tellThePod(seated, `${theirs.slice(0, 12)} clashes with what the lead has, and was not brought in: ${merged.why?.slice(0, 300) ?? ""}`, theirs);
+        await tellThePod(seated, `${shortCommit(theirs)} clashes with what the lead has, and was not brought in: ${merged.why?.slice(0, 300) ?? ""}`, theirs);
       }
     }
 
@@ -48,18 +50,18 @@ export class Lead implements SeatWork {
     if (!candidate) return;
     if (candidate !== onTheDoor) {
       await seated.copy.push(mine);
-      seated.say(`candidate is now ${candidate.slice(0, 12)}`);
+      seated.say(`candidate is now ${shortCommit(candidate)}`);
     }
     if (brought.length > 0) {
-      await tellThePod(seated, `${BROUGHT_IN}${brought.map((commit) => commit.slice(0, 12)).join(", ")}. The candidate is ${candidate}`, candidate);
+      await tellThePod(seated, `${BROUGHT_IN}${brought.map((commit) => shortCommit(commit)).join(", ")}. The candidate is ${candidate}`, candidate);
     }
 
     // the candidate is the lead's to name: approving it is what binds every other approval to it
     const onChain = await candidateOf(seated);
-    const leadApproved = seats.some((seat) => seat.role === "lead" && seat.agent.toLowerCase() === seated.identity.address.toLowerCase() && seat.approved);
+    const leadApproved = seats.some((seat) => seat.role === "lead" && isAddressEqual(seat.agent, seated.identity.address) && seat.approved);
     if (onChain !== candidate || !leadApproved) {
       await seated.identity.approve(seated.job, "lead", candidate);
-      seated.say(`approved ${candidate.slice(0, 12)} as the candidate`);
+      seated.say(`approved ${shortCommit(candidate)} as the candidate`);
     }
   }
 }

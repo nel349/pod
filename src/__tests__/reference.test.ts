@@ -14,10 +14,12 @@ import { bytes32ToCommit } from "../repo.ts";
 import { record, registerAgent } from "../registry.ts";
 import { IMAGE } from "../sandbox.ts";
 import { anvilAvailable } from "./support/anvil.ts";
-import { COAT_IDEA, dockerAvailable, DRY, good, serverSaying, WET, WORKING } from "./support/coat.ts";
-import { aPod, aPodServer, VALIDATOR, type Agent, type RunningPodServer } from "./support/podServer.ts";
+import { COAT_IDEA, DRY, good, serverSaying, WET, WORKING } from "./support/coat.ts";
+import { aPod, aPodServer, VALIDATOR, type RunningPodServer } from "./support/podServer.ts";
 import { tokenOfJob } from "../token.ts";
 import { Worker } from "../worker/index.ts";
+import { SEATS } from "../seal.ts";
+import { dockerAvailable } from "./support/tools.ts";
 
 /**
  * A whole pod of reference agents, through the public doors only, against a real chain, from a
@@ -83,10 +85,15 @@ describe.skipIf(!available)("a pod of reference agents", () => {
     const models: Partial<Record<Role, Model>> = { builder: builder.model, reviewer: reviewer.model, security: security.model };
 
     // each agent's own identity, registered with its own key, which is what lets it ask for its record
-    const identities = {} as Record<Role, bigint>;
-    for (const [role, agent] of Object.entries(pod) as [Role, Agent][]) {
-      identities[role] = (await registerAgent({ publicClient: pod$.anvil.publicClient, wallet: pod$.anvil.wallet(agent.key) }, pod$.registries)).agentId;
+    const identities = new Map<Role, bigint>();
+    for (const role of SEATS) {
+      identities.set(role, (await registerAgent({ publicClient: pod$.anvil.publicClient, wallet: pod$.anvil.wallet(pod[role].key) }, pod$.registries)).agentId);
     }
+    const identityOf = (role: Role): bigint => {
+      const agentId = identities.get(role);
+      if (agentId === undefined) throw new Error(`the ${role} has no identity`);
+      return agentId;
+    };
 
     // the worker runs beside the pod from the start, as it will beside a server: nobody tells it when
     const said: string[] = [];
@@ -103,16 +110,16 @@ describe.skipIf(!available)("a pod of reference agents", () => {
 
     // and the agents run until their job is over, which they see for themselves on the chain
     const outOfTime = AbortSignal.timeout(360_000);
-    const agents: Promise<Finished>[] = (Object.entries(pod) as [Role, Agent][]).map(([role, agent]) => runReferenceAgent({
-      server: pod$.base, key: agent.key, role, model: models[role], image: IMAGE, every: 250, signal: outOfTime,
-      agentId: identities[role], say: (what) => said.push(what),
+    const agents: Promise<Finished>[] = SEATS.map((role) => runReferenceAgent({
+      server: pod$.base, key: pod[role].key, role, model: models[role], image: IMAGE, every: 250, signal: outOfTime,
+      agentId: identityOf(role), say: (what) => said.push(what),
     }));
     const runner = privateKeyToAccount(VALIDATOR).address;
     // what the test waits for is every end the worker is responsible for: a title, main, and each record
     const everyRecord = async (): Promise<boolean> => {
       if ((await tokenOfJob({ address: pod$.token, publicClient: pod$.anvil.publicClient }, pod$.onChainId)) === 0n) return false;
-      for (const role of Object.keys(pod) as Role[]) {
-        if ((await record(pod$.anvil.publicClient, identities[role], `pod.${role}`, [runner], pod$.registries)).count === 0) return false;
+      for (const role of SEATS) {
+        if ((await record(pod$.anvil.publicClient, identityOf(role), `pod.${role}`, [runner], pod$.registries)).count === 0) return false;
       }
       return true;
     };
@@ -142,8 +149,8 @@ describe.skipIf(!available)("a pod of reference agents", () => {
 
     // every seat is held by its own key, and the pod was paid
     const seats = await readSeats(pod$.reading, pod$.onChainId);
-    for (const [role, agent] of Object.entries(pod) as [Role, Agent][]) {
-      expect(seats.find((seat) => seat.role === role)?.agent).toBe(agent.address);
+    for (const role of SEATS) {
+      expect(seats.find((seat) => seat.role === role)?.agent).toBe(pod[role].address);
     }
     expect(await pod$.anvil.publicClient.getBalance({ address: pod.builder.address })).toBeGreaterThan(builderBefore);
 
@@ -166,8 +173,8 @@ describe.skipIf(!available)("a pod of reference agents", () => {
       .toEqual([branchFor("builder", pod.builder.address), branchFor("lead", pod.lead.address), "main"].sort());
 
     // and each agent's record in ERC-8004 has this job, passed, under its own role
-    for (const role of Object.keys(pod) as Role[]) {
-      expect(await record(pod$.anvil.publicClient, identities[role], `pod.${role}`, [runner], pod$.registries)).toEqual({ count: 1, average: 100 });
+    for (const role of SEATS) {
+      expect(await record(pod$.anvil.publicClient, identityOf(role), `pod.${role}`, [runner], pod$.registries)).toEqual({ count: 1, average: 100 });
     }
   }, 480_000);
 });

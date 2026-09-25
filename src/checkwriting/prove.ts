@@ -12,7 +12,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { grade, type CheckToRun } from "../blackbox.ts";
-import { PORT, START } from "../job.ts";
+import { PORT, START, WORK_FILE } from "../job.ts";
 import { readableToTheBox } from "../sandbox.ts";
 import { firstLine } from "../errors.ts";
 import { textFromTheBox } from "./fromTheBox.ts";
@@ -68,13 +68,13 @@ export async function prove(
 ): Promise<ReadonlyMap<string, Tried>> {
   const nothing = await mkdtemp(join(tmpdir(), "pod-nothing-"));
   try {
-    await writeFile(join(nothing, "server.js"), NOTHING_BUILT);
+    await writeFile(join(nothing, WORK_FILE), NOTHING_BUILT);
     await readableToTheBox(nothing);
 
     const workingOnce = await tryAgainst(versions.working, checks, toRun, image);
     const workingTwice = await tryAgainst(versions.working, checks, toRun, image);
     const none = await tryAgainst(nothing, checks, toRun, image);
-    const workingSource = await textFromTheBox(join(versions.working, "server.js"));
+    const workingSource = await textFromTheBox(join(versions.working, WORK_FILE));
 
     const tried = new Map<string, Tried>();
     for (const check of toRun) {
@@ -106,7 +106,7 @@ async function tryNearMiss(
   workingSource: string | undefined, checks: string, image: string,
 ): Promise<Outcome> {
   if (!directory) return notTried("there was no near miss to try it against");
-  const nearMissSource = await textFromTheBox(join(directory, "server.js"));
+  const nearMissSource = await textFromTheBox(join(directory, WORK_FILE));
   if (nearMissSource === undefined) return notTried("the near miss could not be read");
   if (nearMissSource === workingSource) return notTried("the near miss is the working version, unchanged");
 

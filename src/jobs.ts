@@ -10,6 +10,7 @@
  */
 import { parseAbi, type Address, type Hex, type PublicClient, type WalletClient } from "viem";
 import type { Role } from "./job.ts";
+import { SEATS } from "./seal.ts";
 
 export const podJobsAbi = parseAbi([
   "function post(bytes32 seal, uint64 endsAt, uint8 reviewers) payable returns (uint256)",
@@ -46,7 +47,6 @@ export const podJobsAbi = parseAbi([
 
 /** The contract's enum order, named once so nothing else has to know it. */
 const ROLE_NUMBER: Record<Role, number> = { lead: 0, builder: 1, reviewer: 2, qa: 3, security: 4 };
-const ROLES = Object.keys(ROLE_NUMBER) as readonly Role[];
 
 export function roleNumber(role: Role): number {
   return ROLE_NUMBER[role];
@@ -93,7 +93,7 @@ export interface HeldSeat {
  * The contract keeps a row per role, and only the reviewer row can hold more than one.
  */
 export async function readSeats(at: Omit<Contract, "wallet">, jobId: bigint): Promise<readonly HeldSeat[]> {
-  const rows = await Promise.all(ROLES.map(async (role) => {
+  const rows = await Promise.all(SEATS.map(async (role) => {
     const count = await at.publicClient.readContract({
       address: at.address, abi: podJobsAbi, functionName: "seatCount", args: [jobId, roleNumber(role)],
     });
@@ -158,7 +158,7 @@ export async function readApprovals(
     // newest first, so each seat is found at its latest approval
     for (const log of [...logs].reverse()) {
       if (log.args.commitHash.toLowerCase() !== commit.toLowerCase()) continue;
-      const role = ROLES.find((named) => roleNumber(named) === log.args.role);
+      const role = SEATS.find((named) => roleNumber(named) === log.args.role);
       if (!role || !wanted.has(key(role, log.args.agent)) || found.has(key(role, log.args.agent))) continue;
       const block = await at.publicClient.getBlock({ blockHash: log.blockHash });
       found.set(key(role, log.args.agent), { role, agent: log.args.agent, commit: log.args.commitHash, at: block.timestamp });
@@ -172,7 +172,7 @@ export async function readApprovals(
 
 /** What each seat on a job pays and costs to take, read from the contract rather than worked out here. */
 export async function readTerms(at: Omit<Contract, "wallet">, jobId: bigint): Promise<Readonly<Record<Role, { readonly pay: bigint; readonly deposit: bigint }>>> {
-  const terms = await Promise.all(ROLES.map(async (role) => {
+  const terms = await Promise.all(SEATS.map(async (role) => {
     const [pay, deposit] = await Promise.all([seatPay(at, jobId, role), seatDeposit(at, jobId, role)]);
     return [role, { pay, deposit }] as const;
   }));

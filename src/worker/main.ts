@@ -10,7 +10,7 @@
  */
 import { join } from "node:path";
 import { isHex } from "viem";
-import { REPOSITORIES_FOLDER, WORKER_FOLDER } from "../folders.ts";
+import { JOBS_FOLDER_SETTING, REPOSITORIES_FOLDER, WORKER_FOLDER } from "../folders.ts";
 import { live } from "../live.ts";
 import { MONAD_REGISTRIES } from "../registry.ts";
 import { IMAGE } from "../sandbox.ts";
@@ -18,8 +18,8 @@ import { JobStore } from "../store.ts";
 import { holdTheLock } from "./lock.ts";
 import { Worker } from "./Worker.ts";
 
-const directory = process.env.POD_JOBS;
-if (!directory) throw new Error("POD_JOBS has to name the folder the server serves jobs from");
+const directory = process.env[JOBS_FOLDER_SETTING];
+if (!directory) throw new Error(`${JOBS_FOLDER_SETTING} has to name the folder the server serves jobs from`);
 const key = process.env.POD_VALIDATOR_KEY;
 if (!key || !isHex(key)) throw new Error("POD_VALIDATOR_KEY is not set. It is the key verdicts are signed and settled with");
 // live() checks the key against the validator the contracts were deployed with, and says so if not

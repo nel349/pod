@@ -4,6 +4,7 @@ import { gradeJob, undeclaredCalls } from "../pipeline.ts";
 import { verifyReceipt } from "../receipt.ts";
 import type { CheckToRun } from "../blackbox.ts";
 import { checkout } from "./support/checkout.ts";
+import { dockerAvailable } from "./support/tools.ts";
 
 const IMAGE = "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944";
 const ARTEFACT = new URL("../../fixtures/app-honest", import.meta.url).pathname;
@@ -33,15 +34,9 @@ describe("spotting a call nobody declared", () => {
   });
 });
 
-const dockerAvailable = await (async () => {
-  try {
-    return (await Bun.spawn(["docker", "info"], { stdout: "ignore", stderr: "ignore" }).exited) === 0;
-  } catch {
-    return false;
-  }
-})();
+const withDocker = await dockerAvailable();
 
-describe.skipIf(!dockerAvailable)("a job, graded end to end", () => {
+describe.skipIf(!withDocker)("a job, graded end to end", () => {
   test("work that holds up is passed, signed, and scored 100", async () => {
     const report = await gradeJob({
       seal: SEAL, commit: "c0ffee1", artefact: ARTEFACT, start: "node server.js",

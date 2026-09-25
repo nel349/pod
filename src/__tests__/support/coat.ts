@@ -72,11 +72,3 @@ export function replyingInTurn(...replies: readonly unknown[]): {
 }
 
 export const writerWith = (model: Model): CheckWriter => ({ model, image: IMAGE, agents: AGENTS });
-
-export async function dockerAvailable(): Promise<boolean> {
-  try {
-    return (await Bun.spawn(["docker", "info"], { stdout: "ignore", stderr: "ignore" }).exited) === 0;
-  } catch {
-    return false;
-  }
-}

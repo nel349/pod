@@ -12,6 +12,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { neededOnCI } from "./tools.ts";
 
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const LINUX_CHROME = ["/usr/bin/google-chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium"];
@@ -28,7 +29,7 @@ async function chromePath(): Promise<string | undefined> {
 }
 
 export async function browserAvailable(): Promise<boolean> {
-  return (await chromePath()) !== undefined;
+  return neededOnCI("Chrome", (await chromePath()) !== undefined);
 }
 
 interface Waiting {

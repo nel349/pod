@@ -16,12 +16,13 @@
  */
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { isAddressEqual, type Address, type Hex } from "viem";
+import { isAddressEqual, zeroHash, type Address, type Hex } from "viem";
 import { z } from "zod";
-import { firstLine } from "../errors.ts";
+import { errorCode, firstLine } from "../errors.ts";
 import { MOST_BLOCKS_A_LOG_READ_COVERS, readJob, readSeats, type Contract, type HeldSeat } from "../jobs.ts";
 import { agentWalletOf, ownerOfAgent, validationAbi, verdictOnChain, writeVerdict, type Registries } from "../registry.ts";
 import { isWallName, receiptPath, ROUTES } from "../routes.ts";
+import type { SignedReceipt } from "../receipt.ts";
 import type { JobRecord, JobStore } from "../store.ts";
 import { registryResponse, registryTag } from "../verdict.ts";
 
@@ -30,7 +31,6 @@ export const MOST_READS_A_LOOK = 50;
 /** How many requests are held at once. Asking is free, so this is what stops a flood of asks from filling the worker */
 export const MOST_HELD = 500;
 
-const NOTHING = /^0x0{64}$/i;
 const STATE = "registry.json";
 
 const RequestSchema = z.object({
@@ -59,6 +59,7 @@ export interface RegistryAnswersOptions {
 }
 
 type Outcome = "answered" | "held" | "ignored";
+type Settled = { readonly is: "yes"; readonly signed: SignedReceipt } | { readonly is: "not yet" } | { readonly is: "never" };
 
 export class RegistryAnswers {
   constructor(private readonly options: RegistryAnswersOptions) {}
@@ -108,18 +109,19 @@ export class RegistryAnswers {
       return "ignored";
     }
     const record = await store.read(jobId);
-    if (!record?.chain || !isAddressEqual(record.chain.jobs as Address, jobs.address)) {
+    if (!record?.chain || !isAddressEqual(record.chain.jobs, jobs.address)) {
       say(`agent #${request.agentId} asked about ${jobId}, which is not a job on this contract`);
       return "ignored";
     }
-    if (!NOTHING.test((await verdictOnChain(jobs.publicClient, request.key, registries)).responseHash)) return "ignored";
+    if ((await verdictOnChain(jobs.publicClient, request.key, registries)).responseHash !== zeroHash) return "ignored";
     const onChainId = BigInt(record.chain.jobId);
     const settled = await this.settledAsGraded(record, onChainId);
-    if (settled === "not yet") return "held";
-    if (settled === "never") {
+    if (settled.is === "not yet") return "held";
+    if (settled.is === "never") {
       say(`agent #${request.agentId} asked about ${jobId}, whose verdict was never settled, so nothing is recorded`);
       return "ignored";
     }
+    const { signed } = settled;
 
     const agentId = BigInt(request.agentId);
     const seat = await this.seatOf(agentId, await readSeats(jobs, onChainId));
@@ -136,11 +138,10 @@ export class RegistryAnswers {
     // the seat is written down before the answer is sent: a worker stopped between the two answers
     // this same request again, and no other
     if (!already) await this.remember(jobId, { role: seat.role, agent: seat.agent, agentId: request.agentId, key: request.key });
-    const signed = record.signed!;
     const verdict = { kind: signed.receipt.verdict };
     const answered = await this.options.onTheChain(async () => {
       // read again inside the queue: another look may have answered it while this one waited
-      if (!NOTHING.test((await verdictOnChain(jobs.publicClient, request.key, registries)).responseHash)) return false;
+      if ((await verdictOnChain(jobs.publicClient, request.key, registries)).responseHash !== zeroHash) return false;
       await writeVerdict({ publicClient: jobs.publicClient, wallet: jobs.wallet }, {
         key: request.key,
         score: registryResponse(verdict),
@@ -159,16 +160,15 @@ export class RegistryAnswers {
    * worker, runs that disagreed left to end. "never" when it ended some other way, such as a verdict
    * that came too late and the poster taking the money back.
    */
-  private async settledAsGraded(record: JobRecord, onChainId: bigint): Promise<"yes" | "not yet" | "never"> {
-    if (!record.signed || record.tile.verdict === "running") {
-      return (await readJob(this.options.jobs, onChainId)).state === "working" ? "not yet" : "never";
-    }
+  private async settledAsGraded(record: JobRecord, onChainId: bigint): Promise<Settled> {
     const state = (await readJob(this.options.jobs, onChainId)).state;
-    if (state === "working" || state === "open") return "not yet";
-    const verdict = record.signed.receipt.verdict;
-    if (verdict === "passed") return state === "settled" ? "yes" : "never";
-    if (verdict === "failed") return state === "refunded" && record.chain?.settled !== undefined ? "yes" : "never";
-    return "yes";
+    const signed = record.signed;
+    if (!signed || record.tile.verdict === "running") return { is: state === "working" ? "not yet" : "never" };
+    if (state === "working" || state === "open") return { is: "not yet" };
+    const verdict = signed.receipt.verdict;
+    if (verdict === "passed") return state === "settled" ? { is: "yes", signed } : { is: "never" };
+    if (verdict === "failed") return state === "refunded" && record.chain?.settled !== undefined ? { is: "yes", signed } : { is: "never" };
+    return { is: "yes", signed };
   }
 
   /** The seat an identity held, if it is that seat's own key: as the identity's owner, or as the wallet it acts with. */
@@ -198,7 +198,7 @@ export class RegistryAnswers {
     try {
       text = await readFile(join(this.options.stateFolder, STATE), "utf8");
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      if (errorCode(error) !== "ENOENT") throw error;
       return { readTo: (latest > 0n ? latest - 1n : 0n).toString(), holding: [] };
     }
     const parsed = StateSchema.safeParse(JSON.parse(text));

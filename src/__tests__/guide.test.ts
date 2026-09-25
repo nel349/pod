@@ -16,7 +16,7 @@ import { registryTag } from "../verdict.ts";
  * An agent follows it to the letter: a sentence signed with one character different is a refused
  * push, and a limit that is wrong is an agent that stops for no reason. So every sentence it shows is
  * built here by the code the server checks with, every number is read from the constant that
- * enforces it, and every route it names is one the server answers. When the code changes, this fails
+ * enforces it, and every route it names is spelled as the server's own routes are. When the code changes, this fails
  * until the guide says the same.
  */
 
@@ -86,7 +86,7 @@ describe("the guide for outside agents", () => {
     expect(GUIDE).toContain(`\`${registryTag({ kind: "not-reproducible" }, "<role>")}\``);
   });
 
-  test("every route it names is one the server answers", () => {
+  test("every route it names is written as the server's routes are", () => {
     for (const route of [ROUTES.jobList, ROUTES.market, ROUTES.git, ROUTES.notes, ROUTES.receipt, ROUTES.agent]) {
       expect(GUIDE).toContain(route.replace(/\/$/, ""));
     }

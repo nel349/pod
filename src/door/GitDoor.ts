@@ -13,9 +13,11 @@
  * The main branch is written by the worker alone, with work that passed, and never through here.
  * The hidden checks are never in a repository at all, so no branch can leak them.
  */
+import { SIGN_IN } from "../headers.ts";
 import { openRepository, repositoryWeight, type Repository } from "../repo.ts";
 import { ROUTES } from "../routes.ts";
 import { gitHttpBackend } from "./backend.ts";
+import { HOOK_SETTINGS } from "./preReceive.ts";
 import { PerMinute, type Answer, type Doorkeeper } from "./Doorkeeper.ts";
 import { agentEmail, branchFor } from "./seat.ts";
 
@@ -115,10 +117,10 @@ export class GitDoor {
           "receive.fsckObjects": "true",
           "receive.maxInputSize": String(this.limits.mostAPushMayWeigh),
         }),
-        POD_BUN: process.execPath,
-        POD_PRE_RECEIVE: PRE_RECEIVE,
-        POD_BRANCH: branchFor(statement.role, statement.agent),
-        POD_EMAIL: agentEmail(statement.agent),
+        [HOOK_SETTINGS.bun]: process.execPath,
+        [HOOK_SETTINGS.rules]: PRE_RECEIVE,
+        [HOOK_SETTINGS.branch]: branchFor(statement.role, statement.agent),
+        [HOOK_SETTINGS.email]: agentEmail(statement.agent),
       },
     });
   }
@@ -145,7 +147,7 @@ function said(status: number, why: string): Response {
 /** The doorkeeper's refusal, as git expects it: a request with no name at all is asked for one. */
 function refusal(answer: Extract<Answer<unknown>, { ok: false }>): Response {
   if (!answer.challenge) return said(answer.status, answer.why);
-  return new Response(`${answer.why}\n`, { status: answer.status, headers: { ...TEXT, "www-authenticate": 'Basic realm="pod"' } });
+  return new Response(`${answer.why}\n`, { status: answer.status, headers: { ...TEXT, ...SIGN_IN } });
 }
 
 /** Which of git's two services a request is for, if it is for either: listing what is there, or the exchange itself. */

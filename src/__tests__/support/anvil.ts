@@ -5,8 +5,9 @@
  * is not Monad, so nothing Monad-specific is proven against it — only the contract's own rules and
  * the code that talks to them.
  */
-import { createPublicClient, createWalletClient, defineChain, http, type Address, type Hex, type PublicClient, type WalletClient } from "viem";
+import { createPublicClient, createWalletClient, defineChain, http, parseEther, type Address, type Hex, type PublicClient, type WalletClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { neededOnCI } from "./tools.ts";
 
 /** Anvil's published test keys. Public knowledge, worthless, and the reason they are safe to name. */
 export const ANVIL_KEYS = [
@@ -20,11 +21,13 @@ export const ANVIL_KEYS = [
 ] as const;
 
 export async function anvilAvailable(): Promise<boolean> {
+  let isHere = false;
   try {
-    return (await Bun.spawn(["anvil", "--version"], { stdout: "ignore", stderr: "ignore" }).exited) === 0;
+    isHere = (await Bun.spawn(["anvil", "--version"], { stdout: "ignore", stderr: "ignore" }).exited) === 0;
   } catch {
-    return false;
+    isHere = false;
   }
+  return neededOnCI("anvil", isHere);
 }
 
 export interface Anvil {
@@ -33,6 +36,8 @@ export interface Anvil {
   readonly publicClient: PublicClient;
   wallet(key: Hex): WalletClient;
   deploy(artefact: string, args: readonly unknown[], by?: Hex): Promise<Address>;
+  /** Send a key something to spend, from the first of anvil's own keys */
+  fund(to: Address, value?: bigint): Promise<void>;
   stop(): void;
 }
 
@@ -73,6 +78,10 @@ export async function startAnvil(): Promise<Anvil> {
         abi: built.abi, bytecode: built.bytecode.object as Hex, args,
       } as Parameters<typeof deployer.deployContract>[0]);
       return (await publicClient.waitForTransactionReceipt({ hash })).contractAddress!;
+    },
+    async fund(to, value = parseEther("10")) {
+      const payer = privateKeyToAccount(ANVIL_KEYS[0]);
+      await publicClient.waitForTransactionReceipt({ hash: await wallet(ANVIL_KEYS[0]).sendTransaction({ to, value, account: payer, chain }) });
     },
     stop: () => node.kill(),
   };

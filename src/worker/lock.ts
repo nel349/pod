@@ -6,6 +6,7 @@
  */
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { errorCode } from "../errors.ts";
 
 const LOCK = "lock";
 
@@ -19,7 +20,7 @@ export async function holdTheLock(folder: string): Promise<Held> {
   try {
     await writeFile(path, String(process.pid), { flag: "wx" });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    if (errorCode(error) !== "EEXIST") throw error;
     const holder = Number((await readFile(path, "utf8")).trim());
     if (Number.isInteger(holder) && holder > 0 && isAlive(holder)) {
       throw new Error(`another worker is running (process ${holder}); only one may, or jobs are graded twice`);
@@ -36,6 +37,6 @@ function isAlive(pid: number): boolean {
     return true;
   } catch (error) {
     // EPERM: it is alive, and somebody else's
-    return (error as NodeJS.ErrnoException).code === "EPERM";
+    return errorCode(error) === "EPERM";
   }
 }

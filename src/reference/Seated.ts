@@ -1,6 +1,7 @@
 /**
  * What a reference agent has once it holds a seat, and the few things every seat reads the same way.
  */
+import { zeroHash } from "viem";
 import type { Model } from "../broker.ts";
 import { plainDashes } from "../checkwriting/fromTheBox.ts";
 import type { ListedJob } from "../door/index.ts";
@@ -32,12 +33,10 @@ export interface SeatWork {
   step(): Promise<void>;
 }
 
-const NO_COMMIT = /^0x0{64}$/i;
-
 /** The pod's candidate: the commit the contract's approvals are bound to, or nothing until the lead names one. */
 export async function candidateOf(seated: Seated): Promise<string | undefined> {
   const onChain = await seated.identity.readJob(seated.job);
-  return NO_COMMIT.test(onChain.commit) ? undefined : bytes32ToCommit(onChain.commit);
+  return onChain.commit === zeroHash ? undefined : bytes32ToCommit(onChain.commit);
 }
 
 /** The lead's branch, which is where every candidate is. */

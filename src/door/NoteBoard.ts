@@ -10,35 +10,21 @@
  *   read    the pod while the job runs, with the same signed statement the git door takes; anybody
  *           once the job has a verdict, when it is published with the rest of the job
  */
-import { isAddress, isHex, recoverMessageAddress, type Address } from "viem";
-import { z } from "zod";
+import { isAddressEqual, recoverMessageAddress, type Address } from "viem";
 import { bodyWithin, tooLarge } from "../body.ts";
+import { NO_STORE, SIGN_IN } from "../headers.ts";
 import { noteMessage } from "../messages.ts";
+import { LONGEST_NOTE, NoteSchema, type Note } from "../note.ts";
 import { ROUTES } from "../routes.ts";
-import { SEATS } from "../seal.ts";
-import { checksArePublished, type JobStore, type Note } from "../store.ts";
+import { checksArePublished, type JobStore } from "../store.ts";
 import { PerMinute, type Answer, type Doorkeeper } from "./Doorkeeper.ts";
+import { secondsNow } from "../clock.ts";
 
-/** A note is a paragraph or a few, not a document */
-export const LONGEST_NOTE = 4000;
 /** A request carrying a note, with room for the note, its signature and its field names */
 const MOST_A_NOTE_MAY_WEIGH = LONGEST_NOTE * 4 + 2000;
 export const NOTES_A_SEAT_MAY_WRITE_A_MINUTE = 20;
 /** How far a note's time may be from ours. A clock a little off is normal; a note from yesterday is not */
 export const NOTE_CLOCK_SLACK_SECONDS = 5 * 60;
-
-const COMMIT = /^[0-9a-f]{40}$|^[0-9a-f]{64}$/;
-
-/** A note as it arrives, from anybody. Nothing in it is trusted until the signature and the chain agree */
-export const NoteSchema = z.object({
-  agent: z.string().refine((agent): agent is Address => isAddress(agent), "the agent is the address of the key that holds the seat"),
-  role: z.enum(SEATS),
-  about: z.string().regex(COMMIT, "a note is about a commit, named by its full id, or about the job, with no commit at all").optional(),
-  // checked, never changed: the signature is over the note exactly as it was sent
-  says: z.string().max(LONGEST_NOTE, `a note is at most ${LONGEST_NOTE} characters`).refine((says) => says.trim() !== "", "a note says something"),
-  at: z.number().int().positive().max(Number.MAX_SAFE_INTEGER, "a note's time is in seconds since 1970"),
-  signature: z.string().refine((signature): signature is `0x${string}` => isHex(signature), "the signature is hex"),
-}).strict();
 
 export class NoteBoard {
   private readonly written = new PerMinute(NOTES_A_SEAT_MAY_WRITE_A_MINUTE);
@@ -55,7 +41,7 @@ export class NoteBoard {
         const admitted = await keeper.admit(request, job.value);
         if (!admitted.ok) return refusal(admitted);
       }
-      return Response.json({ notes: await this.options.store.notes(job.value.jobId) }, { headers: { "cache-control": "no-store" } });
+      return Response.json({ notes: await this.options.store.notes(job.value.jobId) }, { headers: NO_STORE });
     }
     if (request.method !== "POST") return Response.json({ why: "notes are read with GET and written with POST" }, { status: 405 });
 
@@ -72,7 +58,7 @@ export class NoteBoard {
     const note: Note = parsed.data;
     const { jobId, onChainId } = job.value;
 
-    const now = Math.floor(Date.now() / 1000);
+    const now = secondsNow();
     // said without turning the time into a date: a time far enough off is no date at all
     if (Math.abs(note.at - now) > NOTE_CLOCK_SLACK_SECONDS) {
       return Response.json({ why: `that note says it was written ${note.at} seconds after 1970, which is not now` }, { status: 400 });
@@ -86,7 +72,7 @@ export class NoteBoard {
     } catch {
       return Response.json({ why: "that signature could not be read" }, { status: 401 });
     }
-    if (signer.toLowerCase() !== note.agent.toLowerCase()) {
+    if (!isAddressEqual(signer, note.agent)) {
       return Response.json({ why: "that signature is not from the agent the note names, over this note" }, { status: 401 });
     }
     const notSeated = await keeper.notSeated(note.agent, parsed.data.role, onChainId);
@@ -111,6 +97,6 @@ export class NoteBoard {
 function refusal(answer: Extract<Answer<unknown>, { ok: false }>): Response {
   return Response.json({ why: answer.why }, {
     status: answer.status,
-    headers: answer.challenge ? { "www-authenticate": 'Basic realm="pod"' } : {},
+    headers: answer.challenge ? SIGN_IN : {},
   });
 }

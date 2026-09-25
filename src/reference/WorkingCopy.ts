@@ -9,6 +9,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { PLAIN_GIT } from "../plainGit.ts";
 
 export interface Committer {
   readonly name: string;
@@ -156,9 +157,7 @@ export class WorkingCopy {
     return {
       PATH: process.env.PATH ?? "/usr/bin:/bin",
       HOME: this.path,
-      GIT_CONFIG_GLOBAL: "/dev/null",
-      GIT_CONFIG_SYSTEM: "/dev/null",
-      GIT_TERMINAL_PROMPT: "0",
+      ...PLAIN_GIT,
       GIT_AUTHOR_NAME: this.who.name, GIT_AUTHOR_EMAIL: this.who.email,
       GIT_COMMITTER_NAME: this.who.name, GIT_COMMITTER_EMAIL: this.who.email,
     };

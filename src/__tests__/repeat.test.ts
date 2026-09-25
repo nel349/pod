@@ -10,6 +10,7 @@ import { serve } from "../server.ts";
 import { JobStore } from "../store.ts";
 import { jobPath } from "../routes.ts";
 import type { CheckToRun } from "../blackbox.ts";
+import { dockerAvailable } from "./support/tools.ts";
 
 /**
  * A stranger, checking a verdict they had no part in.
@@ -30,13 +31,7 @@ const toRun: CheckToRun[] = [
   { says: "a weak excuse scores lower", command: "node weak.mjs", hidden: true },
 ];
 
-const dockerAvailable = await (async () => {
-  try {
-    return (await Bun.spawn(["docker", "info"], { stdout: "ignore", stderr: "ignore" }).exited) === 0;
-  } catch {
-    return false;
-  }
-})();
+const withDocker = await dockerAvailable();
 
 const servers: { stop: () => void }[] = [];
 afterAll(() => { for (const server of servers) server.stop(); });
@@ -68,7 +63,7 @@ describe("a job URL is all a stranger needs", () => {
   });
 });
 
-describe.skipIf(!dockerAvailable)("repeating a verdict somebody else published", () => {
+describe.skipIf(!withDocker)("repeating a verdict somebody else published", () => {
   test("the same code reaches the same answer, and the signature holds", async () => {
     const { jobURL } = await publishedJob();
 

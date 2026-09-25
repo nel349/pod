@@ -7,7 +7,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { Browser, browserAvailable } from "./support/browser.ts";
 import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
 import { walletInThePage } from "./support/wallet.ts";
-import { COAT_IDEA, DRY, GOOD_REPLY, WET, dockerAvailable, replying, writerWith } from "./support/coat.ts";
+import { COAT_IDEA, DRY, GOOD_REPLY, WET, replying, writerWith } from "./support/coat.ts";
 import { serve, type Market } from "../server.ts";
 import { JobStore } from "../store.ts";
 import { readerFor } from "../posting.ts";
@@ -15,6 +15,7 @@ import { readJob } from "../jobs.ts";
 import { CheckWriting, ProvenChecks } from "../checkwriting/index.ts";
 import { checkFilePath, checksPath, jobPath, ROUTES } from "../routes.ts";
 import { COPY } from "../web/post/state/index.ts";
+import { dockerAvailable } from "./support/tools.ts";
 
 /**
  * A stranger posts a job, from a browser, with their own wallet, without writing a line of code.

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readdir } from "node:fs/promises";
+import { neededOnCI } from "./support/tools.ts";
 
 /**
  * Every test file is run by CI.
@@ -19,5 +20,18 @@ describe("continuous integration", () => {
     const files = (await readdir(TESTS)).filter((name) => /\.test\.tsx?$/.test(name)).sort();
     const notRun = files.filter((name) => !workflow.includes(`src/__tests__/${name}`));
     expect(notRun).toEqual([]);
+  });
+
+  test("a test whose tool is missing on CI fails there, rather than skipping and passing", () => {
+    const was = process.env.CI;
+    try {
+      process.env.CI = "true";
+      expect(() => neededOnCI("anvil", false)).toThrow("anvil is not on this CI machine");
+      expect(neededOnCI("anvil", true)).toBe(true);
+      process.env.CI = "";
+      expect(neededOnCI("anvil", false)).toBe(false);
+    } finally {
+      process.env.CI = was;
+    }
   });
 });

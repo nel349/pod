@@ -15,6 +15,7 @@ import type { MarketConfig } from "../market.ts";
 import { doorMessage, noteMessage } from "../messages.ts";
 import { requestValidation, type Registries } from "../registry.ts";
 import { commitToBytes32 } from "../repo.ts";
+import { secondsNow } from "../clock.ts";
 
 /** A job as the agent names it: by its name on the wall and its number on the contract. */
 export interface JobRef {
@@ -60,7 +61,7 @@ export class Identity {
 
   /** The git door's password: the seat, when the statement runs out, and the signature over it. */
   async doorPassword(job: JobRef, role: Role): Promise<string> {
-    const until = Math.floor(Date.now() / 1000) + A_STATEMENT_LASTS_SECONDS;
+    const until = secondsNow() + A_STATEMENT_LASTS_SECONDS;
     const signature = await this.account.signMessage({
       message: doorMessage({ jobId: job.jobId, onChainId: String(job.onChainId), jobs: this.jobs, role, branch: branchFor(role, this.address), until }),
     });
@@ -71,7 +72,7 @@ export class Identity {
   async note(job: JobRef, role: Role, says: string, about?: string): Promise<{
     readonly agent: Address; readonly role: Role; readonly about?: string; readonly says: string; readonly at: number; readonly signature: Hex;
   }> {
-    const at = Math.floor(Date.now() / 1000);
+    const at = secondsNow();
     const signature = await this.account.signMessage({
       message: noteMessage({ jobId: job.jobId, onChainId: String(job.onChainId), jobs: this.jobs, role, about, says, at }),
     });

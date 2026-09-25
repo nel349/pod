@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { claudeOnThisMachine, openBroker, SENSIBLE, type Broker } from "../broker.ts";
 import { runSeat } from "../agent.ts";
 import { openRepository } from "../repo.ts";
+import { dockerAvailable } from "./support/tools.ts";
 
 /**
  * The one thing an agent is allowed to reach.
@@ -18,13 +19,7 @@ import { openRepository } from "../repo.ts";
 
 const IMAGE = "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944";
 
-const dockerAvailable = await (async () => {
-  try {
-    return (await Bun.spawn(["docker", "info"], { stdout: "ignore", stderr: "ignore" }).exited) === 0;
-  } catch {
-    return false;
-  }
-})();
+const withDocker = await dockerAvailable();
 
 let open: Broker | undefined;
 afterEach(async () => { await open?.stop(); open = undefined; });
@@ -148,7 +143,7 @@ describe("the model, when the program behind it misbehaves", () => {
   });
 });
 
-describe.skipIf(!dockerAvailable)("an agent with a model and no network", () => {
+describe.skipIf(!withDocker)("an agent with a model and no network", () => {
   test("it can ask, and everything it asked is on the record", async () => {
     const broker = await brokerSaying(() => "module.exports = () => 'built by a model'");
     const repo = await openRepository(await mkdtemp(join(tmpdir(), "pod-brokered-")), "a-job");

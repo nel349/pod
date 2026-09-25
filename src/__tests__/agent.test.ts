@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { runInBox, runPod, runSeat } from "../agent.ts";
 import { history, openRepository, type Repository } from "../repo.ts";
 import { writableByTheBox } from "../sandbox.ts";
+import { dockerAvailable } from "./support/tools.ts";
 
 /**
  * A seat, worked by an agent.
@@ -20,13 +21,7 @@ import { writableByTheBox } from "../sandbox.ts";
 const IMAGE = "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944";
 const BRIEF = "A page that tells me whether to take a coat";
 
-const dockerAvailable = await (async () => {
-  try {
-    return (await Bun.spawn(["docker", "info"], { stdout: "ignore", stderr: "ignore" }).exited) === 0;
-  } catch {
-    return false;
-  }
-})();
+const withDocker = await dockerAvailable();
 
 async function aRepository(): Promise<Repository> {
   return openRepository(await mkdtemp(join(tmpdir(), "pod-agents-")), "a-weather-page");
@@ -50,7 +45,7 @@ const readsAndApproves = `node -e '
   }));
 '`;
 
-describe.skipIf(!dockerAvailable)("a seat, worked by an agent", () => {
+describe.skipIf(!withDocker)("a seat, worked by an agent", () => {
   test("what the agent leaves becomes a commit, under its own name", async () => {
     const repo = await aRepository();
     const outcome = await runSeat({
@@ -168,7 +163,7 @@ describe.skipIf(!dockerAvailable)("a seat, worked by an agent", () => {
   }, 240_000);
 });
 
-describe.skipIf(!dockerAvailable)("the workspace, once the agent stops", () => {
+describe.skipIf(!withDocker)("the workspace, once the agent stops", () => {
   /**
    * The box runs as root, so on Linux everything an agent makes is root's. The server has to be able
    * to read what it left and delete the rest, including a folder the agent shut on purpose.
@@ -225,7 +220,7 @@ describe.skipIf(!dockerAvailable)("the workspace, once the agent stops", () => {
   }, 120_000);
 });
 
-describe.skipIf(!dockerAvailable)("the pod, working", () => {
+describe.skipIf(!withDocker)("the pod, working", () => {
   /**
    * A builder that gets it wrong the first time and right the second, by reading what it was
    * refused for — which is exactly the story the product claims, and the one a fixture cannot fake.

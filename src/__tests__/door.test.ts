@@ -3,16 +3,18 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseEther, recoverMessageAddress, type Address, type Hex } from "viem";
-import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { agentEmail, branchFor, doorChainFor, Doorkeeper, GitDoor, LONGEST_NOTE, MOST_A_REPOSITORY_MAY_WEIGH, NoteBoard, NOTES_A_SEAT_MAY_WRITE_A_MINUTE, PUSHES_A_SEAT_MAY_MAKE_A_MINUTE } from "../door/index.ts";
+import { privateKeyToAccount } from "viem/accounts";
+import { agentEmail, branchFor, Doorkeeper, GitDoor, LONGEST_NOTE, MOST_A_REPOSITORY_MAY_WEIGH, NoteBoard, NOTES_A_SEAT_MAY_WRITE_A_MINUTE, PUSHES_A_SEAT_MAY_MAKE_A_MINUTE } from "../door/index.ts";
 import type { Role, Spec } from "../job.ts";
-import { post, readJob, readSeats, readTerms, takeSeat } from "../jobs.ts";
+import { post, readJob, takeSeat } from "../jobs.ts";
 import { doorMessage, noteMessage } from "../messages.ts";
+import { PLAIN_GIT } from "../plainGit.ts";
 import { openJob } from "../publish.ts";
 import { gitPath, notesPath } from "../routes.ts";
 import { serve } from "../server.ts";
 import { JobStore } from "../store.ts";
 import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
+import { anAgent, doorChainOn, type Agent } from "./support/podServer.ts";
 
 /**
  * The doors an agent uses, the git door and the notes, against a real chain, git with a real git client.
@@ -41,16 +43,6 @@ const TIGHT = { mostAPushMayWeigh: 64 * 1024, pushesASeatMayMakeAMinute: 3, most
 let tightBase = "";
 let tightServer: { stop: () => void } | undefined;
 
-interface Agent {
-  readonly key: Hex;
-  readonly address: Address;
-}
-
-function anAgent(): Agent {
-  const key = generatePrivateKey();
-  return { key, address: privateKeyToAccount(key).address };
-}
-
 const lead = anAgent();
 const builder = anAgent();
 const stranger = anAgent();
@@ -60,13 +52,6 @@ const elsewhere = anAgent();
 /** the two jobs, by the name on the wall and the number on the contract */
 const FIRST = { jobId: "a-coat-given-the-rain", onChainId: 0n };
 const SECOND = { jobId: "an-umbrella-given-the-wind", onChainId: 0n };
-
-async function fund(to: Address): Promise<void> {
-  const payer = anvil.wallet(ANVIL_KEYS[0]);
-  await anvil.publicClient.waitForTransactionReceipt({
-    hash: await payer.sendTransaction({ to, value: parseEther("10"), account: payer.account!, chain: payer.chain }),
-  });
-}
 
 const contractAs = (key: Hex) => ({ address: jobs, publicClient: anvil.publicClient, wallet: anvil.wallet(key) });
 
@@ -87,24 +72,14 @@ beforeAll(async () => {
   if (!available) return;
   anvil = await startAnvil();
   jobs = await anvil.deploy("PodJobs", [privateKeyToAccount(ANVIL_KEYS[6]).address]);
-  for (const agent of [lead, builder, stranger, elsewhere]) await fund(agent.address);
+  for (const agent of [lead, builder, stranger, elsewhere]) await anvil.fund(agent.address);
 
   store = new JobStore(await mkdtemp(join(tmpdir(), "pod-door-jobs-")));
   repositories = await mkdtemp(join(tmpdir(), "pod-door-repositories-"));
   FIRST.onChainId = await aPostedJob(FIRST.jobId, [["lead", lead], ["builder", builder]]);
   SECOND.onChainId = await aPostedJob(SECOND.jobId, [["builder", elsewhere]]);
 
-  const contract = { address: jobs, publicClient: anvil.publicClient };
-  const keeper = new Doorkeeper({
-    store,
-    chain: doorChainFor({
-      jobs,
-      readJob: (id) => readJob(contract, id),
-      readSeats: (id) => readSeats(contract, id),
-      readTerms: (id) => readTerms(contract, id),
-      latestBlockTime: async () => (await anvil.publicClient.getBlock()).timestamp,
-    }),
-  });
+  const keeper = new Doorkeeper({ store, chain: doorChainOn(anvil, jobs) });
   const door = new GitDoor({ repositories, keeper, limits: LIMITS });
   const serving = serve(store, 0, { door, notes: new NoteBoard({ keeper, store }) });
   server = serving;
@@ -149,9 +124,7 @@ async function git(cwd: string, args: readonly string[], who?: { readonly author
     env: {
       PATH: process.env.PATH ?? "/usr/bin:/bin",
       HOME: cwd,
-      GIT_CONFIG_GLOBAL: "/dev/null",
-      GIT_CONFIG_SYSTEM: "/dev/null",
-      GIT_TERMINAL_PROMPT: "0",
+      ...PLAIN_GIT,
       ...(who ? {
         GIT_AUTHOR_NAME: "an agent", GIT_AUTHOR_EMAIL: who.author,
         GIT_COMMITTER_NAME: "an agent", GIT_COMMITTER_EMAIL: who.committer ?? who.author,

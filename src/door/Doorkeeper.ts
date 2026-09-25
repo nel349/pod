@@ -5,12 +5,13 @@
  * contract says the key holds, and a job's window is the one the contract measures by the chain's
  * own clock. The doors differ in what they let a seat do once it is in, not in who a seat is.
  */
-import type { Address } from "viem";
+import { isAddressEqual, type Address } from "viem";
 import type { HeldSeat, JobState } from "../jobs.ts";
 import type { Role } from "../job.ts";
 import { isWallName } from "../routes.ts";
 import type { JobRecord, JobStore } from "../store.ts";
 import { statementFrom, statementHolds, type Statement } from "./credentials.ts";
+import { secondsNow } from "../clock.ts";
 
 /** What the doors ask the chain. The contract is the only list of who sits in a pod, and the only clock for its window */
 export interface DoorChain {
@@ -71,7 +72,7 @@ export class Doorkeeper {
     if (!isWallName(jobId)) return refused(404, "there is no job at that address");
     const record = await this.options.store.read(jobId);
     if (!record?.chain) return refused(404, `there is no job called ${jobId} with money on the chain`);
-    if (record.chain.jobs.toLowerCase() !== this.jobs.toLowerCase()) {
+    if (!isAddressEqual(record.chain.jobs, this.jobs)) {
       return refused(404, `${jobId} is on another contract than the one this door answers to`);
     }
     return { ok: true, value: { jobId, onChainId: BigInt(record.chain.jobId), record } };
@@ -82,7 +83,7 @@ export class Doorkeeper {
     const read = statementFrom(request.headers.get("authorization"));
     if (!read.ok) return refused(401, read.why, true);
     const about = { jobId: job.jobId, onChainId: String(job.onChainId), jobs: this.jobs };
-    const held = await statementHolds(read.value, about, Math.floor(Date.now() / 1000));
+    const held = await statementHolds(read.value, about, secondsNow());
     if (!held.ok) return refused(403, held.why);
     const notSeated = await this.notSeated(held.value.agent, held.value.role, job.onChainId);
     if (notSeated) return refused(403, notSeated);
@@ -91,7 +92,7 @@ export class Doorkeeper {
 
   /** Why this key cannot act as this seat on this job, or nothing if it holds it. */
   async notSeated(agent: Address, role: Role, onChainId: bigint): Promise<string | undefined> {
-    const mine = (await this.options.chain.seats(onChainId)).filter((seat) => seat.agent.toLowerCase() === agent.toLowerCase());
+    const mine = (await this.options.chain.seats(onChainId)).filter((seat) => isAddressEqual(seat.agent, agent));
     if (mine.some((seat) => seat.role === role)) return undefined;
     if (mine.length > 0) return `that key holds the ${mine.map((seat) => seat.role).join(" and ")} seat on job ${onChainId}, not the ${role} seat`;
     return `that key holds no seat on job ${onChainId}. Take one on the contract first`;

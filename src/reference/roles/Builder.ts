@@ -6,12 +6,11 @@
  * owner's model forever. What it writes is only ever read as text and committed; it never runs it.
  */
 import { branchFor } from "../../door/seat.ts";
-import { PORT } from "../../job.ts";
+import { PORT, WORK_FILE } from "../../job.ts";
 import { JUDGES, MOST_REBUILDS, REFUSED } from "../protocol.ts";
 import { briefFor, candidateOf, leadBranchOf, passwordFor, type Seated, type SeatWork } from "../Seated.ts";
+import { shortCommit } from "../../repo.ts";
 
-/** The one file the work is, and the one the box starts */
-const SERVER = "server.js";
 
 export class Builder implements SeatWork {
   /** the commit this builder last pushed, whose refusals it answers */
@@ -61,10 +60,10 @@ export class Builder implements SeatWork {
     if (!seated.model) throw new Error("a builder needs a model to write the work with");
     const mine = branchFor("builder", seated.identity.address);
     await seated.copy.reset(await seated.copy.fetch(mine));
-    const existing = await seated.copy.read(SERVER);
+    const existing = await seated.copy.read(WORK_FILE);
 
     const answer = await seated.model([
-      "You are the builder on a small team. Write the whole of server.js and nothing else.",
+      `You are the builder on a small team. Write the whole of ${WORK_FILE} and nothing else.`,
       `It is a Node program using only the standard library. It must listen on port ${PORT}, on every interface,`,
       "not only localhost: it is reached from another machine on a private network.",
       "Reply with one fenced code block and no explanation.",
@@ -75,12 +74,12 @@ export class Builder implements SeatWork {
       ...(refusals.length > 0 ? ["", "## Why the last version was refused, which this one must fix", ...refusals.map((why) => `- ${why}`)] : []),
     ].join("\n"), AbortSignal.timeout(MODEL_MAY_TAKE_MS));
 
-    await seated.copy.write({ [SERVER]: codeIn(answer) });
+    await seated.copy.write({ [WORK_FILE]: codeIn(answer) });
     const commit = await seated.copy.commit(refusals.length === 0 ? "Build it from the brief" : `Answer the refusal: ${refusals[0]}`.slice(0, 200));
     if (!commit) throw new Error("the builder has nothing to push");
     await seated.copy.push(mine);
     this.latest = commit;
-    seated.say(`pushed ${commit.slice(0, 12)} to ${mine}${refusals.length > 0 ? `, answering ${refusals.length} refusal(s)` : ""}`);
+    seated.say(`pushed ${shortCommit(commit)} to ${mine}${refusals.length > 0 ? `, answering ${refusals.length} refusal(s)` : ""}`);
   }
 }
 

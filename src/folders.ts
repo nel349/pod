@@ -1,3 +1,6 @@
+/** The setting that names the jobs folder, which the server serves and the worker grades */
+export const JOBS_FOLDER_SETTING = "POD_JOBS";
+
 /**
  * What lives beside the jobs, inside the jobs folder, and is not a job.
  *

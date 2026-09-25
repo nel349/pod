@@ -17,9 +17,10 @@ import { JobStore } from "../store.ts";
 import { podTokenAbi, tokenOfJob } from "../token.ts";
 import { Worker } from "../worker/index.ts";
 import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
-import { COAT_IDEA, dockerAvailable, DRY, good, serverSaying, WET, WORKING } from "./support/coat.ts";
+import { COAT_IDEA, DRY, good, serverSaying, WET, WORKING } from "./support/coat.ts";
 import { aPod, anAgent, type Agent } from "./support/podServer.ts";
 import { deployRegistries } from "./support/registries.ts";
+import { dockerAvailable } from "./support/tools.ts";
 
 /**
  * The worker, against a real chain, a real token and real grading.
@@ -125,13 +126,6 @@ interface MadeJob {
   readonly commit: string;
 }
 
-async function fundAgent(agent: Agent): Promise<void> {
-  const payer = anvil.wallet(ANVIL_KEYS[0]);
-  await anvil.publicClient.waitForTransactionReceipt({
-    hash: await payer.sendTransaction({ to: agent.address, value: parseEther("10"), account: payer.account!, chain: payer.chain }),
-  });
-}
-
 async function mine(blocks: number): Promise<void> {
   await anvil.publicClient.request({ method: "anvil_mine" as never, params: [toHex(blocks)] as never });
 }
@@ -151,7 +145,7 @@ interface JobShape {
  */
 async function aJob(jobId: string, work: string, approving: readonly Role[], shape: JobShape = {}): Promise<MadeJob> {
   const pod = aPod();
-  for (const agent of Object.values(pod)) await fundAgent(agent);
+  for (const agent of Object.values(pod)) await anvil.fund(agent.address);
   const now = (await anvil.publicClient.getBlock()).timestamp;
   const seal = await sealSpec(SPEC);
   const onChainId = await post(contractAs(POSTER), { seal, endsAt: now + 3600n, reviewers: 1, price: PRICE });
@@ -160,7 +154,8 @@ async function aJob(jobId: string, work: string, approving: readonly Role[], sha
     "check-1.mjs": good(0).check, "check-2.mjs": good(1).check,
   });
   await store.saveSpec(jobId, SPEC);
-  for (const [role, agent] of Object.entries(pod) as [Role, Agent][]) {
+  for (const role of SEATS) {
+    const agent = pod[role];
     await takeSeat(contractAs(agent.key), onChainId, role, shape.owners?.[role] ?? agent.address);
   }
 
@@ -287,7 +282,7 @@ describe.skipIf(!available)("the worker", () => {
     const builderId = await anIdentity(job.pod.builder);
     const reviewerId = await anIdentity(job.pod.reviewer);
     const stranger = anAgent();
-    await fundAgent(stranger);
+    await anvil.fund(stranger.address);
     const strangerId = await anIdentity(stranger);
 
     // the builder asks before there is a verdict; it is held, and answered once the job is settled
@@ -336,7 +331,7 @@ describe.skipIf(!available)("the worker", () => {
 
   test("somebody a seat names as its owner is not the seat: only the key that held it has its verdict recorded", async () => {
     const friend = anAgent();
-    await fundAgent(friend);
+    await anvil.fund(friend.address);
     const job = await aJob("a-coat-with-a-friend", WORKING, SEATS, { owners: { builder: friend.address } });
     const friendId = await anIdentity(friend);
     const said: string[] = [];

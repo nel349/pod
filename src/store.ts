@@ -16,6 +16,7 @@ import type { Tile } from "./gallery.ts";
 import type { Approval } from "./jobpage.ts";
 import type { SignedReceipt } from "./receipt.ts";
 import type { Spec } from "./job.ts";
+import { NoteSchema, type Note } from "./note.ts";
 import { isSafeName } from "./routes.ts";
 import { specFromTheWire, SpecOnTheWireSchema, specToTheWire } from "./specWire.ts";
 
@@ -34,22 +35,7 @@ export interface Brief {
   readonly seats: readonly { readonly role: string; readonly taken: boolean }[];
 }
 
-/**
- * What one seat said to its pod, signed with its seat key: the review comments of this world.
- *
- * The signature is over the sentence `noteMessage` builds from the rest, so anybody can check who
- * said it without asking us, for as long as the job is published.
- */
-export interface Note {
-  readonly agent: Address;
-  readonly role: string;
-  /** the commit it is about, or nothing when it is about the job as a whole */
-  readonly about?: string;
-  readonly says: string;
-  /** seconds since 1970, as the seat signed it */
-  readonly at: number;
-  readonly signature: Hex;
-}
+export type { Note } from "./note.ts";
 
 export interface CheckSaid {
   readonly says: string;
@@ -68,7 +54,7 @@ export interface OnChain {
   readonly network: "monad-testnet";
   /** the job's number in the contract */
   readonly jobId: string;
-  readonly jobs: string;
+  readonly jobs: Address;
   readonly settled?: string;
   readonly minted?: string;
   readonly tokenId?: string;
@@ -304,8 +290,8 @@ export class JobStore {
     } catch {
       return [];
     }
-    // written only by addNote, after the door that took each one checked every field of it
-    return text.split("\n").filter(Boolean).map((line) => JSON.parse(line) as Note);
+    // written only by addNote, after the door checked every field; read through the same shape all the same
+    return text.split("\n").filter(Boolean).map((line) => NoteSchema.parse(JSON.parse(line)));
   }
 
   /** Every job an agent sat on, whichever seat it held. */

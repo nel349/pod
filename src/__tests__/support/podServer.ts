@@ -5,14 +5,15 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseEther, type Address, type Hex, type PublicClient } from "viem";
+import { type Address, type Hex, type PublicClient } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { CheckWriting, ProvenChecks } from "../../checkwriting/index.ts";
-import { doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard } from "../../door/index.ts";
+import { doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard, type DoorChain } from "../../door/index.ts";
 import { sealSpec, type Role, type Spec } from "../../job.ts";
 import { policyMet, post, readJob, readSeats, readTerms } from "../../jobs.ts";
 import { openJob } from "../../publish.ts";
 import type { Registries } from "../../registry.ts";
+import { PLAIN_GIT } from "../../plainGit.ts";
 import { bytes32ToCommit } from "../../repo.ts";
 import { serve } from "../../server.ts";
 import { JobStore } from "../../store.ts";
@@ -31,6 +32,20 @@ export interface Agent {
 export function anAgent(): Agent {
   const key = generatePrivateKey();
   return { key, address: privateKeyToAccount(key).address };
+}
+
+/**
+ * The chain as the doors read it, on a local chain. A test that counts the reads says what to count.
+ */
+export function doorChainOn(anvil: Anvil, jobs: Address, counting: { readonly jobRead?: () => void; readonly seatsRead?: () => void } = {}): DoorChain {
+  const reading = { address: jobs, publicClient: anvil.publicClient };
+  return doorChainFor({
+    jobs,
+    readJob: (id) => { counting.jobRead?.(); return readJob(reading, id); },
+    readSeats: (id) => { counting.seatsRead?.(); return readSeats(reading, id); },
+    readTerms: (id) => readTerms(reading, id),
+    latestBlockTime: async () => (await anvil.publicClient.getBlock()).timestamp,
+  });
 }
 
 /** Five fresh keys, one per seat. */
@@ -66,12 +81,7 @@ export async function aPodServer(input: {
   const jobs = await anvil.deploy("PodJobs", [privateKeyToAccount(VALIDATOR).address]);
   const token = await anvil.deploy("PodToken", [privateKeyToAccount(VALIDATOR).address]);
   const registries = await deployRegistries(anvil);
-  const payer = anvil.wallet(ANVIL_KEYS[0]);
-  for (const agent of input.fund) {
-    await anvil.publicClient.waitForTransactionReceipt({
-      hash: await payer.sendTransaction({ to: agent.address, value: parseEther("10"), account: payer.account!, chain: payer.chain }),
-    });
-  }
+  for (const agent of input.fund) await anvil.fund(agent.address);
   const store = new JobStore(await mkdtemp(join(tmpdir(), "pod-jobs-")));
   const repositories = await mkdtemp(join(tmpdir(), "pod-repositories-"));
   const reading = { address: jobs, publicClient: anvil.publicClient };
@@ -84,16 +94,7 @@ export async function aPodServer(input: {
   await store.save({ ...opened, chain: { network: "monad-testnet", jobId: String(onChainId), jobs } }, input.files);
   await store.saveSpec(input.jobId, input.spec);
 
-  const keeper = new Doorkeeper({
-    store,
-    chain: doorChainFor({
-      jobs,
-      readJob: (id) => readJob(reading, id),
-      readSeats: (id) => readSeats(reading, id),
-      readTerms: (id) => readTerms(reading, id),
-      latestBlockTime: async () => (await anvil.publicClient.getBlock()).timestamp,
-    }),
-  });
+  const keeper = new Doorkeeper({ store, chain: doorChainOn(anvil, jobs) });
   const proven = new ProvenChecks(await mkdtemp(join(tmpdir(), "pod-proven-")));
   const server = serve(store, 0, {
     // the market is here for what agents read first: which chain, which contract
@@ -113,7 +114,7 @@ export async function aPodServer(input: {
     base: `http://127.0.0.1:${server.port}`,
     async git(args) {
       const child = Bun.spawn(["git", "--git-dir", join(repositories, `${input.jobId}.git`), ...args], {
-        stdout: "pipe", stderr: "pipe", env: { PATH: process.env.PATH ?? "/usr/bin:/bin", GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" },
+        stdout: "pipe", stderr: "pipe", env: { PATH: process.env.PATH ?? "/usr/bin:/bin", ...PLAIN_GIT },
       });
       const [out, code] = await Promise.all([new Response(child.stdout).text(), child.exited]);
       if (code !== 0) throw new Error(`git ${args.join(" ")} failed: ${await new Response(child.stderr).text()}`);

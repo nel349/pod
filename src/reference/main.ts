@@ -16,7 +16,7 @@ import { parseArgs } from "node:util";
 import { isAddress, isHex } from "viem";
 import { claudeOnThisMachine } from "../broker.ts";
 import { SEATS } from "../seal.ts";
-import { runReferenceAgent } from "./ReferenceAgent.ts";
+import { NEEDS_A_MODEL, runReferenceAgent } from "./ReferenceAgent.ts";
 
 const { values } = parseArgs({
   options: {
@@ -49,7 +49,7 @@ const finished = await runReferenceAgent({
   ...(values.job ? { jobId: values.job } : {}),
   ...(every ? { every } : {}),
   ...(values.identity ? { agentId: BigInt(values.identity) } : {}),
-  ...(role === "lead" || role === "qa" ? {} : { model: claudeOnThisMachine() }),
+  ...(NEEDS_A_MODEL.includes(role) ? { model: claudeOnThisMachine() } : {}),
   signal: stop.signal,
 });
 console.log(`[${role}] done${finished.jobId ? ` with ${finished.jobId}` : ""}: ${finished.why}`);
