@@ -63,6 +63,9 @@ export async function runReferenceAgent(options: ReferenceAgentOptions): Promise
   const every = options.every ?? LOOK_EVERY_MS;
   const server = new PodServer(options.server);
   const identity = new Identity(options.key, await server.market(), options.owner);
+  // a server with no credit door credits nobody, and says so with a 404
+  const credit = await server.creditOf(identity.address);
+  if (credit) say(`writes its commits in the name of ${credit.login} on GitHub, which its owner linked`);
 
   const taken = await takeASeat(server, identity, options, say, every);
   if (!taken) return { why: "stopped before a seat was free" };
@@ -71,7 +74,10 @@ export async function runReferenceAgent(options: ReferenceAgentOptions): Promise
 
   const copy = await WorkingCopy.open(
     async () => server.gitDoor(job, identity.address, await identity.doorPassword(job, options.role)),
-    { name: `${options.role} ${identity.address.slice(0, 10)}`, email: agentEmail(identity.address) },
+    {
+      name: `${options.role} ${identity.address.slice(0, 10)}`, email: agentEmail(identity.address),
+      ...(credit ? { writtenAs: { name: credit.login, email: credit.email } } : {}),
+    },
   );
   const seated: Seated = {
     job, role: options.role, listed: taken, identity, server, copy,

@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { type Address, type Hex, type PublicClient } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { CheckWriting, ProvenChecks } from "../../checkwriting/index.ts";
-import { doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard, type DoorChain } from "../../door/index.ts";
+import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard, type DoorChain } from "../../door/index.ts";
 import { sealSpec, type Role, type Spec } from "../../job.ts";
 import { policyMet, post, readJob, readSeats, readTerms } from "../../jobs.ts";
 import { openJob } from "../../publish.ts";
@@ -65,6 +65,8 @@ export interface RunningPodServer {
   readonly base: string;
   readonly onChainId: bigint;
   readonly reading: { readonly address: Address; readonly publicClient: PublicClient };
+  /** which GitHub account each agent's work is credited to, as the doors read it */
+  readonly credit: CreditBook;
   /** git, run against the job's bare repository on the server's own disk */
   git(args: readonly string[]): Promise<string>;
   stop(): void;
@@ -95,6 +97,7 @@ export async function aPodServer(input: {
   await store.saveSpec(input.jobId, input.spec);
 
   const keeper = new Doorkeeper({ store, chain: doorChainOn(anvil, jobs) });
+  const credit = new CreditBook(await mkdtemp(join(tmpdir(), "pod-credit-")));
   const proven = new ProvenChecks(await mkdtemp(join(tmpdir(), "pod-proven-")));
   const server = serve(store, 0, {
     // the market is here for what agents read first: which chain, which contract
@@ -104,13 +107,14 @@ export async function aPodServer(input: {
       writing: new CheckWriting({ writer: writerWith(replying(GOOD_REPLY).model), proven }),
       proven,
     },
-    door: new GitDoor({ repositories, keeper }),
+    door: new GitDoor({ repositories, keeper, credit }),
     notes: new NoteBoard({ keeper, store }),
     jobList: new JobList({ keeper, store }),
+    credit: new CreditDoor({ book: credit }),
   });
 
   return {
-    anvil, jobs, token, registries, store, repositories, reading, onChainId,
+    anvil, jobs, token, registries, store, repositories, reading, onChainId, credit,
     base: `http://127.0.0.1:${server.port}`,
     async git(args) {
       const child = Bun.spawn(["git", "--git-dir", join(repositories, `${input.jobId}.git`), ...args], {

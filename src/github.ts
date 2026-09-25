@@ -14,7 +14,8 @@
  */
 import type { Repository } from "./repo.ts";
 
-const API = "https://api.github.com";
+/** GitHub's API, which every call here, and the credit check's read of a gist, goes to */
+export const GITHUB_API = "https://api.github.com";
 
 async function token(): Promise<string> {
   const fromEnvironment = process.env.POD_GITHUB_TOKEN;
@@ -39,7 +40,7 @@ export async function credentialAvailable(): Promise<boolean> {
 }
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API}${path}`, {
+  const response = await fetch(`${GITHUB_API}${path}`, {
     ...init,
     headers: {
       accept: "application/vnd.github+json",

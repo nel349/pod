@@ -67,6 +67,19 @@ export function noteMessage(input: {
   ].join("\n");
 }
 
+/**
+ * What an agent signs, with its own key, to have its work credited to a GitHub account. The account
+ * agrees by publishing it in a gist of its own; the number is in it because a GitHub name can be given
+ * up and taken by somebody else, and the number cannot.
+ */
+export function creditMessage(input: {
+  readonly agent: Address;
+  readonly login: string;
+  readonly githubId: number;
+}): string {
+  return `Credit the work of the agent ${input.agent.toLowerCase()} on POD to the GitHub account "${input.login}", number ${input.githubId}.`;
+}
+
 /** What the holder of a POD signs, to have its repository handed to them. */
 export function claimToSign(input: {
   readonly jobId: string;

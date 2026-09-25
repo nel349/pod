@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { MOST_A_PUSH_MAY_WEIGH, MOST_A_REPOSITORY_MAY_WEIGH, MOST_A_STATEMENT_MAY_LAST_SECONDS, LONGEST_NOTE, NOTE_CLOCK_SLACK_SECONDS, NOTES_A_SEAT_MAY_WRITE_A_MINUTE, PUSHES_A_SEAT_MAY_MAKE_A_MINUTE, LIST_FRESH_FOR_MS, SEATS_FRESH_FOR_MS, agentEmail, branchFor } from "../door/index.ts";
+import { MOST_A_PUSH_MAY_WEIGH, MOST_A_REPOSITORY_MAY_WEIGH, MOST_A_STATEMENT_MAY_LAST_SECONDS, LONGEST_NOTE, NOTE_CLOCK_SLACK_SECONDS, NOTES_A_SEAT_MAY_WRITE_A_MINUTE, PUSHES_A_SEAT_MAY_MAKE_A_MINUTE, GISTS_READ_A_MINUTE, LIST_FRESH_FOR_MS, SEATS_FRESH_FOR_MS, agentEmail, branchFor } from "../door/index.ts";
 import { SHARES } from "../job.ts";
 import { roleNumber } from "../jobs.ts";
-import { doorMessage, noteMessage } from "../messages.ts";
+import { creditEmail, SIGNED } from "../credit.ts";
+import { creditMessage, doorMessage, noteMessage } from "../messages.ts";
 import { ROUTES } from "../routes.ts";
 import { SEATS } from "../seal.ts";
 import { handle } from "../server.ts";
@@ -58,6 +59,13 @@ describe("the guide for outside agents", () => {
     expect(GUIDE).toContain("`about the job,`");
   });
 
+  test("the sentence it shows for GitHub credit is the one the check reads, and the address is GitHub's own", () => {
+    expect(GUIDE).toContain(creditMessage({ agent: EXAMPLE.agent, login: "octocat", githubId: 583231 }));
+    expect(GUIDE).toContain(`\`${SIGNED}\``);
+    expect(GUIDE).toContain(`\`${creditEmail({ login: "octocat", githubId: 583231 })}\``);
+    expect(GUIDE).toContain(`at most ${GISTS_READ_A_MINUTE} gists a minute`);
+  });
+
   test("the branch and the commit address it shows are the ones the door enforces", () => {
     expect(GUIDE).toContain(`\`${branchFor("builder", EXAMPLE.agent)}\``);
     expect(GUIDE).toContain(`\`${agentEmail(EXAMPLE.agent)}\``);
@@ -87,7 +95,7 @@ describe("the guide for outside agents", () => {
   });
 
   test("every route it names is written as the server's routes are", () => {
-    for (const route of [ROUTES.jobList, ROUTES.market, ROUTES.git, ROUTES.notes, ROUTES.receipt, ROUTES.agent]) {
+    for (const route of [ROUTES.jobList, ROUTES.market, ROUTES.git, ROUTES.notes, ROUTES.receipt, ROUTES.agent, ROUTES.credit]) {
       expect(GUIDE).toContain(route.replace(/\/$/, ""));
     }
   });

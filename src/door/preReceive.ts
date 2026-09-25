@@ -8,7 +8,9 @@
  *   only their own branch      one branch per seat, and every other one is somebody else's
  *   nothing deleted            the attempts that failed stay in the record
  *   nothing rewritten          a push only adds to what is already there
- *   only their own commits     every new commit is written, and committed, as the seat that pushes it
+ *   only their own commits     every new commit is committed as the seat that pushes it, and written
+ *                              as the seat or as the GitHub account its owner linked (11G), which is
+ *                              also the only one a co-author line may name
  *
  * The door hands it the seat's branch and address in the settings named below.
  */
@@ -20,6 +22,8 @@ export const HOOK_SETTINGS = {
   rules: "POD_PRE_RECEIVE",
   branch: "POD_BRANCH",
   email: "POD_EMAIL",
+  /** the GitHub address the seat's owner linked, or nothing */
+  credit: "POD_CREDIT",
 } as const;
 export interface Update {
   readonly old: string;
@@ -30,13 +34,24 @@ export interface Update {
 export interface Pusher {
   readonly branch: string;
   readonly email: string;
+  /** the GitHub address the seat's work is credited to, if its owner linked one */
+  readonly credit?: string;
+}
+
+/** One commit a push brings, as the rules read it */
+export interface Arriving {
+  readonly commit: string;
+  readonly author: string;
+  readonly committer: string;
+  /** each co-author line, as written: a name and an address in angle brackets */
+  readonly coAuthors: readonly string[];
 }
 
 /** What this needs to know about the commits, which the hook asks git and a test can answer itself. */
 export interface Commits {
   isAncestor(older: string, newer: string): Promise<boolean>;
   /** the commits a push brings that no branch here has yet, with who wrote and who committed each */
-  arriving(tip: string): Promise<readonly { readonly commit: string; readonly author: string; readonly committer: string }[]>;
+  arriving(tip: string): Promise<readonly Arriving[]>;
 }
 
 const NOTHING = /^0+$/;
@@ -60,13 +75,21 @@ export async function refusalFor(updates: readonly Update[], pusher: Pusher, com
     if (!NOTHING.test(update.old) && !(await commits.isAncestor(update.old, update.new))) {
       return `history is never rewritten here: that push would drop commits already on ${pusher.branch}`;
     }
+    const mayName = pusher.credit ? [pusher.email, pusher.credit.toLowerCase()] : [pusher.email];
+    const asWho = pusher.credit ? `${pusher.email}, or as ${pusher.credit}, the GitHub account this seat's owner linked` : pusher.email;
     for (const arriving of await commits.arriving(update.new)) {
       const short = shortCommit(arriving.commit);
-      if (arriving.author.toLowerCase() !== pusher.email) {
-        return `${short} says it was written by ${arriving.author}, and commits pushed from this seat are written as ${pusher.email}`;
+      if (!mayName.includes(arriving.author.toLowerCase())) {
+        return `${short} says it was written by ${arriving.author}, and commits pushed from this seat are written as ${asWho}`;
       }
       if (arriving.committer.toLowerCase() !== pusher.email) {
         return `${short} says it was committed by ${arriving.committer}, and commits pushed from this seat are committed as ${pusher.email}`;
+      }
+      for (const line of arriving.coAuthors) {
+        const named = /<([^<>]+)>\s*$/.exec(line)?.[1]?.toLowerCase();
+        if (!named || !mayName.includes(named)) {
+          return `${short} names "${line}" as a co-author, and commits pushed from this seat may name only ${asWho}`;
+        }
       }
     }
   }
@@ -80,13 +103,15 @@ const gitCommits: Commits = {
   },
   async arriving(tip) {
     // everything reachable from the new tip that no branch here reaches yet: exactly what this push adds
-    // separated by a NUL, which no address can hold: a space would let "<me me>" pass as "me"
-    const listing = Bun.spawn(["git", "log", "--format=%H%x00%ae%x00%ce", tip, "--not", "--branches"], { stdout: "pipe", stderr: "pipe" });
+    // separated by a NUL, which no address can hold: a space would let "<me me>" pass as "me". Each
+    // commit ends with a record separator, and its co-author lines are joined by a unit separator
+    const format = "%H%x00%ae%x00%ce%x00%(trailers:key=Co-authored-by,valueonly,unfold,separator=%x1f)%x1e";
+    const listing = Bun.spawn(["git", "log", `--format=${format}`, tip, "--not", "--branches"], { stdout: "pipe", stderr: "pipe" });
     const [out, code] = await Promise.all([new Response(listing.stdout).text(), listing.exited]);
     if (code !== 0) throw new Error(`git could not list the commits in that push: ${await new Response(listing.stderr).text()}`);
-    return out.split("\n").filter(Boolean).map((line) => {
-      const [commit = "", author = "", committer = ""] = line.split("\0");
-      return { commit, author, committer };
+    return out.split("\x1e").map((record) => record.trim()).filter(Boolean).map((record) => {
+      const [commit = "", author = "", committer = "", coAuthors = ""] = record.split("\0");
+      return { commit, author, committer, coAuthors: coAuthors.split("\x1f").map((line) => line.trim()).filter(Boolean) };
     });
   },
 };
@@ -94,13 +119,14 @@ const gitCommits: Commits = {
 if (import.meta.main) {
   const branch = process.env[HOOK_SETTINGS.branch];
   const email = process.env[HOOK_SETTINGS.email];
+  const credit = process.env[HOOK_SETTINGS.credit];
   if (!branch || !email) {
     console.error("pod: this push came in without a seat, so nothing was changed");
     process.exit(1);
   }
   let refused: string | undefined;
   try {
-    refused = await refusalFor(updatesFrom(await Bun.stdin.text()), { branch, email }, gitCommits);
+    refused = await refusalFor(updatesFrom(await Bun.stdin.text()), { branch, email, ...(credit ? { credit } : {}) }, gitCommits);
   } catch {
     // what went wrong is the server's to know; the agent is told only that nothing moved
     refused = "the push could not be checked, so nothing was changed. Push again";

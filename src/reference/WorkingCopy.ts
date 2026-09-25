@@ -14,6 +14,8 @@ import { PLAIN_GIT } from "../plainGit.ts";
 export interface Committer {
   readonly name: string;
   readonly email: string;
+  /** who the work is written as, when that is not the seat: the GitHub account its owner linked */
+  readonly writtenAs?: { readonly name: string; readonly email: string };
 }
 
 /** How to reach the git door: its address, and the header that signs in as the seat */
@@ -152,13 +154,13 @@ export class WorkingCopy {
     return { code, out: `${out}${err}` };
   }
 
-  /** No settings from the machine, no prompts, and every commit written and committed as the seat. */
+  /** No settings from the machine, no prompts, and every commit committed as the seat, and written as it or in the name it was given. */
   private env(): Record<string, string> {
     return {
       PATH: process.env.PATH ?? "/usr/bin:/bin",
       HOME: this.path,
       ...PLAIN_GIT,
-      GIT_AUTHOR_NAME: this.who.name, GIT_AUTHOR_EMAIL: this.who.email,
+      GIT_AUTHOR_NAME: this.who.writtenAs?.name ?? this.who.name, GIT_AUTHOR_EMAIL: this.who.writtenAs?.email ?? this.who.email,
       GIT_COMMITTER_NAME: this.who.name, GIT_COMMITTER_EMAIL: this.who.email,
     };
   }

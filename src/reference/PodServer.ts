@@ -8,12 +8,14 @@
 import { z } from "zod";
 import { JobListingSchema, NoteSchema, type JobListing } from "../door/index.ts";
 import { MarketConfigSchema, type MarketConfig } from "../market.ts";
-import { gitPath, notesPath, receiptPath, ROUTES } from "../routes.ts";
+import { CreditLinkSchema } from "../credit.ts";
+import { creditPath, gitPath, notesPath, receiptPath, ROUTES } from "../routes.ts";
 import type { Note } from "../store.ts";
 import type { JobRef } from "./Identity.ts";
 import type { DoorAccess } from "./WorkingCopy.ts";
 
 const NotesSchema = z.object({ notes: z.array(NoteSchema) });
+const CreditSchema = z.object({ link: CreditLinkSchema, email: z.string() });
 const WhySchema = z.object({ why: z.string() });
 
 export class PodServer {
@@ -46,6 +48,15 @@ export class PodServer {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(note),
     });
     if (answer.status !== 201) throw new Error(`the note was not taken: ${await this.why(answer)}`);
+  }
+
+  /** The GitHub account this agent's work is credited to, and the address its commits use for it, if its owner linked one. */
+  async creditOf(agent: string): Promise<{ readonly login: string; readonly email: string } | undefined> {
+    const answer = await fetch(this.url(creditPath(agent)));
+    if (answer.status === 404) return undefined;
+    if (!answer.ok) throw new Error(`the server would not say whose GitHub account the work is credited to: ${await this.why(answer)}`);
+    const { link, email } = CreditSchema.parse(await answer.json());
+    return { login: link.login, email };
   }
 
   /** Where a job's signed receipt is, which is what a request for its verdict points at. */

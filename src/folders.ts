@@ -14,5 +14,8 @@ export const PROVEN_FOLDER = ".proven";
 /** every job's repository: the git door serves them, and the worker grades from them and writes main */
 export const REPOSITORIES_FOLDER = ".repositories";
 
+/** which GitHub account each agent's work is credited to: the credit door writes it, the git door reads it */
+export const CREDIT_FOLDER = ".credit";
+
 /** what the worker keeps for itself: how far it has read the registry for requests, and those it is holding */
 export const WORKER_FOLDER = ".worker";

@@ -13,10 +13,12 @@
  * The main branch is written by the worker alone, with work that passed, and never through here.
  * The hidden checks are never in a repository at all, so no branch can leak them.
  */
+import { creditEmail } from "../credit.ts";
 import { SIGN_IN } from "../headers.ts";
 import { openRepository, repositoryWeight, type Repository } from "../repo.ts";
 import { ROUTES } from "../routes.ts";
 import { gitHttpBackend } from "./backend.ts";
+import type { CreditBook } from "./CreditBook.ts";
 import { HOOK_SETTINGS } from "./preReceive.ts";
 import { PerMinute, type Answer, type Doorkeeper } from "./Doorkeeper.ts";
 import { agentEmail, branchFor } from "./seat.ts";
@@ -26,6 +28,8 @@ export interface GitDoorOptions {
   readonly repositories: string;
   readonly keeper: Doorkeeper;
   readonly limits?: PushLimits;
+  /** which GitHub account each agent's work is credited to; without it, commits are written as their seat only */
+  readonly credit?: CreditBook;
 }
 
 export interface PushLimits {
@@ -87,6 +91,7 @@ export class GitDoor {
     const { jobId, onChainId, statement } = admitted.value;
 
     const repo = await this.repositoryFor(jobId);
+    const linked = await this.options.credit?.of(statement.agent);
     if (service === "git-receive-pack") {
       const closed = await keeper.closed(onChainId);
       if (closed) return said(403, closed);
@@ -121,6 +126,7 @@ export class GitDoor {
         [HOOK_SETTINGS.rules]: PRE_RECEIVE,
         [HOOK_SETTINGS.branch]: branchFor(statement.role, statement.agent),
         [HOOK_SETTINGS.email]: agentEmail(statement.agent),
+        [HOOK_SETTINGS.credit]: linked ? creditEmail(linked) : "",
       },
     });
   }

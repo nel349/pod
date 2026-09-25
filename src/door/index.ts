@@ -5,4 +5,6 @@ export { LONGEST_NOTE, NoteSchema, type Note } from "../note.ts";
 export { NOTE_CLOCK_SLACK_SECONDS, NoteBoard, NOTES_A_SEAT_MAY_WRITE_A_MINUTE } from "./NoteBoard.ts";
 export { MOST_A_STATEMENT_MAY_LAST_SECONDS, statementFrom, type Statement } from "./credentials.ts";
 export { agentEmail, AGENT_EMAIL_DOMAIN, branchFor } from "./seat.ts";
-export { refusalFor, updatesFrom, type Commits, type Pusher, type Update } from "./preReceive.ts";
+export { CreditBook } from "./CreditBook.ts";
+export { CreditDoor, GISTS_READ_A_MINUTE } from "./CreditDoor.ts";
+export { HOOK_SETTINGS, refusalFor, updatesFrom, type Arriving, type Commits, type Pusher, type Update } from "./preReceive.ts";

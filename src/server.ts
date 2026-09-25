@@ -15,8 +15,8 @@ import { CheckWriting, ProvenChecks } from "./checkwriting/index.ts";
 import type { MarketConfig } from "./market.ts";
 import { bodyWithin, tooLarge } from "./body.ts";
 import { NO_STORE } from "./headers.ts";
-import { JOBS_FOLDER_SETTING, PROVEN_FOLDER, REPOSITORIES_FOLDER } from "./folders.ts";
-import { doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard } from "./door/index.ts";
+import { CREDIT_FOLDER, JOBS_FOLDER_SETTING, PROVEN_FOLDER, REPOSITORIES_FOLDER } from "./folders.ts";
+import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard } from "./door/index.ts";
 import postPage from "./web/post/index.html";
 import { renderCard } from "./card.ts";
 import { renderJob } from "./jobpage.ts";
@@ -62,6 +62,8 @@ export interface Services {
   readonly notes?: NoteBoard;
   /** the open jobs, for agents looking for work */
   readonly jobList?: JobList;
+  /** which GitHub account each agent's work is credited to */
+  readonly credit?: CreditDoor;
 }
 const BUNDLE = { "content-type": "application/x-git-bundle" } as const;
 
@@ -79,7 +81,7 @@ const NOTHING_YET = `<!doctype html>
 <p>No job has been graded on this server. When one has, it appears here, whether it passed or not.</p>
 </header></body></html>`;
 
-export async function handle(request: Request, store: JobStore, { market, door, notes, jobList }: Services = {}): Promise<Response> {
+export async function handle(request: Request, store: JobStore, { market, door, notes, jobList, credit }: Services = {}): Promise<Response> {
   const { pathname } = new URL(request.url);
 
   // agents' work, in and out, through git. It speaks its own methods, so it is answered before the rest
@@ -88,6 +90,9 @@ export async function handle(request: Request, store: JobStore, { market, door, 
   }
   if (pathname.startsWith(ROUTES.notes)) {
     return notes ? await notes.handle(request) : Response.json({ why: "notes are not open on this server" }, { status: 404 });
+  }
+  if (pathname === ROUTES.credit || pathname.startsWith(`${ROUTES.credit}/`)) {
+    return credit ? await credit.handle(request) : Response.json({ why: "GitHub credit is not open on this server" }, { status: 404 });
   }
 
   // the one thing a stranger can change: posting a job they have already paid for
@@ -321,9 +326,11 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
       latestBlockTime: async () => (await publicClient.getBlock()).timestamp,
     }),
   });
-  const door = new GitDoor({ repositories: join(jobsDirectory, REPOSITORIES_FOLDER), keeper });
+  const book = new CreditBook(join(jobsDirectory, CREDIT_FOLDER));
+  const door = new GitDoor({ repositories: join(jobsDirectory, REPOSITORIES_FOLDER), keeper, credit: book });
   const notes = new NoteBoard({ keeper, store });
   const jobList = new JobList({ keeper, store });
+  const credit = new CreditDoor({ book });
   const market: Market = {
     page: {
       chainId: MONAD_TESTNET.id, chainName: "Monad testnet", rpc, jobs,
@@ -340,7 +347,7 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
     }),
     proven,
   };
-  return { market, door, notes, jobList };
+  return { market, door, notes, jobList, credit };
 }
 
 
@@ -356,7 +363,7 @@ if (import.meta.main) {
   console.log(market
     ? `posting is open, against ${market.page.jobs}; checks are written by Claude, through the CLI signed in on this machine`
     : "posting is closed: no POD_JOBS_ADDRESS");
-  if (services.door) console.log(`agents push their work to http://localhost:${port}${ROUTES.git}<job>.git, and write notes to ${ROUTES.notes}<job>. Open jobs are listed at ${ROUTES.jobList}`);
+  if (services.door) console.log(`agents push their work to http://localhost:${port}${ROUTES.git}<job>.git, and write notes to ${ROUTES.notes}<job>. Open jobs are listed at ${ROUTES.jobList}, and owners link GitHub accounts at ${ROUTES.credit}`);
 
   // stopping: take no new requests, let any writing under way finish and take its boxes down, then go
   const stop = async (): Promise<void> => {

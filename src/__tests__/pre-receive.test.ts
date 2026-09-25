@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { agentEmail, branchFor, refusalFor, updatesFrom, type Commits } from "../door/index.ts";
+import { creditEmail } from "../credit.ts";
+import { agentEmail, branchFor, refusalFor, updatesFrom, type Arriving, type Commits } from "../door/index.ts";
 
 /**
  * What a push may change, as rules alone, without a repository: the git door runs them inside git on
@@ -17,7 +18,7 @@ const OTHER = "c".repeat(40);
 /** A history written out by hand: what descends from what, and which commits a push brings. */
 function history(input: {
   readonly descends?: readonly (readonly [string, string])[];
-  readonly arriving?: readonly { readonly commit: string; readonly author: string; readonly committer: string }[];
+  readonly arriving?: readonly Arriving[];
 }): Commits {
   return {
     isAncestor: async (older, newer) => older === newer || (input.descends ?? []).some(([a, b]) => a === older && b === newer),
@@ -25,7 +26,11 @@ function history(input: {
   };
 }
 
-const mine = (commit: string) => ({ commit, author: SEAT.email, committer: SEAT.email });
+const mine = (commit: string): Arriving => ({ commit, author: SEAT.email, committer: SEAT.email, coAuthors: [] });
+/** the GitHub account the seat's owner linked, and one nobody linked */
+const LINKED = creditEmail({ login: "octocat", githubId: 583231 });
+const UNLINKED = creditEmail({ login: "someone", githubId: 42 });
+const CREDITED = { ...SEAT, credit: LINKED };
 
 describe("the rules for a push", () => {
   test("git's lines are read as old, new and the branch", () => {
@@ -58,12 +63,38 @@ describe("the rules for a push", () => {
 
   test("every commit a push brings is written and committed as the seat, and only the seat", async () => {
     const pushed = updatesFrom(`${NONE} ${NEW} refs/heads/${SEAT.branch}`);
-    const writtenByAnother = history({ arriving: [mine(OLD), { commit: NEW, author: "someone@example.com", committer: SEAT.email }] });
+    const writtenByAnother = history({ arriving: [mine(OLD), { commit: NEW, author: "someone@example.com", committer: SEAT.email, coAuthors: [] }] });
     expect(await refusalFor(pushed, SEAT, writtenByAnother)).toContain("says it was written by someone@example.com");
-    const committedByAnother = history({ arriving: [{ commit: NEW, author: SEAT.email, committer: "someone@example.com" }] });
+    const committedByAnother = history({ arriving: [{ commit: NEW, author: SEAT.email, committer: "someone@example.com", coAuthors: [] }] });
     expect(await refusalFor(pushed, SEAT, committedByAnother)).toContain("says it was committed by someone@example.com");
     // the address is the seat's whatever its case
-    const shouted = history({ arriving: [{ commit: NEW, author: SEAT.email.toUpperCase(), committer: SEAT.email }] });
+    const shouted = history({ arriving: [{ commit: NEW, author: SEAT.email.toUpperCase(), committer: SEAT.email, coAuthors: [] }] });
     expect(await refusalFor(pushed, SEAT, shouted)).toBeUndefined();
+  });
+
+  test("with a GitHub account linked, a commit may be written in its name, and name it as a co-author", async () => {
+    const pushed = updatesFrom(`${NONE} ${NEW} refs/heads/${SEAT.branch}`);
+    const inItsName = history({ arriving: [{ commit: NEW, author: LINKED, committer: SEAT.email, coAuthors: [] }] });
+    expect(await refusalFor(pushed, CREDITED, inItsName)).toBeUndefined();
+    const namingIt = history({ arriving: [{ ...mine(NEW), coAuthors: [`octocat <${LINKED}>`] }] });
+    expect(await refusalFor(pushed, CREDITED, namingIt)).toBeUndefined();
+    // but it is still committed by the seat, so every commit leads back to the key that pushed it
+    const committedAsGitHub = history({ arriving: [{ commit: NEW, author: LINKED, committer: LINKED, coAuthors: [] }] });
+    expect(await refusalFor(pushed, CREDITED, committedAsGitHub)).toContain("says it was committed by");
+  });
+
+  test("a GitHub account nobody linked to this seat is refused, as author and as co-author", async () => {
+    const pushed = updatesFrom(`${NONE} ${NEW} refs/heads/${SEAT.branch}`);
+    const writtenAsUnlinked = history({ arriving: [{ commit: NEW, author: UNLINKED, committer: SEAT.email, coAuthors: [] }] });
+    expect(await refusalFor(pushed, CREDITED, writtenAsUnlinked)).toContain(`written by ${UNLINKED}`);
+    const namingUnlinked = history({ arriving: [{ ...mine(NEW), coAuthors: [`someone <${UNLINKED}>`] }] });
+    expect(await refusalFor(pushed, CREDITED, namingUnlinked)).toContain("as a co-author");
+    const namingNobody = history({ arriving: [{ ...mine(NEW), coAuthors: ["someone, no address"] }] });
+    expect(await refusalFor(pushed, CREDITED, namingNobody)).toContain("as a co-author");
+    // and a seat whose owner linked nothing may not write as the account another seat's owner linked
+    const inItsName = history({ arriving: [{ commit: NEW, author: LINKED, committer: SEAT.email, coAuthors: [] }] });
+    expect(await refusalFor(pushed, SEAT, inItsName)).toContain(`written by ${LINKED}`);
+    const namingIt = history({ arriving: [{ ...mine(NEW), coAuthors: [`octocat <${LINKED}>`] }] });
+    expect(await refusalFor(pushed, SEAT, namingIt)).toContain("as a co-author");
   });
 });

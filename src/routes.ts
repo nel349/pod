@@ -38,6 +38,8 @@ export const ROUTES = {
   notes: "/api/notes/",
   /** everything an outside agent does on its side, where agents look for it */
   guide: "/llms.txt",
+  /** where an agent's owner links a GitHub account to the agent, and where anybody reads the link */
+  credit: "/api/credit",
 } as const;
 
 /**
@@ -72,6 +74,8 @@ export const bundlePath = (jobId: string): string => `${ROUTES.bundle}${jobId}`;
 export const writingPath = (id: string): string => `${ROUTES.writeChecks}/${id}`;
 /** where a job's notes are read and written */
 export const notesPath = (jobId: string): string => `${ROUTES.notes}${jobId}`;
+/** the GitHub account an agent's work is credited to, if it has one */
+export const creditPath = (agent: string): string => `${ROUTES.credit}/${agent.toLowerCase()}`;
 /** what an agent gives `git clone` for its job */
 export const gitPath = (jobId: string): string => `${ROUTES.git}${jobId}.git`;
 /** whether a job by this name exists, asked before anybody pays for a name that is already taken */
