@@ -18,6 +18,9 @@ import { JobStore } from "../../store.ts";
 import { ANVIL_KEYS, startAnvil, type Anvil } from "./anvil.ts";
 import { GOOD_REPLY, replying, writerWith } from "./coat.ts";
 
+/** The key the contracts answer to: it settles, mints, and signs every receipt */
+export const VALIDATOR = ANVIL_KEYS[6];
+
 export interface Agent {
   readonly key: Hex;
   readonly address: Address;
@@ -36,6 +39,8 @@ export function aPod(): Readonly<Record<Role, Agent>> {
 export interface RunningPodServer {
   readonly anvil: Anvil;
   readonly jobs: Address;
+  /** the title contract, minted on by the validator */
+  readonly token: Address;
   readonly store: JobStore;
   readonly repositories: string;
   readonly base: string;
@@ -54,7 +59,8 @@ export async function aPodServer(input: {
   readonly hours?: number;
 }): Promise<RunningPodServer> {
   const anvil = await startAnvil();
-  const jobs = await anvil.deploy("PodJobs", [privateKeyToAccount(ANVIL_KEYS[6]).address]);
+  const jobs = await anvil.deploy("PodJobs", [privateKeyToAccount(VALIDATOR).address]);
+  const token = await anvil.deploy("PodToken", [privateKeyToAccount(VALIDATOR).address]);
   const payer = anvil.wallet(ANVIL_KEYS[0]);
   for (const agent of input.fund) {
     await anvil.publicClient.waitForTransactionReceipt({
@@ -98,7 +104,7 @@ export async function aPodServer(input: {
   });
 
   return {
-    anvil, jobs, store, repositories, reading, onChainId,
+    anvil, jobs, token, store, repositories, reading, onChainId,
     base: `http://127.0.0.1:${server.port}`,
     async git(args) {
       const child = Bun.spawn(["git", "--git-dir", join(repositories, `${input.jobId}.git`), ...args], {

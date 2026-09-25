@@ -26,6 +26,7 @@ export const podJobsAbi = parseAbi([
   "function nextJobId() view returns (uint256)",
   "function jobs(uint256) view returns (address poster, uint256 price, bytes32 seal, uint64 endsAt, uint8 state, bytes32 commit, uint8 reviewers)",
   "event Posted(uint256 indexed jobId, address indexed poster, bytes32 seal, uint256 price, uint64 endsAt)",
+  "event Approved(uint256 indexed jobId, uint8 role, address indexed agent, bytes32 commitHash)",
   "event Settled(uint256 indexed jobId, bytes32 commitHash, uint256 paid)",
   "event Refunded(uint256 indexed jobId, uint256 amount, string why)",
   // the contract's refusals, by name, so a reverted call says why rather than showing four bytes
@@ -104,6 +105,34 @@ export async function readSeats(at: Omit<Contract, "wallet">, jobId: bigint): Pr
     }));
   }));
   return rows.flat();
+}
+
+/** One approval as the contract recorded it: which seat, which key, and when its block was made. */
+export interface ApprovalOnChain {
+  readonly role: Role;
+  readonly agent: Address;
+  readonly commit: Hex;
+  /** seconds since 1970, the time of the block the approval is in */
+  readonly at: bigint;
+}
+
+/**
+ * Every approval a job's seats gave one commit, read from the contract's own record of them. Only the
+ * latest from each seat: a seat that approved the same commit twice approved it once.
+ */
+export async function readApprovals(at: Omit<Contract, "wallet">, jobId: bigint, commit: Hex): Promise<readonly ApprovalOnChain[]> {
+  const logs = await at.publicClient.getContractEvents({
+    address: at.address, abi: podJobsAbi, eventName: "Approved", args: { jobId }, fromBlock: 0n, strict: true,
+  });
+  const latest = new Map<string, ApprovalOnChain>();
+  for (const log of logs) {
+    if (log.args.commitHash.toLowerCase() !== commit.toLowerCase()) continue;
+    const role = ROLES.find((named) => roleNumber(named) === log.args.role);
+    if (!role) continue;
+    const block = await at.publicClient.getBlock({ blockHash: log.blockHash });
+    latest.set(`${role}:${log.args.agent.toLowerCase()}`, { role, agent: log.args.agent, commit: log.args.commitHash, at: block.timestamp });
+  }
+  return [...latest.values()];
 }
 
 /** What each seat on a job pays and costs to take, read from the contract rather than worked out here. */

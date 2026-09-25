@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { grade, type CheckToRun, type GradeOutcome } from "./blackbox.ts";
 import { checkout, has, type Repository } from "./repo.ts";
+import { readableToTheBox } from "./sandbox.ts";
 import { fingerprintTree, signReceipt, type Receipt, type SignedReceipt } from "./receipt.ts";
 import { registryResponse, registryTag, reachVerdict, type Verdict } from "./verdict.ts";
 import type { Address, Hex } from "viem";
@@ -130,6 +131,8 @@ export async function gradeCommit(job: GradeCommit): Promise<GradeReport> {
   const laid = await mkdtemp(join(tmpdir(), "pod-graded-"));
   try {
     await checkout(job.repo, job.commit, laid);
+    // a temporary folder is its owner's alone on Linux, and the box that runs the work cannot open it
+    await readableToTheBox(laid);
     return await gradeJob({ ...job, artefact: laid, repository: job.repository ?? job.repo.path });
   } finally {
     await rm(laid, { recursive: true, force: true });

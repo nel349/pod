@@ -3,16 +3,19 @@ import { parseEther } from "viem";
 import type { Model } from "../broker.ts";
 import { agentEmail, branchFor } from "../door/index.ts";
 import type { Role, Spec } from "../job.ts";
-import { policyMet, readSeats } from "../jobs.ts";
+import { policyMet, readJob, readSeats } from "../jobs.ts";
 import { APPROVED, REFUSED, runReferenceAgent, type Finished } from "../reference/index.ts";
 import { commitToBytes32 } from "../repo.ts";
 import { IMAGE } from "../sandbox.ts";
 import { anvilAvailable } from "./support/anvil.ts";
 import { COAT_IDEA, dockerAvailable, DRY, good, serverSaying, WET, WORKING } from "./support/coat.ts";
-import { aPod, aPodServer, untilThePolicyIsMet, type Agent, type RunningPodServer } from "./support/podServer.ts";
+import { aPod, aPodServer, untilThePolicyIsMet, VALIDATOR, type Agent, type RunningPodServer } from "./support/podServer.ts";
+import { tokenOfJob } from "../token.ts";
+import { Worker } from "../worker/index.ts";
 
 /**
- * A whole pod of reference agents, through the public doors only, against a real chain.
+ * A whole pod of reference agents, through the public doors only, against a real chain, from a
+ * posted job to the pod paid and the poster holding the title.
  *
  * Five keys, five agents, one freshly posted job. Nobody tells them what to do: each finds the job
  * in the list, takes its seat on the contract, and works until the contract says every approval the
@@ -118,5 +121,29 @@ describe.skipIf(!available)("a pod of reference agents", () => {
     for (const author of authors) expect(seatEmails).toContain(author);
     expect((await pod$.git(["branch", "--list"])).split("\n").map((line) => line.replace("*", "").trim()).filter(Boolean).sort())
       .toEqual([branchFor("builder", pod.builder.address), branchFor("lead", pod.lead.address)].sort());
-  }, 300_000);
+
+    // and from there to payment, with nobody asking: the worker grades what they agreed on, against
+    // the sealed exam as well, pays the pod, titles the poster and puts the work on main
+    const builderBefore = await pod$.anvil.publicClient.getBalance({ address: pod.builder.address });
+    const worker = new Worker({
+      store: pod$.store, repositories: pod$.repositories, image: IMAGE, runnerKey: VALIDATOR, times: 2,
+      jobs: { address: pod$.jobs, publicClient: pod$.anvil.publicClient, wallet: pod$.anvil.wallet(VALIDATOR) },
+      token: { address: pod$.token, publicClient: pod$.anvil.publicClient, wallet: pod$.anvil.wallet(VALIDATOR) },
+      say: (what) => said.push(what),
+    });
+    const tokenReading = { address: pod$.token, publicClient: pod$.anvil.publicClient };
+    const deadline = Date.now() + 180_000;
+    while (Date.now() < deadline && (await tokenOfJob(tokenReading, pod$.onChainId)) === 0n) {
+      await worker.tick();
+      await worker.whenIdle();
+    }
+    const record = (await pod$.store.read(JOB))!;
+    expect(record.tile.verdict).toBe("passed");
+    expect(record.checksSaid.find((check) => check.says === DRY)?.exitCode).toBe(0);
+    expect((await readJob(pod$.reading, pod$.onChainId)).state).toBe("settled");
+    expect(await pod$.anvil.publicClient.getBalance({ address: pod.builder.address })).toBeGreaterThan(builderBefore);
+    expect(await tokenOfJob(tokenReading, pod$.onChainId)).not.toBe(0n);
+    await worker.tick();
+    expect((await pod$.git(["rev-parse", "refs/heads/main"])).trim()).toBe(candidate);
+  }, 480_000);
 });

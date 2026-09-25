@@ -14,6 +14,7 @@ import { acceptPosting, readerFor, type ChainReader } from "./posting.ts";
 import { CheckWriting, ProvenChecks } from "./checkwriting/index.ts";
 import type { MarketConfig } from "./market.ts";
 import { bodyWithin } from "./body.ts";
+import { PROVEN_FOLDER, REPOSITORIES_FOLDER } from "./folders.ts";
 import { doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard } from "./door/index.ts";
 import postPage from "./web/post/index.html";
 import { renderCard } from "./card.ts";
@@ -334,14 +335,6 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
   return { market, door, notes, jobList };
 }
 
-/**
- * Where the proven checks' fingerprints are kept, inside the jobs folder. A dot folder, so the wall,
- * which lists the jobs folder, never mistakes it for a job.
- */
-export const PROVEN_FOLDER = ".proven";
-
-/** Where every job's repository is kept, inside the jobs folder, as a dot folder for the same reason. */
-export const REPOSITORIES_FOLDER = ".repositories";
 
 if (import.meta.main) {
   const directory = process.env.POD_JOBS;

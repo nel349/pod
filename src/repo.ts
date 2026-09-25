@@ -148,6 +148,17 @@ async function write(repo: Repository, work: Work, tree: string): Promise<string
   return commit;
 }
 
+/**
+ * Put a commit that passed on the main branch. The worker is the only thing that ever does, and only
+ * with a commit whose verdict passed; the git door refuses main to every seat. Doing it twice is the
+ * same as doing it once.
+ */
+export async function putOnMain(repo: Repository, commit: string): Promise<void> {
+  if (!(await has(repo, commit))) throw new Error(`${commit} is not a commit in ${repo.jobId}`);
+  if ((await head(repo)) === commit) return;
+  await must([`--git-dir=${repo.path}`, "update-ref", `refs/heads/${BRANCH}`, commit]);
+}
+
 /** The tip of the branch, or nothing at all if the pod has not committed yet. */
 export async function head(repo: Repository): Promise<string | undefined> {
   const ran = await git([`--git-dir=${repo.path}`, "rev-parse", `refs/heads/${BRANCH}`]);

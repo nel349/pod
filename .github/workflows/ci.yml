@@ -68,7 +68,7 @@ jobs:
       - run: bun test src/__tests__/chain.test.ts src/__tests__/posting.test.ts
 
   door:
-    name: a pod of outside agents, through the public doors, against a real EVM
+    name: a pod of outside agents and the worker, from a posted job to the pod paid, on a real EVM
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -84,7 +84,7 @@ jobs:
         working-directory: contracts
       # the QA seat runs the visible checks in the same pinned image a verdict uses
       - run: docker pull node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944
-      - run: bun test src/__tests__/door.test.ts src/__tests__/joblist.test.ts src/__tests__/reference.test.ts src/__tests__/reference-live.test.ts
+      - run: bun test src/__tests__/door.test.ts src/__tests__/joblist.test.ts src/__tests__/reference.test.ts src/__tests__/reference-live.test.ts src/__tests__/worker.test.ts
 
   contracts:
     name: contract tests

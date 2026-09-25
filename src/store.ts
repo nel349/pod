@@ -88,6 +88,8 @@ export interface JobRecord {
   readonly signed?: SignedReceipt;
   readonly repository?: string;
   readonly podHolder?: string;
+  /** why the worker has not graded it although the pod says it is done, such as the approved commit never having been pushed */
+  readonly waitingBecause?: string;
 }
 
 const RECORD = "job.json";
@@ -212,6 +214,24 @@ export class JobStore {
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * Every check file, sealed ones included, for grading. The server's own use and nothing else:
+   * nothing that answers a request may call this while the job runs.
+   */
+  async allCheckFiles(jobId: string): Promise<Readonly<Record<string, string>>> {
+    if (!isSafeName(jobId)) return {};
+    const directory = join(this.root, jobId, CHECKS);
+    let names: string[];
+    try {
+      names = (await readdir(directory)).filter(isSafeName);
+    } catch {
+      return {};
+    }
+    const files: Record<string, string> = {};
+    for (const name of names) files[name] = await readFile(join(directory, name), "utf8");
+    return files;
   }
 
   /** The files of the checks the pod may see, by the spec that was sealed. */
