@@ -10,8 +10,9 @@
  */
 import { join } from "node:path";
 import { isHex } from "viem";
-import { REPOSITORIES_FOLDER } from "../folders.ts";
+import { REPOSITORIES_FOLDER, WORKER_FOLDER } from "../folders.ts";
 import { live } from "../live.ts";
+import { MONAD_REGISTRIES } from "../registry.ts";
 import { IMAGE } from "../sandbox.ts";
 import { JobStore } from "../store.ts";
 import { Worker } from "./Worker.ts";
@@ -31,6 +32,7 @@ const worker = new Worker({
   runnerKey: key,
   image: IMAGE,
   ...(process.env.POD_SITE ? { site: process.env.POD_SITE } : {}),
+  registry: { registries: MONAD_REGISTRIES, stateFolder: join(directory, WORKER_FOLDER) },
 });
 
 const stop = new AbortController();

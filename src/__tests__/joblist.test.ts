@@ -125,6 +125,7 @@ describe.skipIf(!available)("the job list, as an outside agent reads it", () => 
     // what the server writes is what an agent reading it through the schema will accept
     expect(JobListingSchema.safeParse(listing).success).toBe(true);
     expect(listing.version).toBe(JOB_LIST_VERSION);
+    expect(listing.guide).toBe(ROUTES.guide);
     expect(listing.market).toBe(ROUTES.market);
 
     const job = listing.jobs.find((one) => one.jobId === "a-coat-given-the-rain")!;

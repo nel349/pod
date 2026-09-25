@@ -45,11 +45,11 @@ export function reachVerdict(results: readonly RunResult[]): Verdict {
 }
 
 /** The score the Validation Registry takes: 0 to 100, and only a clean pass earns 100. */
-export function registryResponse(verdict: Verdict): number {
+export function registryResponse(verdict: Pick<Verdict, "kind">): number {
   return verdict.kind === "passed" ? 100 : 0;
 }
 
 /** The tag the verdict is filed under, which is what makes a record role-scoped and readable. */
-export function registryTag(verdict: Verdict, role: string): string {
+export function registryTag(verdict: Pick<Verdict, "kind">, role: string): string {
   return verdict.kind === "not-reproducible" ? `pod.${role}.unreproducible` : `pod.${role}`;
 }

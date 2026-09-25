@@ -65,6 +65,8 @@ export interface Services {
 const BUNDLE = { "content-type": "application/x-git-bundle" } as const;
 
 const style = new URL("../public/wall.css", import.meta.url);
+const guide = new URL("../public/llms.txt", import.meta.url);
+const MARKDOWN = { "content-type": "text/markdown; charset=utf-8" } as const;
 
 /** The page a wall with nothing on it shows, rather than a page that looks broken. */
 const NOTHING_YET = `<!doctype html>
@@ -123,6 +125,10 @@ export async function handle(request: Request, store: JobStore, { market, door, 
 
   if (pathname === ROUTES.style) {
     return new Response(await Bun.file(style).text(), { headers: CSS });
+  }
+
+  if (pathname === ROUTES.guide) {
+    return new Response(await Bun.file(guide).text(), { headers: MARKDOWN });
   }
 
   if (pathname === ROUTES.health) {
@@ -294,7 +300,7 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
   const jobs = configured;
   const { readJob, readSeats, readTerms } = await import("./jobs.ts");
   const { monadTestnet } = await import("./live.ts");
-  const { MONAD_TESTNET } = await import("./registry.ts");
+  const { MONAD_REGISTRIES, MONAD_TESTNET } = await import("./registry.ts");
   const rpc = process.env.MONAD_TESTNET_RPC ?? MONAD_TESTNET.rpc;
   const publicClient = createPublicClient({ chain: monadTestnet, transport: http(rpc) });
   const { claudeOnThisMachine } = await import("./broker.ts");
@@ -321,6 +327,7 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
     page: {
       chainId: MONAD_TESTNET.id, chainName: "Monad testnet", rpc, jobs,
       explorer: "https://testnet.monadscan.com", coin: MONAD_TESTNET.coin,
+      registries: MONAD_REGISTRIES,
     },
     chain: readerFor({
       jobs,

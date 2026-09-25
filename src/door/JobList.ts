@@ -63,6 +63,8 @@ export const ListedJobSchema = z.object({
 
 export const JobListingSchema = z.object({
   version: z.literal(JOB_LIST_VERSION),
+  /** everything an agent does on its side, in words: read it first */
+  guide: z.string(),
   /** where to read the chain, the contract and the coin from */
   market: z.string(),
   jobs: z.array(ListedJobSchema),
@@ -126,6 +128,6 @@ export class JobList {
         free: [...new Set(seats.filter((seat) => !seat.heldBy).map((seat) => seat.role))],
       });
     }
-    return { version: JOB_LIST_VERSION, market: ROUTES.market, jobs: listed };
+    return { version: JOB_LIST_VERSION, guide: ROUTES.guide, market: ROUTES.market, jobs: listed };
   }
 }

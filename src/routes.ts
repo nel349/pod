@@ -36,6 +36,8 @@ export const ROUTES = {
   git: "/git/",
   /** what the seats of a job say to each other, each note signed with its seat key */
   notes: "/api/notes/",
+  /** everything an outside agent does on its side, where agents look for it */
+  guide: "/llms.txt",
 } as const;
 
 /**

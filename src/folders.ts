@@ -10,3 +10,6 @@ export const PROVEN_FOLDER = ".proven";
 
 /** every job's repository: the git door serves them, and the worker grades from them and writes main */
 export const REPOSITORIES_FOLDER = ".repositories";
+
+/** what the worker keeps for itself: how far it has read the registry for requests, and those it is holding */
+export const WORKER_FOLDER = ".worker";

@@ -28,9 +28,22 @@ export const MONAD_TESTNET = {
   validationRegistry: "0x8004Cb1BF31DAf7788923b405b754f57acEB4272" as Address,
 } as const;
 
+/** Where the two registries are. Monad's, unless a test deploys its own on a local chain */
+export interface Registries {
+  readonly identity: Address;
+  readonly validation: Address;
+}
+
+export const MONAD_REGISTRIES: Registries = {
+  identity: MONAD_TESTNET.identityRegistry,
+  validation: MONAD_TESTNET.validationRegistry,
+};
+
 export const identityAbi = parseAbi([
   "function register() external returns (uint256)",
+  "function register(string agentURI) external returns (uint256)",
   "function ownerOf(uint256 tokenId) view returns (address)",
+  "function getAgentWallet(uint256 agentId) view returns (address)",
   "function setApprovalForAll(address operator, bool approved) external",
   "function isApprovedForAll(address owner, address operator) view returns (bool)",
   "function getVersion() view returns (string)",
@@ -42,6 +55,8 @@ export const validationAbi = parseAbi([
   "function getValidationStatus(bytes32 requestHash) view returns (address validatorAddress, uint256 agentId, uint8 response, bytes32 responseHash, string tag, uint256 lastUpdate)",
   "function getSummary(uint256 agentId, address[] validatorAddresses, string tag) view returns (uint64 count, uint8 avgResponse)",
   "function getIdentityRegistry() view returns (address)",
+  "function getValidatorRequests(address validatorAddress) view returns (bytes32[])",
+  "event ValidationRequest(address indexed validatorAddress, uint256 indexed agentId, string requestURI, bytes32 indexed requestHash)",
 ]);
 
 export function readOnlyClient(rpcUrl: string = MONAD_TESTNET.rpc): PublicClient {
@@ -49,8 +64,9 @@ export function readOnlyClient(rpcUrl: string = MONAD_TESTNET.rpc): PublicClient
 }
 
 /**
- * What a seat has to do before it can be part of a job: let the platform speak for its agent in the
- * registry. Without this, nobody but the agent's owner could ever ask for its work to be checked.
+ * Let an address speak for all of an owner's agents in the registry. The registry has no narrower
+ * approval: it also lets that address move the owner's identities. So outside agents are never asked
+ * for it (decided 24 Sep, Y12): each asks for its own verdict instead. Kept for identities we own.
  */
 export function approvePlatformCall(platform: Address): Hex {
   return encodeFunctionData({ abi: identityAbi, functionName: "setApprovalForAll", args: [platform, true] });
@@ -92,9 +108,9 @@ export function verdictCall(input: {
 }
 
 /** Who owns an agent, which is what decides whether a seat can be taken by that wallet. */
-export async function ownerOfAgent(client: PublicClient, agentId: bigint): Promise<Address> {
+export async function ownerOfAgent(client: PublicClient, agentId: bigint, at: Registries = MONAD_REGISTRIES): Promise<Address> {
   return client.readContract({
-    address: MONAD_TESTNET.identityRegistry,
+    address: at.identity,
     abi: identityAbi,
     functionName: "ownerOf",
     args: [agentId],
@@ -107,9 +123,10 @@ export async function record(
   agentId: bigint,
   tag: string,
   runners: readonly Address[] = [],
+  at: Registries = MONAD_REGISTRIES,
 ): Promise<{ readonly count: number; readonly average: number }> {
   const [count, average] = await client.readContract({
-    address: MONAD_TESTNET.validationRegistry,
+    address: at.validation,
     abi: validationAbi,
     functionName: "getSummary",
     args: [agentId, [...runners], tag],
@@ -118,9 +135,9 @@ export async function record(
 }
 
 /** Which identity registry the validation registry checks ownership against. */
-export async function identityRegistryOf(client: PublicClient): Promise<Address> {
+export async function identityRegistryOf(client: PublicClient, at: Registries = MONAD_REGISTRIES): Promise<Address> {
   return client.readContract({
-    address: MONAD_TESTNET.validationRegistry,
+    address: at.validation,
     abi: validationAbi,
     functionName: "getIdentityRegistry",
   });
@@ -155,11 +172,11 @@ async function send(by: Sender, to: Address, data: Hex): Promise<Hex> {
  * Registering is permissionless: whoever sends this owns the agent that comes out of it, which is
  * what makes "the agent is owned by a person" a fact on the chain rather than a claim on a page.
  */
-export async function registerAgent(by: Sender): Promise<{ readonly agentId: bigint; readonly hash: Hex }> {
+export async function registerAgent(by: Sender, at: Registries = MONAD_REGISTRIES): Promise<{ readonly agentId: bigint; readonly hash: Hex }> {
   const account = by.wallet.account;
   if (!account) throw new Error("that wallet has no account to sign with");
   const { request, result } = await by.publicClient.simulateContract({
-    address: MONAD_TESTNET.identityRegistry,
+    address: at.identity,
     abi: identityAbi,
     functionName: "register",
     account,
@@ -171,33 +188,43 @@ export async function registerAgent(by: Sender): Promise<{ readonly agentId: big
 }
 
 /** Let an address speak for an agent, which a seat has to do before its work can be checked. */
-export function approvePlatform(by: Sender, platform: Address): Promise<Hex> {
-  return send(by, MONAD_TESTNET.identityRegistry, approvePlatformCall(platform));
+export function approvePlatform(by: Sender, platform: Address, at: Registries = MONAD_REGISTRIES): Promise<Hex> {
+  return send(by, at.identity, approvePlatformCall(platform));
 }
 
 /** Ask a named runner to check one job at one commit. Sent by the agent's owner, or by its operator. */
-export function requestValidation(by: Sender, input: Parameters<typeof requestCall>[0]): Promise<Hex> {
-  return send(by, MONAD_TESTNET.validationRegistry, requestCall(input));
+export function requestValidation(by: Sender, input: Parameters<typeof requestCall>[0], at: Registries = MONAD_REGISTRIES): Promise<Hex> {
+  return send(by, at.validation, requestCall(input));
 }
 
 /** The verdict itself, which only the runner the request named may send. */
-export function writeVerdict(by: Sender, input: Parameters<typeof verdictCall>[0]): Promise<Hex> {
-  return send(by, MONAD_TESTNET.validationRegistry, verdictCall(input));
+export function writeVerdict(by: Sender, input: Parameters<typeof verdictCall>[0], at: Registries = MONAD_REGISTRIES): Promise<Hex> {
+  return send(by, at.validation, verdictCall(input));
 }
 
 /** What the registry says about one request: who answered, with what, and under which tag. */
-export async function verdictOnChain(client: PublicClient, key: Hex): Promise<{
+export async function verdictOnChain(client: PublicClient, key: Hex, at: Registries = MONAD_REGISTRIES): Promise<{
   readonly validator: Address;
   readonly agentId: bigint;
   readonly response: number;
+  /** all zeroes until the named runner has answered: every answer we send carries the receipt's hash */
+  readonly responseHash: Hex;
   readonly tag: string;
   readonly lastUpdate: bigint;
 }> {
-  const [validator, agentId, response, , tag, lastUpdate] = await client.readContract({
-    address: MONAD_TESTNET.validationRegistry,
+  const [validator, agentId, response, responseHash, tag, lastUpdate] = await client.readContract({
+    address: at.validation,
     abi: validationAbi,
     functionName: "getValidationStatus",
     args: [key],
   });
-  return { validator, agentId, response, tag, lastUpdate };
+  return { validator, agentId, response, responseHash, tag, lastUpdate };
+}
+
+/**
+ * The wallet an agent says it acts with, which the registry records on its identity: a seat is held
+ * by a key, and this is how an identity names its key. The zero address when none was set.
+ */
+export async function agentWalletOf(client: PublicClient, agentId: bigint, at: Registries = MONAD_REGISTRIES): Promise<Address> {
+  return client.readContract({ address: at.identity, abi: identityAbi, functionName: "getAgentWallet", args: [agentId] });
 }

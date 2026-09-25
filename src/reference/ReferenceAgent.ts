@@ -41,6 +41,11 @@ export interface ReferenceAgentOptions {
   readonly every?: number;
   /** take a seat on this job only, rather than the first with the role free */
   readonly jobId?: string;
+  /**
+   * The agent's ERC-8004 identity, which its key owns or acts for. Given, the agent asks for the
+   * verdict on its seat to be recorded there once the job has one; left out, it asks for nothing.
+   */
+  readonly agentId?: bigint;
   readonly signal?: AbortSignal;
   readonly say?: (what: string) => void;
 }
@@ -74,7 +79,10 @@ export async function runReferenceAgent(options: ReferenceAgentOptions): Promise
   try {
     while (!options.signal?.aborted) {
       const over = await whyItIsOver(identity, job);
-      if (over) return { jobId: job.jobId, why: over };
+      if (over) {
+        await askForTheRecord(server, identity, job, options.agentId, say);
+        return { jobId: job.jobId, why: over };
+      }
       try {
         await work.step();
       } catch (error) {
@@ -121,6 +129,22 @@ async function takeASeat(
     await pause(every, options.signal);
   }
   return undefined;
+}
+
+/**
+ * Once a job is over, ask for the verdict on this seat to be recorded in ERC-8004, if the agent has an
+ * identity and the job has a verdict. Asking is the agent's to do (Y12): nobody else can.
+ */
+async function askForTheRecord(server: PodServer, identity: Identity, job: JobRef, agentId: bigint | undefined, say: (what: string) => void): Promise<void> {
+  if (agentId === undefined) return;
+  if (!identity.registries) return say("the server names no ERC-8004 registries, so no verdict is asked for");
+  if (!(await server.hasReceipt(job))) return say("the job ended with no verdict, so there is none to record");
+  try {
+    await identity.askForMyVerdict(agentId, server.receiptLink(job));
+    say(`asked for the verdict to be recorded for agent #${agentId}`);
+  } catch (error) {
+    say(`could not ask for the verdict to be recorded: ${(error as Error).message.split("\n")[0]}`);
+  }
 }
 
 /** Why there is nothing more to do on this job, or nothing if there still is. */

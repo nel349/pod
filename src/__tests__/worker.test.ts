@@ -2,13 +2,15 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseEther, type Address, type Hex } from "viem";
+import { parseEther, toHex, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { agentEmail, branchFor } from "../door/index.ts";
 import { sealSpec, type Role, type Spec } from "../job.ts";
 import { approve, post, readJob, takeSeat } from "../jobs.ts";
 import { openJob } from "../publish.ts";
 import { commitToBytes32, commitWork, head, openRepository } from "../repo.ts";
+import { record, registerAgent, requestValidation, verdictOnChain, type Registries } from "../registry.ts";
+import { receiptPath } from "../routes.ts";
 import { IMAGE } from "../sandbox.ts";
 import { JobStore } from "../store.ts";
 import { podTokenAbi, tokenOfJob } from "../token.ts";
@@ -16,14 +18,16 @@ import { Worker } from "../worker/index.ts";
 import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
 import { COAT_IDEA, dockerAvailable, DRY, good, serverSaying, WET, WORKING } from "./support/coat.ts";
 import { aPod, type Agent } from "./support/podServer.ts";
+import { deployRegistries } from "./support/registries.ts";
 
 /**
  * The worker, against a real chain, a real token and real grading.
  *
  * The pods here are made by hand, straight onto the contract and into the repository, so what is
  * under test is only the worker: that it grades what the chain says is ready and nothing else, that
- * the money moves the way the verdict says, once, and that a worker that dies half way is picked up
- * by the next one without anybody being paid twice.
+ * the money moves the way the verdict says, once, that a worker that dies half way is picked up by
+ * the next one without anybody being paid twice, and that each agent that asks has its verdict
+ * recorded in ERC-8004, on the ERC-8004 team's own registries, deployed here.
  */
 
 const available = (await anvilAvailable()) && (await dockerAvailable());
@@ -33,6 +37,9 @@ let jobs: Address;
 let token: Address;
 let store: JobStore;
 let repositories: string;
+let registries: Registries;
+/** where the workers here keep how far they have read the registry: shared, as a restarted worker's would be */
+let workerState: string;
 
 const POSTER = ANVIL_KEYS[1];
 const POSTER_ADDRESS = privateKeyToAccount(POSTER).address;
@@ -64,6 +71,8 @@ beforeAll(async () => {
   token = await anvil.deploy("PodToken", [validator]);
   store = new JobStore(await mkdtemp(join(tmpdir(), "pod-worker-jobs-")));
   repositories = await mkdtemp(join(tmpdir(), "pod-worker-repositories-"));
+  registries = await deployRegistries(anvil);
+  workerState = await mkdtemp(join(tmpdir(), "pod-worker-state-"));
 }, 120_000);
 
 afterAll(() => anvil?.stop());
@@ -75,18 +84,20 @@ interface MadeJob {
   readonly commit: string;
 }
 
+async function fundAgent(agent: Agent): Promise<void> {
+  const payer = anvil.wallet(ANVIL_KEYS[0]);
+  await anvil.publicClient.waitForTransactionReceipt({
+    hash: await payer.sendTransaction({ to: agent.address, value: parseEther("10"), account: payer.account!, chain: payer.chain }),
+  });
+}
+
 /**
  * A job posted, a pod seated, the work committed into the job's repository by the builder, and
  * approvals given by whichever seats are named. `pushed: false` approves a commit that is not there.
  */
 async function aJob(jobId: string, work: string, approving: readonly Role[], pushed = true): Promise<MadeJob> {
   const pod = aPod();
-  const payer = anvil.wallet(ANVIL_KEYS[0]);
-  for (const agent of Object.values(pod)) {
-    await anvil.publicClient.waitForTransactionReceipt({
-      hash: await payer.sendTransaction({ to: agent.address, value: parseEther("10"), account: payer.account!, chain: payer.chain }),
-    });
-  }
+  for (const agent of Object.values(pod)) await fundAgent(agent);
   const now = (await anvil.publicClient.getBlock()).timestamp;
   const seal = await sealSpec(SPEC);
   const onChainId = await post(contractAs(POSTER), { seal, endsAt: now + 3600n, reviewers: 1, price: PRICE });
@@ -125,6 +136,7 @@ const EVERY_SEAT: readonly Role[] = ["lead", "builder", "reviewer", "qa", "secur
 function aWorker(jobsKey: Hex = VALIDATOR, said: string[] = []): Worker {
   return new Worker({
     store, repositories, jobs: contractAs(jobsKey), token: tokenAs(VALIDATOR), runnerKey: VALIDATOR, image: IMAGE, times: 2,
+    site: SITE, registry: { registries, stateFolder: workerState },
     say: (what) => said.push(what),
   });
 }
@@ -141,6 +153,24 @@ async function untilSettled(worker: Worker, done: () => Promise<boolean>, second
 }
 
 const balance = (address: Address) => anvil.publicClient.getBalance({ address });
+
+const SITE = "http://pod.test";
+const sender = (key: Hex) => ({ publicClient: anvil.publicClient, wallet: anvil.wallet(key) });
+
+/** An agent's own identity in the registry, registered with its own key, so the key owns it. */
+async function anIdentity(agent: Agent): Promise<bigint> {
+  return (await registerAgent(sender(agent.key), registries)).agentId;
+}
+
+/** What an agent sends to have its verdict recorded: its own request, naming the validator, pointing at the receipt. */
+async function asksForItsVerdict(agent: Agent, agentId: bigint, jobId: string, key: Hex = toHex(crypto.getRandomValues(new Uint8Array(32)))): Promise<Hex> {
+  await requestValidation(sender(agent.key), {
+    runner: privateKeyToAccount(VALIDATOR).address, agentId, evidenceURI: `${SITE}${receiptPath(jobId)}`, key,
+  }, registries);
+  return key;
+}
+
+const answerTo = (key: Hex) => verdictOnChain(anvil.publicClient, key, registries);
 
 describe.skipIf(!available)("the worker", () => {
   test("several jobs at once: each is graded, published and settled its own way, and only work that passed is titled and put on main", async () => {
@@ -176,6 +206,61 @@ describe.skipIf(!available)("the worker", () => {
     expect(await tokenOfJob(tokenAs(VALIDATOR), failing.onChainId)).toBe(0n);
     expect(await head(await openRepository(repositories, failing.jobId))).toBeUndefined();
     expect((await store.read(failing.jobId))!.chain?.minted).toBeUndefined();
+  }, 300_000);
+
+  test("each agent that asks has the verdict on its seat recorded in ERC-8004, once, and nobody else does", async () => {
+    const job = await aJob("a-coat-with-a-record", WORKING, EVERY_SEAT);
+    const builderId = await anIdentity(job.pod.builder);
+    const reviewerId = await anIdentity(job.pod.reviewer);
+    const stranger = aPod().builder;
+    await fundAgent(stranger);
+    const strangerId = await anIdentity(stranger);
+
+    // the builder asks before there is a verdict; it is held, and answered once there is one
+    const early = await asksForItsVerdict(job.pod.builder, builderId, job.jobId);
+    const first: string[] = [];
+    const worker = aWorker(VALIDATOR, first);
+    await worker.tick();
+    expect((await answerTo(early)).responseHash).toBe(`0x${"0".repeat(64)}`);
+    await untilSettled(worker, async () => (await answerTo(early)).response === 100);
+    const answered = await answerTo(early);
+    expect(answered.tag).toBe("pod.builder");
+    expect(answered.responseHash).toBe((await store.read(job.jobId))!.signed!.hash);
+    expect(await record(anvil.publicClient, builderId, "pod.builder", [privateKeyToAccount(VALIDATOR).address], registries)).toEqual({ count: 1, average: 100 });
+
+    // an identity with no seat on the job asks too, and nothing is recorded for it
+    const uninvited = await asksForItsVerdict(stranger, strangerId, job.jobId);
+    await worker.tick();
+    expect((await answerTo(uninvited)).responseHash).toBe(`0x${"0".repeat(64)}`);
+    expect(first.some((line) => line.includes(`#${strangerId}`) && line.includes("holds no seat"))).toBe(true);
+
+    // the reviewer asks while no worker is running; the next one, reading on from where the last stopped, answers it
+    const whileDown = await asksForItsVerdict(job.pod.reviewer, reviewerId, job.jobId);
+    const second: string[] = [];
+    const next = aWorker(VALIDATOR, second);
+    await next.tick();
+    expect((await answerTo(whileDown)).tag).toBe("pod.reviewer");
+    // and nothing it had already answered is answered again
+    expect(second.filter((line) => line.startsWith("[worker] recorded "))).toEqual([`[worker] recorded passed for agent #${reviewerId}, the reviewer on ${job.jobId}`]);
+
+    // a worker that has lost its place reads every request again from the start, and answers none twice
+    await writeFile(join(workerState, "registry.json"), JSON.stringify({ readTo: "0", holding: [] }));
+    const third: string[] = [];
+    await aWorker(VALIDATOR, third).tick();
+    expect(third.filter((line) => line.startsWith("[worker] recorded "))).toEqual([]);
+  }, 300_000);
+
+  test("a job that failed is recorded as a failure, under the seat's role", async () => {
+    const job = await aJob("a-coat-recorded-as-failed", ALWAYS_A_COAT, EVERY_SEAT);
+    const qaId = await anIdentity(job.pod.qa);
+    const worker = aWorker();
+    await untilSettled(worker, async () => (await readJob(reading(), job.onChainId)).state === "refunded");
+    const key = await asksForItsVerdict(job.pod.qa, qaId, job.jobId);
+    await worker.tick();
+    const answered = await answerTo(key);
+    expect(answered.tag).toBe("pod.qa");
+    expect(answered.response).toBe(0);
+    expect(answered.responseHash).not.toBe(`0x${"0".repeat(64)}`);
   }, 300_000);
 
   test("a pod that has not met the policy is not graded", async () => {

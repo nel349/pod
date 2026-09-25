@@ -1,0 +1,4 @@
+[test]
+# Every test of ours is under src/. contracts/lib holds other projects' code, pinned, with suites of
+# their own that are theirs to run, not ours.
+root = "src"

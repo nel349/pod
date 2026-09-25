@@ -12,11 +12,13 @@ import { doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard } from "../../doo
 import { sealSpec, type Role, type Spec } from "../../job.ts";
 import { policyMet, post, readJob, readSeats, readTerms } from "../../jobs.ts";
 import { openJob } from "../../publish.ts";
+import type { Registries } from "../../registry.ts";
 import { bytes32ToCommit } from "../../repo.ts";
 import { serve } from "../../server.ts";
 import { JobStore } from "../../store.ts";
 import { ANVIL_KEYS, startAnvil, type Anvil } from "./anvil.ts";
 import { GOOD_REPLY, replying, writerWith } from "./coat.ts";
+import { deployRegistries } from "./registries.ts";
 
 /** The key the contracts answer to: it settles, mints, and signs every receipt */
 export const VALIDATOR = ANVIL_KEYS[6];
@@ -41,6 +43,8 @@ export interface RunningPodServer {
   readonly jobs: Address;
   /** the title contract, minted on by the validator */
   readonly token: Address;
+  /** the ERC-8004 team's registries, deployed here and named in the market so agents know where to ask */
+  readonly registries: Registries;
   readonly store: JobStore;
   readonly repositories: string;
   readonly base: string;
@@ -61,6 +65,7 @@ export async function aPodServer(input: {
   const anvil = await startAnvil();
   const jobs = await anvil.deploy("PodJobs", [privateKeyToAccount(VALIDATOR).address]);
   const token = await anvil.deploy("PodToken", [privateKeyToAccount(VALIDATOR).address]);
+  const registries = await deployRegistries(anvil);
   const payer = anvil.wallet(ANVIL_KEYS[0]);
   for (const agent of input.fund) {
     await anvil.publicClient.waitForTransactionReceipt({
@@ -93,7 +98,7 @@ export async function aPodServer(input: {
   const server = serve(store, 0, {
     // the market is here for what agents read first: which chain, which contract
     market: {
-      page: { chainId: 31337, chainName: "a local chain", rpc: anvil.rpc, jobs, explorer: "http://explorer.invalid", coin: "ETH" },
+      page: { chainId: 31337, chainName: "a local chain", rpc: anvil.rpc, jobs, explorer: "http://explorer.invalid", coin: "ETH", registries },
       chain: { jobs, job: async () => undefined },
       writing: new CheckWriting({ writer: writerWith(replying(GOOD_REPLY).model), proven }),
       proven,
@@ -104,7 +109,7 @@ export async function aPodServer(input: {
   });
 
   return {
-    anvil, jobs, token, store, repositories, reading, onChainId,
+    anvil, jobs, token, registries, store, repositories, reading, onChainId,
     base: `http://127.0.0.1:${server.port}`,
     async git(args) {
       const child = Bun.spawn(["git", "--git-dir", join(repositories, `${input.jobId}.git`), ...args], {

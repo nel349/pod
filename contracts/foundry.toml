@@ -3,4 +3,12 @@ src = "src"
 out = "out"
 libs = ["lib"]
 
+# The ERC-8004 registries are built only so the tests can deploy them on a local chain, the same
+# way the ERC-8004 team's own tests do. Nothing in src/ depends on them.
+remappings = [
+  "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/contracts/",
+  "erc-8004/=lib/erc-8004-contracts/contracts/",
+]
+
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

@@ -4,7 +4,8 @@
  * Nobody asks it to. It looks at every job on this contract and, whenever the chain says every seat
  * the policy asks for has approved one commit, it grades that commit in the sealed box, publishes the
  * evidence, settles on the contract, mints the title to whoever paid, and puts the work on the main
- * branch. So no party has to be trusted to press a button, and no pod can stall a job by never asking.
+ * branch. Then, for every agent that asks, it records the verdict on its seat in ERC-8004 (see
+ * RegistryAnswers.ts). So no party has to be trusted to press a button, and no pod can stall a job by never asking.
  *
  * Every step asks what has already happened before it acts, and the answers live where the wall and
  * the chain already keep them: the job's record, the contract, the token, the repository. A worker
@@ -25,9 +26,11 @@ import { bytes32ToCommit, commitToBytes32, has, openRepository, putOnMain } from
 import { moneyMove } from "../runner.ts";
 import { jobPath } from "../routes.ts";
 import { SEATS } from "../seal.ts";
+import type { Registries } from "../registry.ts";
 import { readableToTheBox } from "../sandbox.ts";
 import type { JobRecord, JobStore, OnChain } from "../store.ts";
 import { mintPod, tokenOfJob } from "../token.ts";
+import { RegistryAnswers } from "./RegistryAnswers.ts";
 
 /** How many jobs are graded at once. Grading is Docker boxes, and a machine has only so many to give */
 export const GRADED_AT_ONCE = 2;
@@ -48,6 +51,11 @@ export interface WorkerOptions {
   readonly image: string;
   /** where job pages are served, so a title points at its job. Left out, the path alone */
   readonly site?: string;
+  /**
+   * The ERC-8004 registries, where agents ask for their verdicts to be recorded, and the folder the
+   * worker keeps how far it has read them in. Left out, nothing is recorded there.
+   */
+  readonly registry?: { readonly registries: Registries; readonly stateFolder: string };
   readonly gradedAtOnce?: number;
   /** how many times the whole set of checks runs, which have to agree. Two at least */
   readonly times?: number;
@@ -61,9 +69,19 @@ export class Worker {
   /** every chain write, in order: one key, one nonce stream */
   private chainWrites: Promise<unknown> = Promise.resolve();
   private readonly runner: Address;
+  private readonly answers?: RegistryAnswers;
 
   constructor(private readonly options: WorkerOptions) {
     this.runner = privateKeyToAccount(options.runnerKey).address;
+    if (options.registry) {
+      this.answers = new RegistryAnswers({
+        store: options.store, jobs: options.jobs, runner: this.runner,
+        registries: options.registry.registries, stateFolder: options.registry.stateFolder,
+        ...(options.site ? { site: options.site } : {}),
+        onTheChain: (write) => this.onTheChain(write),
+        say: (what) => this.say(what),
+      });
+    }
   }
 
   /** One look at every job: start what can start, finish what can finish. */
@@ -75,6 +93,11 @@ export class Worker {
         // one job's trouble is not every job's: it is said, and tried again on the next look
         this.say(`${record.jobId}: ${(error as Error).message.split("\n")[0]}`);
       }
+    }
+    try {
+      await this.answers?.look();
+    } catch (error) {
+      this.say(`the registry could not be read, and will be on the next look: ${(error as Error).message.split("\n")[0]}`);
     }
   }
 

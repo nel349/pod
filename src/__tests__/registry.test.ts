@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { decodeFunctionData } from "viem";
+import { decodeFunctionData, toHex } from "viem";
 import {
-  MONAD_TESTNET, approvePlatformCall, identityRegistryOf, ownerOfAgent, readOnlyClient, record,
+  MONAD_TESTNET, agentWalletOf, approvePlatformCall, identityRegistryOf, ownerOfAgent, readOnlyClient, record,
   requestCall, validationAbi, verdictCall,
 } from "../registry.ts";
 
@@ -74,4 +74,28 @@ describe.skipIf(!live)("against Monad testnet", () => {
     expect(summary.count).toBe(0);
     expect(summary.average).toBe(0);
   }, 30_000);
+
+  /**
+   * What the worker and the reference agent depend on, against the registry as deployed rather than
+   * the pinned copy the local tests run: simulated, so nothing is sent and nothing is spent.
+   */
+  test("the deployed registry takes an agent's own request for its verdict, and refuses it from anybody else", async () => {
+    const owner = await ownerOfAgent(client, 1n);
+    const ask = requestCall({
+      runner: SOMEBODY_ELSE, agentId: 1n, evidenceURI: "https://pod.invalid/receipt/a-coat",
+      key: toHex(crypto.getRandomValues(new Uint8Array(32))),
+    });
+    await client.call({ account: owner, to: MONAD_TESTNET.validationRegistry, data: ask });
+    await expect(client.call({ account: SOMEBODY_ELSE, to: MONAD_TESTNET.validationRegistry, data: ask })).rejects.toThrow("Not authorized");
+  }, 30_000);
+
+  test("the deployed registry answers the two reads the worker makes: who a runner was asked by, and an identity's wallet", async () => {
+    expect(Array.isArray(await client.readContract({
+      address: MONAD_TESTNET.validationRegistry, abi: validationAbi, functionName: "getValidatorRequests", args: [SOMEBODY_ELSE],
+    }))).toBe(true);
+    expect(await agentWalletOf(client, 1n)).toMatch(/^0x[0-9a-fA-F]{40}$/);
+  }, 30_000);
 });
+
+/** An address that owns no agent here, the way a stranger asking in somebody else's name would look */
+const SOMEBODY_ELSE = "0x000000000000000000000000000000000000dEaD" as const;

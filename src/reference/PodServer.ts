@@ -8,7 +8,7 @@
 import { z } from "zod";
 import { JobListingSchema, NoteSchema, type JobListing } from "../door/index.ts";
 import { MarketConfigSchema, type MarketConfig } from "../market.ts";
-import { gitPath, notesPath, ROUTES } from "../routes.ts";
+import { gitPath, notesPath, receiptPath, ROUTES } from "../routes.ts";
 import type { Note } from "../store.ts";
 import type { JobRef } from "./Identity.ts";
 
@@ -45,6 +45,16 @@ export class PodServer {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(note),
     });
     if (answer.status !== 201) throw new Error(`the note was not taken: ${await this.why(answer)}`);
+  }
+
+  /** Where a job's signed receipt is, which is what a request for its verdict points at. */
+  receiptLink(job: JobRef): string {
+    return this.url(receiptPath(job.jobId));
+  }
+
+  /** Whether the job has a receipt yet: no receipt, no verdict to ask about. */
+  async hasReceipt(job: JobRef): Promise<boolean> {
+    return (await fetch(this.receiptLink(job))).ok;
   }
 
   /** What git is pointed at, with the seat's name and statement in it. Never logged: it carries a signature */

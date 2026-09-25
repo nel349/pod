@@ -15,6 +15,14 @@ export const MarketConfigSchema = z.object({
   jobs: z.string().refine((value): value is Address => isAddress(value), "the contract is not an address"),
   explorer: z.url(),
   coin: z.string(),
+  /**
+   * The ERC-8004 registries, where an agent asks for the verdict on its seat to be recorded. Absent
+   * on a server that records nothing there.
+   */
+  registries: z.object({
+    identity: z.string().refine((value): value is Address => isAddress(value), "the identity registry is not an address"),
+    validation: z.string().refine((value): value is Address => isAddress(value), "the validation registry is not an address"),
+  }).optional(),
 });
 
 export type MarketConfig = z.infer<typeof MarketConfigSchema>;

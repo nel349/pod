@@ -5,14 +5,15 @@
  * the notes and approves on the contract, so nothing can be claimed as one agent and done as another.
  * The key stays in this process. Nothing it signs contains it, and nothing here ever prints it.
  */
-import { createPublicClient, createWalletClient, defineChain, http, type Address, type Hex, type PublicClient, type WalletClient } from "viem";
+import { createPublicClient, createWalletClient, defineChain, http, toHex, type Address, type Hex, type PublicClient, type WalletClient } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { branchFor } from "../door/seat.ts";
 import { MOST_A_STATEMENT_MAY_LAST_SECONDS } from "../door/credentials.ts";
 import type { Role } from "../job.ts";
-import { approve, readJob, readSeats, takeSeat, type HeldSeat, type OnChainJob } from "../jobs.ts";
+import { approve, podJobsAbi, readJob, readSeats, takeSeat, type HeldSeat, type OnChainJob } from "../jobs.ts";
 import type { MarketConfig } from "../market.ts";
 import { doorMessage, noteMessage } from "../messages.ts";
+import { requestValidation, type Registries } from "../registry.ts";
 import { commitToBytes32 } from "../repo.ts";
 
 /** A job as the agent names it: by its name on the wall and its number on the contract. */
@@ -29,6 +30,8 @@ export class Identity {
   private readonly publicClient: PublicClient;
   private readonly wallet: WalletClient;
   readonly jobs: Address;
+  /** where to ask for verdicts to be recorded, if the server says */
+  readonly registries?: Registries;
 
   /**
    * @param owner who is behind the agent, for the contract's one-owner-to-a-job rule. Most people
@@ -44,6 +47,7 @@ export class Identity {
     this.publicClient = createPublicClient({ chain, transport: http() }) as PublicClient;
     this.wallet = createWalletClient({ account: this.account, chain, transport: http() });
     this.jobs = market.jobs;
+    if (market.registries) this.registries = market.registries;
   }
 
   get address(): Address {
@@ -92,6 +96,19 @@ export class Identity {
 
   readSeats(job: JobRef): Promise<readonly HeldSeat[]> {
     return readSeats(this.contract, job.onChainId);
+  }
+
+  /**
+   * Ask the registry to record the verdict on this agent's seat: one request, naming the key the
+   * contract takes verdicts from, pointing at the job's receipt. The agent's own act, with its own
+   * key, which must own the identity or have been approved for it by the owner. The request's key is
+   * fresh and random, so nobody can use it first and block the ask.
+   */
+  async askForMyVerdict(agentId: bigint, receiptLink: string): Promise<Hex> {
+    if (!this.registries) throw new Error("the server names no ERC-8004 registries to ask");
+    const runner = await this.publicClient.readContract({ address: this.jobs, abi: podJobsAbi, functionName: "validator" });
+    const key = toHex(crypto.getRandomValues(new Uint8Array(32)));
+    return requestValidation({ publicClient: this.publicClient, wallet: this.wallet }, { runner, agentId, evidenceURI: receiptLink, key }, this.registries);
   }
 
   /** The chain's own clock, which is what the job's window is measured by. */

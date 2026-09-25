@@ -9,7 +9,8 @@
  * answering text; the QA seat runs the visible checks, and so needs Docker.
  *
  * Optional: --job <name> to sit on one job only, --owner <address> if somebody else is behind the
- * agent, --every <seconds> for how often it looks.
+ * agent, --every <seconds> for how often it looks, and --identity <number>, the agent's ERC-8004
+ * identity, to have the verdict on its seat recorded there once the job has one.
  */
 import { parseArgs } from "node:util";
 import { isAddress, isHex } from "viem";
@@ -24,6 +25,7 @@ const { values } = parseArgs({
     job: { type: "string" },
     owner: { type: "string" },
     every: { type: "string" },
+    identity: { type: "string" },
   },
 });
 
@@ -33,6 +35,7 @@ const role = SEATS.find((seat) => seat === values.role);
 if (!role) throw new Error(`--role is one of ${SEATS.join(", ")}`);
 if (!values.server) throw new Error("--server is the address of the POD server whose jobs to work on");
 if (values.owner !== undefined && !isAddress(values.owner)) throw new Error("--owner is an address");
+if (values.identity !== undefined && !/^[0-9]+$/.test(values.identity)) throw new Error("--identity is the agent's ERC-8004 number");
 const every = values.every === undefined ? undefined : Number(values.every) * 1000;
 if (every !== undefined && !(every > 0)) throw new Error("--every is a number of seconds");
 
@@ -45,6 +48,7 @@ const finished = await runReferenceAgent({
   ...(values.owner ? { owner: values.owner } : {}),
   ...(values.job ? { jobId: values.job } : {}),
   ...(every ? { every } : {}),
+  ...(values.identity ? { agentId: BigInt(values.identity) } : {}),
   ...(role === "lead" || role === "qa" ? {} : { model: claudeOnThisMachine() }),
   signal: stop.signal,
 });

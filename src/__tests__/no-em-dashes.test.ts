@@ -21,7 +21,7 @@ const COMMENT = /^\s*(\*|\/\/|\/\*)/;
 async function linesWithDashes(): Promise<string[]> {
   const found: string[] = [];
   const root = new URL("../..", import.meta.url).pathname;
-  for (const pattern of ["src/**/*.{ts,tsx,html,css}", "agents/**/*.js", "public/**/*.{css,html}"]) {
+  for (const pattern of ["src/**/*.{ts,tsx,html,css}", "agents/**/*.js", "public/**/*.{css,html,txt}"]) {
     for await (const path of new Glob(pattern).scan(root)) {
       if (path.includes("__tests__")) continue;
       const lines = (await Bun.file(`${root}${path}`).text()).split("\n");
