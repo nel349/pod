@@ -25,7 +25,7 @@ import { policyMet, readApprovals, readJob, readSeats, settle, type Contract, ty
 import { pause } from "../pause.ts";
 import { gradeCommit } from "../pipeline.ts";
 import { publish } from "../publish.ts";
-import { ensureRepository, push as pushToGitHub, setDefaultBranch } from "../github.ts";
+import { publishJob } from "../github.ts";
 import { BRANCH, bytes32ToCommit, commitToBytes32, has, onBranch, openRepository, putOnMain, shortCommit } from "../repo.ts";
 import { moneyMove } from "../runner.ts";
 import { jobPath } from "../routes.ts";
@@ -330,9 +330,7 @@ export class Worker {
 
   /** The job's whole repository on GitHub, opening on the work that passed, and where it is kept on the record. */
   private async publish(jobId: string, idea: string, owner: string): Promise<void> {
-    const published = await ensureRepository(owner, jobId, idea);
-    await pushToGitHub(await openRepository(this.options.repositories, jobId), published, "every branch");
-    await setDefaultBranch(published, BRANCH);
+    const published = await publishJob(await openRepository(this.options.repositories, jobId), owner, jobId, idea, BRANCH);
     const record = await this.options.store.read(jobId);
     if (record) await this.options.store.save({ ...record, repository: published.url });
     this.say(`${jobId}: published at ${published.url}`);

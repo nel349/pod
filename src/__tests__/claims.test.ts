@@ -1,22 +1,15 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { parseEther, type Address, type Hex } from "viem";
+import type { Address, Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { Claims } from "../claims.ts";
-import { sealSpec, type Spec } from "../job.ts";
-import { approve, post, settle, takeSeat } from "../jobs.ts";
 import { claimToSign } from "../messages.ts";
-import { openJob } from "../publish.ts";
-import { commitToBytes32 } from "../repo.ts";
 import { claimApiPath } from "../routes.ts";
-import { SEATS } from "../seal.ts";
-import { JobStore } from "../store.ts";
-import { mintPod, podTokenAbi, tokenOfJob } from "../token.ts";
-import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
-import { COAT_IDEA, DRY, WET } from "./support/coat.ts";
-import { anAgent, aPod, VALIDATOR } from "./support/podServer.ts";
+import type { JobStore } from "../store.ts";
+import { podTokenAbi } from "../token.ts";
+import { anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
+import { COAT_IDEA } from "./support/coat.ts";
+import { anAgent } from "./support/podServer.ts";
+import { aTitledJob, POSTER } from "./support/titled.ts";
 
 /**
  * The holder of a POD claims its repository (11E), against a real title on a local chain.
@@ -30,17 +23,8 @@ import { anAgent, aPod, VALIDATOR } from "./support/podServer.ts";
 const available = await anvilAvailable();
 
 const JOB = "a-coat-to-claim";
-const POSTER = ANVIL_KEYS[1];
 const COMMIT = "c0".repeat(20);
 const REPOSITORY = "https://github.com/pod-an-owner-nobody-has/pod-a-coat-to-claim";
-const SPEC: Spec = {
-  idea: COAT_IDEA, kind: "service", mode: "flash", price: parseEther("1"),
-  checks: [
-    { says: WET, run: "node check-1.mjs", hidden: false, file: "check-1.mjs" },
-    { says: DRY, run: "node check-2.mjs", hidden: true, file: "check-2.mjs" },
-  ],
-  allowed: [], salt: "a-number-nobody-can-guess",
-};
 
 let anvil: Anvil;
 let store: JobStore;
@@ -48,33 +32,12 @@ let claims: Claims;
 let tokenAddress: Address;
 let tokenId = 0n;
 
-/** A job posted, seated, approved, paid and titled to the poster, the way the worker leaves one. */
 beforeAll(async () => {
   if (!available) return;
   anvil = await startAnvil();
-  const validator = privateKeyToAccount(VALIDATOR).address;
-  const jobs = await anvil.deploy("PodJobs", [validator]);
-  tokenAddress = await anvil.deploy("PodToken", [validator]);
-  const as = (key: Hex) => ({ address: jobs, publicClient: anvil.publicClient, wallet: anvil.wallet(key) });
-  const pod = aPod();
-  for (const agent of Object.values(pod)) await anvil.fund(agent.address);
-
-  const now = (await anvil.publicClient.getBlock()).timestamp;
-  const seal = await sealSpec(SPEC);
-  const onChainId = await post(as(POSTER), { seal, endsAt: now + 3600n, reviewers: 1, price: SPEC.price });
-  for (const role of SEATS) await takeSeat(as(pod[role].key), onChainId, role, pod[role].address);
-  for (const role of SEATS) await approve(as(pod[role].key), onChainId, role, commitToBytes32(COMMIT));
-  await settle(as(VALIDATOR), onChainId, commitToBytes32(COMMIT), true);
-  const token = { address: tokenAddress, publicClient: anvil.publicClient, wallet: anvil.wallet(VALIDATOR) };
-  await mintPod(token, {
-    jobs: as(VALIDATOR), jobId: onChainId, seal, commit: commitToBytes32(COMMIT), receiptHash: `0x${"9e".repeat(32)}`,
-    crew: SEATS.map((role) => ({ role, agent: pod[role].address })), uri: `https://pod.example/job/${JOB}`,
-  });
-  tokenId = await tokenOfJob(token, onChainId);
-
-  store = new JobStore(await mkdtemp(join(tmpdir(), "pod-claims-")));
-  const opened = await openJob(store, { jobId: JOB, seal, spec: SPEC, endsAt: new Date(Number(now + 3600n) * 1000), seats: [] });
-  await store.save({ ...opened, repository: REPOSITORY, chain: { network: "monad-testnet", jobId: String(onChainId), jobs, tokenId: tokenId.toString() } });
+  const titled = await aTitledJob(anvil, { jobId: JOB, commit: COMMIT, repository: REPOSITORY });
+  ({ store, tokenId } = titled);
+  tokenAddress = titled.token;
   claims = new Claims({ store, token: { address: tokenAddress, publicClient: anvil.publicClient } });
 }, 120_000);
 

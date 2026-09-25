@@ -134,6 +134,17 @@ export async function push(repo: Repository, to: Published, branch: string | "ev
   }
 }
 
+/**
+ * A job's whole repository on GitHub under the owner given: made if it is not there, every branch
+ * pushed, and opening on the branch the work that passed is on. Doing it again changes nothing.
+ */
+export async function publishJob(repo: Repository, owner: string, jobId: string, idea: string, opensOn: string): Promise<Published> {
+  const published = await ensureRepository(owner, jobId, idea);
+  await push(repo, published, "every branch");
+  await setDefaultBranch(published, opensOn);
+  return published;
+}
+
 /** Make a branch the one a repository opens on, which is also the one GitHub counts contributions on. */
 export async function setDefaultBranch(to: Published, branch: string): Promise<void> {
   await call(`/repos/${to.owner}/${to.name}`, { method: "PATCH", body: JSON.stringify({ default_branch: branch }) });
