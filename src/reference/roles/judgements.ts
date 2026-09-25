@@ -12,7 +12,7 @@ import { lstat, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { grade, type CheckToRun } from "../../blackbox.ts";
-import { START } from "../../job.ts";
+import { PORT, START } from "../../job.ts";
 import { readableToTheBox } from "../../sandbox.ts";
 import { verdictFrom, type Verdict } from "../protocol.ts";
 import { briefFor, type Seated } from "../Seated.ts";
@@ -41,10 +41,11 @@ export const reviewing: Judgement = async (seated, files) => askTheModel(seated,
 
 export const securityReading: Judgement = async (seated, files) => askTheModel(seated, [
   "You are the security seat on a small team. You do not judge whether the work is good; somebody else does.",
+  `Answering requests on port ${PORT}, from anywhere, is what the work is for: listening there is required, not a fault.`,
   "You judge whether it does anything a job must not do:",
   seated.listed.allowedHosts.length === 0
-    ? "- reach any network at all"
-    : `- reach any host but ${seated.listed.allowedHosts.map((allowed) => allowed.host).join(", ")}`,
+    ? "- open a connection out to any other host"
+    : `- open a connection out to any host but ${seated.listed.allowedHosts.map((allowed) => allowed.host).join(", ")}`,
   "- read environment variables, secrets, or files outside its own folder",
   "- start other programs, or change the machine it runs on",
   "",
@@ -76,13 +77,23 @@ export const qaRunning: Judgement = async (seated, files) => {
     }
     return {
       approve: false,
-      why: failed.map((check) => `"${check.says}" failed: ${check.output.trim().split("\n").at(-1)?.slice(0, LONGEST_CHECK_SAID) ?? `exit ${check.exitCode}`}`).join("; ")
+      why: failed.map((check) => `"${check.says}" failed: ${whatItSaid(check.output) ?? `exit ${check.exitCode}`}`).join("; ")
         || "the work did not start",
     };
   } finally {
     await rm(checks, { recursive: true, force: true });
   }
 };
+
+/**
+ * The line of a check's output that says what went wrong. Not simply the last line: when a check
+ * throws, node ends with its stack and then its own version, which says nothing about the work.
+ */
+export function whatItSaid(output: string): string | undefined {
+  const meaningful = output.split("\n").map((line) => line.trim())
+    .filter((line) => line !== "" && !/^at\s/.test(line) && !/^Node\.js v\d/.test(line) && !/^\^+$/.test(line));
+  return meaningful.at(-1)?.slice(0, LONGEST_CHECK_SAID);
+}
 
 async function askTheModel(seated: Seated, prompt: readonly string[]): Promise<Verdict> {
   if (!seated.model) throw new Error(`the ${seated.role} seat needs a model to judge with`);

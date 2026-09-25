@@ -29,7 +29,9 @@ export interface Verdict {
  */
 export function verdictFrom(answer: string): Verdict {
   const first = answer.trim().split("\n")[0]?.trim() ?? "";
-  if (/^approve\b/i.test(first)) return { approve: true, why: first.replace(/^approve[:\s-]*/i, "").trim() || "it does what was asked" };
-  if (/^refuse\b/i.test(first)) return { approve: false, why: first.replace(/^refuse[:\s-]*/i, "").trim() || "it does not do what was asked" };
+  // whatever the model put between its word and its reason, a colon, a dash of any length, is not the reason
+  const reason = (word: RegExp): string => first.replace(word, "").replace(/^[\s:,.\-\u2013\u2014]+/, "").trim();
+  if (/^approve\b/i.test(first)) return { approve: true, why: reason(/^approve/i) || "it does what was asked" };
+  if (/^refuse\b/i.test(first)) return { approve: false, why: reason(/^refuse/i) || "it does not do what was asked" };
   return { approve: false, why: `the model did not answer APPROVE or REFUSE, so this is not a yes: ${first.slice(0, 200)}` };
 }

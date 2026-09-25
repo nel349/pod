@@ -2,6 +2,7 @@
  * What a reference agent has once it holds a seat, and the few things every seat reads the same way.
  */
 import type { Model } from "../broker.ts";
+import { plainDashes } from "../checkwriting/fromTheBox.ts";
 import type { ListedJob } from "../door/index.ts";
 import { branchFor } from "../door/seat.ts";
 import type { Role } from "../job.ts";
@@ -50,9 +51,12 @@ export function passwordFor(seated: Seated): Promise<string> {
   return seated.identity.doorPassword(seated.job, seated.role);
 }
 
-/** The seat's notes to its pod, signed and sent. */
+/**
+ * The seat's notes to its pod, signed and sent. Much of what they say is the model's words, and notes
+ * are published with the job, so the dashes a model likes are taken out as they are for the checks.
+ */
 export async function tellThePod(seated: Seated, says: string, about?: string): Promise<void> {
-  await seated.server.writeNote(seated.job, await seated.identity.note(seated.job, seated.role, says, about));
+  await seated.server.writeNote(seated.job, await seated.identity.note(seated.job, seated.role, plainDashes(says), about));
 }
 
 /** The brief as the model reads it: the idea, what the visible checks ask, and where the work may reach. */
@@ -64,7 +68,7 @@ export function briefFor(listed: ListedJob): string {
     ...listed.visibleChecks.map((check) => `- ${check.says}`),
     "",
     listed.allowedHosts.length === 0
-      ? "It may not reach any network at all."
-      : `It may reach only: ${listed.allowedHosts.map((allowed) => `${allowed.host} (${allowed.why})`).join(", ")}.`,
+      ? "It may not open a connection out to any other host."
+      : `It may open connections out only to: ${listed.allowedHosts.map((allowed) => `${allowed.host} (${allowed.why})`).join(", ")}.`,
   ].join("\n");
 }

@@ -63,7 +63,8 @@ export class Builder implements SeatWork {
 
     const answer = await seated.model([
       "You are the builder on a small team. Write the whole of server.js and nothing else.",
-      `It is a Node program using only the standard library. It must listen on port ${PORT}.`,
+      `It is a Node program using only the standard library. It must listen on port ${PORT}, on every interface,`,
+      "not only localhost: it is reached from another machine on a private network.",
       "Reply with one fenced code block and no explanation.",
       "",
       "## What is being asked for",
