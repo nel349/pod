@@ -12,6 +12,7 @@
 import { appendFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Address, Hex } from "viem";
+import type { Invitation } from "./claims.ts";
 import type { Tile } from "./gallery.ts";
 import type { Approval } from "./jobpage.ts";
 import type { SignedReceipt } from "./receipt.ts";
@@ -74,6 +75,8 @@ export interface JobRecord {
   readonly signed?: SignedReceipt;
   readonly repository?: string;
   readonly podHolder?: string;
+  /** the last invitation GitHub sent to hand the repository to the title's holder */
+  readonly invited?: Invitation;
   /** why the worker has not graded it although the pod says it is done, such as the approved commit never having been pushed */
   readonly waitingBecause?: string;
   /** the verdicts recorded in ERC-8004 for this job's seats: one per seat, and which request it answered */

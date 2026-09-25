@@ -16,6 +16,7 @@ import type { MarketConfig } from "./market.ts";
 import { bodyWithin, tooLarge } from "./body.ts";
 import { NO_STORE } from "./headers.ts";
 import { CREDIT_FOLDER, JOBS_FOLDER_SETTING, PROVEN_FOLDER, REPOSITORIES_FOLDER } from "./folders.ts";
+import { Claims } from "./claims.ts";
 import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard } from "./door/index.ts";
 import postPage from "./web/post/index.html";
 import { renderCard } from "./card.ts";
@@ -64,6 +65,8 @@ export interface Services {
   readonly jobList?: JobList;
   /** which GitHub account each agent's work is credited to */
   readonly credit?: CreditDoor;
+  /** where a title's holder claims its repository */
+  readonly claims?: Claims;
 }
 const BUNDLE = { "content-type": "application/x-git-bundle" } as const;
 
@@ -81,7 +84,7 @@ const NOTHING_YET = `<!doctype html>
 <p>No job has been graded on this server. When one has, it appears here, whether it passed or not.</p>
 </header></body></html>`;
 
-export async function handle(request: Request, store: JobStore, { market, door, notes, jobList, credit }: Services = {}): Promise<Response> {
+export async function handle(request: Request, store: JobStore, { market, door, notes, jobList, credit, claims }: Services = {}): Promise<Response> {
   const { pathname } = new URL(request.url);
 
   // agents' work, in and out, through git. It speaks its own methods, so it is answered before the rest
@@ -90,6 +93,9 @@ export async function handle(request: Request, store: JobStore, { market, door, 
   }
   if (pathname.startsWith(ROUTES.notes)) {
     return notes ? await notes.handle(request) : Response.json({ why: "notes are not open on this server" }, { status: 404 });
+  }
+  if (pathname.startsWith(ROUTES.claimApi)) {
+    return claims ? await claims.handle(request) : Response.json({ why: "claims are not open on this server: it names no title contract" }, { status: 404 });
   }
   if (pathname === ROUTES.credit || pathname.startsWith(`${ROUTES.credit}/`)) {
     return credit ? await credit.handle(request) : Response.json({ why: "GitHub credit is not open on this server" }, { status: 404 });
@@ -331,6 +337,11 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
   const notes = new NoteBoard({ keeper, store });
   const jobList = new JobList({ keeper, store });
   const credit = new CreditDoor({ book });
+  // the title contract, if the server is told where it is: without it nobody can claim anything here
+  const tokenAddress = process.env.POD_TOKEN_ADDRESS;
+  const claims = tokenAddress && isAddress(tokenAddress)
+    ? new Claims({ store, token: { address: tokenAddress, publicClient: contract.publicClient } })
+    : undefined;
   const market: Market = {
     page: {
       chainId: MONAD_TESTNET.id, chainName: "Monad testnet", rpc, jobs,
@@ -347,7 +358,7 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
     }),
     proven,
   };
-  return { market, door, notes, jobList, credit };
+  return { market, door, notes, jobList, credit, ...(claims ? { claims } : {}) };
 }
 
 
