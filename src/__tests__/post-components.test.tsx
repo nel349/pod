@@ -150,7 +150,11 @@ describe("sealing what is on the page", () => {
     const firstSeal = result.current.sealed?.seal;
 
     rerender({ written: second });
-    await waitFor(() => expect(result.current.sealed?.seal).not.toBe(firstSeal));
+    // a new seal, not the moment in between when the second set is being sealed and there is none
+    await waitFor(() => {
+      expect(result.current.sealed).toBeDefined();
+      expect(result.current.sealed?.seal).not.toBe(firstSeal);
+    });
     expect(result.current.sealed?.files).toEqual({ "check-2.mjs": "// a different check, for the same words" });
 
     // leave nothing scheduled behind: React and the query cache both keep work for later
