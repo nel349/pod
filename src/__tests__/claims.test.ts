@@ -107,20 +107,20 @@ describe.skipIf(!available)("claiming a POD's repository", () => {
       jobId: JOB, idea: COAT_IDEA, tokenId: tokenId.toString(), repository: REPOSITORY,
       holder: privateKeyToAccount(POSTER).address,
     });
-  });
+  }, 60_000);
 
   test("anybody but the holder is refused before GitHub is asked", async () => {
     const answer = await claimAs(anAgent().key, "octocat");
     expect(answer.status).toBe(403);
     expect(await whyOf(answer)).toContain("not the holder's");
-  });
+  }, 60_000);
 
   test("the holder's claim is sent on to GitHub, and GitHub's refusal is said, with nothing recorded as sent", async () => {
     const answer = await withGitHubRefusing(() => claimAs(POSTER, "octocat"));
     expect(answer.status).toBe(502);
     expect(await whyOf(answer)).toContain("GitHub would not send the invitation");
     expect((await store.read(JOB))?.invited).toBeUndefined();
-  });
+  }, 60_000);
 
   test("a title that was sold carries the claim: the old holder is refused, the new one reaches GitHub", async () => {
     const buyer = anAgent();
@@ -132,12 +132,12 @@ describe.skipIf(!available)("claiming a POD's repository", () => {
     });
     expect((await claimAs(POSTER, "octocat")).status).toBe(403);
     expect((await withGitHubRefusing(() => claimAs(buyer.key, "octocat"))).status).toBe(502);
-  });
+  }, 60_000);
 
   test("a name GitHub would not allow is refused, and so is a job with nothing to claim", async () => {
     expect((await claimAs(POSTER, "not a name")).status).toBe(400);
     expect((await claimAs(POSTER, "-dash-first")).status).toBe(400);
     const nothing = await claims.handle(new Request(`http://pod.test${claimApiPath("no-such-job")}`));
     expect(nothing.status).toBe(404);
-  });
+  }, 60_000);
 });

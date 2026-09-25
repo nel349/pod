@@ -41,6 +41,9 @@ export interface Anvil {
   stop(): void;
 }
 
+/** How often a client of the local chain asks whether a transaction is in */
+const LOCAL_POLLING_MS = 100;
+
 export async function startAnvil(): Promise<Anvil> {
   const port = 20000 + Math.floor(Math.random() * 20000);
   const node = Bun.spawn(["anvil", "--port", `${port}`, "--silent"], { stdout: "pipe", stderr: "pipe" });
@@ -49,7 +52,9 @@ export async function startAnvil(): Promise<Anvil> {
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
     rpcUrls: { default: { http: [`http://127.0.0.1:${port}`] } },
   });
-  const publicClient = createPublicClient({ chain, transport: http() }) as PublicClient;
+  // a local chain mines each transaction at once, so it is asked again soon: viem's default wait
+  // between asks is four seconds, and a test that sends twenty transactions spent most of its time there
+  const publicClient = createPublicClient({ chain, transport: http(), pollingInterval: LOCAL_POLLING_MS }) as PublicClient;
 
   // wait until it answers, and say what it said if it never does
   let up = false;
@@ -64,7 +69,7 @@ export async function startAnvil(): Promise<Anvil> {
     throw new Error(`anvil never answered on ${port}. It said: ${said.slice(0, 400) || "(nothing)"}`);
   }
 
-  const wallet = (key: Hex) => createWalletClient({ account: privateKeyToAccount(key), chain, transport: http() });
+  const wallet = (key: Hex) => createWalletClient({ account: privateKeyToAccount(key), chain, transport: http(), pollingInterval: LOCAL_POLLING_MS });
 
   return {
     port,
