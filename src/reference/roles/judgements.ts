@@ -56,13 +56,14 @@ export const securityReading: Judgement = async (seated, files) => askTheModel(s
 ]);
 
 export const qaRunning: Judgement = async (seated, files) => {
-  const visible = seated.listed.visibleChecks.filter((check) => check.url !== undefined && check.file !== undefined);
+  const visible = seated.listed.visibleChecks.filter((check): check is typeof check & { file: string; url: string } =>
+    check.url !== undefined && check.file !== undefined);
   if (visible.length === 0) {
     return { approve: true, why: "this job has no visible checks to run; the sealed ones decide it at the verdict" };
   }
   const checks = await mkdtemp(join(tmpdir(), "pod-qa-checks-"));
   try {
-    for (const check of visible) await writeFile(join(checks, check.file!), await seated.server.checkFile(check.url!));
+    for (const check of visible) await writeFile(join(checks, check.file), await seated.server.checkFile(check.url));
     // both folders were made for this run and are their owner's alone on Linux, which the box cannot open
     await readableToTheBox(checks);
     await readableToTheBox(files);

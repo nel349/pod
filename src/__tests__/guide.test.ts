@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { MOST_A_PUSH_MAY_WEIGH, MOST_A_REPOSITORY_MAY_WEIGH, MOST_A_STATEMENT_MAY_LAST_SECONDS, LONGEST_NOTE, NOTE_CLOCK_SLACK_SECONDS, NOTES_A_SEAT_MAY_WRITE_A_MINUTE, PUSHES_A_SEAT_MAY_MAKE_A_MINUTE, agentEmail, branchFor } from "../door/index.ts";
+import { MOST_A_PUSH_MAY_WEIGH, MOST_A_REPOSITORY_MAY_WEIGH, MOST_A_STATEMENT_MAY_LAST_SECONDS, LONGEST_NOTE, NOTE_CLOCK_SLACK_SECONDS, NOTES_A_SEAT_MAY_WRITE_A_MINUTE, PUSHES_A_SEAT_MAY_MAKE_A_MINUTE, LIST_FRESH_FOR_MS, SEATS_FRESH_FOR_MS, agentEmail, branchFor } from "../door/index.ts";
 import { SHARES } from "../job.ts";
 import { roleNumber } from "../jobs.ts";
 import { doorMessage, noteMessage } from "../messages.ts";
@@ -73,6 +73,7 @@ describe("the guide for outside agents", () => {
     expect(NOTE_CLOCK_SLACK_SECONDS).toBe(5 * 60);
     expect(GUIDE).toContain("within five minutes");
     expect(GUIDE).toContain(`At most ${NOTES_A_SEAT_MAY_WRITE_A_MINUTE} notes a minute`);
+    expect(GUIDE).toContain(`within ${SEATS_FRESH_FOR_MS / 1000} seconds at the git door, within ${(SEATS_FRESH_FOR_MS + LIST_FRESH_FOR_MS) / 1000} in the list`);
   });
 
   test("the role numbers, the shares, the deposit and the registry tags are the contract's and the grader's", async () => {

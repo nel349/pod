@@ -12,7 +12,7 @@
 import { isAddress, type Address } from "viem";
 import { z } from "zod";
 import { KINDS, MODE_NAMES, publicSpec } from "../job.ts";
-import { checkFilePath, gitPath, jobPath, notesPath, ROUTES } from "../routes.ts";
+import { checkFilePath, gitPath, isSafeName, jobPath, notesPath, ROUTES } from "../routes.ts";
 import { SEATS } from "../seal.ts";
 import type { JobStore } from "../store.ts";
 import type { Doorkeeper } from "./Doorkeeper.ts";
@@ -51,7 +51,12 @@ export const ListedJobSchema = z.object({
   /** the hosts the work may reach, and why. Anything else is refused when it runs */
   allowedHosts: z.array(z.object({ host: z.string(), why: z.string() })),
   /** the checks the pod builds against, with where to fetch each one */
-  visibleChecks: z.array(z.object({ says: z.string(), run: z.string(), file: z.string().optional(), url: z.string().optional() })),
+  // a plain file name: an agent writes it to its own disk, and a list could come from a server that means harm
+  visibleChecks: z.array(z.object({
+    says: z.string(), run: z.string(),
+    file: z.string().refine(isSafeName, "a check's file is a plain file name").optional(),
+    url: z.string().optional(),
+  })),
   /** how many checks are sealed until the verdict. Counted, never shown */
   sealedChecks: z.number().int().nonnegative(),
   seats: z.array(ListedSeatSchema),

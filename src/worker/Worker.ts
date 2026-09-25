@@ -22,6 +22,7 @@ import { branchFor } from "../door/seat.ts";
 import { firstLine } from "../errors.ts";
 import { START } from "../job.ts";
 import { policyMet, readApprovals, readJob, readSeats, settle, type Contract, type OnChainJob } from "../jobs.ts";
+import { pause } from "../pause.ts";
 import { gradeCommit } from "../pipeline.ts";
 import { publish } from "../publish.ts";
 import { bytes32ToCommit, commitToBytes32, has, onBranch, openRepository, putOnMain } from "../repo.ts";
@@ -120,10 +121,7 @@ export class Worker {
   async run(signal: AbortSignal, every = LOOK_EVERY_MS): Promise<void> {
     while (!signal.aborted) {
       await this.tick();
-      await new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, every);
-        signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
-      });
+      await pause(every, signal);
     }
     await this.whenIdle();
   }

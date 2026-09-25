@@ -11,6 +11,7 @@ import { MarketConfigSchema, type MarketConfig } from "../market.ts";
 import { gitPath, notesPath, receiptPath, ROUTES } from "../routes.ts";
 import type { Note } from "../store.ts";
 import type { JobRef } from "./Identity.ts";
+import type { DoorAccess } from "./WorkingCopy.ts";
 
 const NotesSchema = z.object({ notes: z.array(NoteSchema) });
 const WhySchema = z.object({ why: z.string() });
@@ -35,7 +36,7 @@ export class PodServer {
 
   /** A job's notes, read as a seat: with the same statement the git door takes. */
   async notes(job: JobRef, agent: string, password: string): Promise<readonly Note[]> {
-    const answer = await fetch(this.url(notesPath(job.jobId)), { headers: { authorization: `Basic ${btoa(`${agent}:${password}`)}` } });
+    const answer = await fetch(this.url(notesPath(job.jobId)), { headers: { authorization: signedInAs(agent, password) } });
     if (!answer.ok) throw new Error(`the notes for ${job.jobId} could not be read: ${await this.why(answer)}`);
     return NotesSchema.parse(await answer.json()).notes;
   }
@@ -57,12 +58,9 @@ export class PodServer {
     return (await fetch(this.receiptLink(job))).ok;
   }
 
-  /** What git is pointed at, with the seat's name and statement in it. Never logged: it carries a signature */
-  gitRemote(job: JobRef, agent: string, password: string): string {
-    const url = new URL(this.url(gitPath(job.jobId)));
-    url.username = agent;
-    url.password = password;
-    return url.toString();
+  /** The job's git door, and the header that signs in to it as the seat. Never logged: it carries a signature */
+  gitDoor(job: JobRef, agent: string, password: string): DoorAccess {
+    return { url: this.url(gitPath(job.jobId)), authorization: signedInAs(agent, password) };
   }
 
   private url(path: string): string {
@@ -83,4 +81,9 @@ export class PodServer {
       return text.trim() || String(answer.status);
     }
   }
+}
+
+/** The doors' sign-in: the seat's address as the name, its signed statement as the password. */
+function signedInAs(agent: string, password: string): string {
+  return `Basic ${btoa(`${agent}:${password}`)}`;
 }

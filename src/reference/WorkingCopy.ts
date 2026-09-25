@@ -3,7 +3,8 @@
  *
  * Plain git, nothing else: fetch what the pod has pushed, change files, commit as the seat, push the
  * seat's branch through the git door. Every command that reaches the door is handed a fresh signed
- * statement, and anything git prints is scrubbed of it before it can reach a log.
+ * statement, as a header in its environment: never in the door's address, which git writes into its
+ * command line where anybody on the machine can list it. Anything git prints is scrubbed of it too.
  */
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -12,6 +13,12 @@ import { dirname, join } from "node:path";
 export interface Committer {
   readonly name: string;
   readonly email: string;
+}
+
+/** How to reach the git door: its address, and the header that signs in as the seat */
+export interface DoorAccess {
+  readonly url: string;
+  readonly authorization: string;
 }
 
 interface Ran {
@@ -25,14 +32,14 @@ const FETCHED = "refs/remotes/pod";
 export class WorkingCopy {
   private constructor(
     readonly path: string,
-    /** the git door's address with a fresh statement in it, asked for anew each time */
-    private readonly remote: () => Promise<string>,
+    /** the git door, with a fresh statement, asked for anew each time */
+    private readonly door: () => Promise<DoorAccess>,
     private readonly who: Committer,
   ) {}
 
-  static async open(remote: () => Promise<string>, who: Committer): Promise<WorkingCopy> {
+  static async open(door: () => Promise<DoorAccess>, who: Committer): Promise<WorkingCopy> {
     const path = await mkdtemp(join(tmpdir(), "pod-agent-"));
-    const copy = new WorkingCopy(path, remote, who);
+    const copy = new WorkingCopy(path, door, who);
     await copy.must(["init", "--quiet", "--initial-branch=work"]);
     return copy;
   }
@@ -47,12 +54,18 @@ export class WorkingCopy {
     return (await this.must(["rev-parse", `${FETCHED}/${branch}`])).trim();
   }
 
-  /** Make the working files those of one commit, or empty if there is none yet. */
+  /**
+   * Make the working files those of one commit, or empty if there is none yet: nothing left from a
+   * turn that failed half way can be taken for work the door already has.
+   */
   async reset(commit: string | undefined): Promise<void> {
     if (commit) {
       await this.must(["reset", "--quiet", "--hard", commit]);
-      await this.must(["clean", "--quiet", "-fd"]);
+    } else {
+      if (await this.head()) await this.must(["update-ref", "-d", "HEAD"]);
+      await this.must(["read-tree", "--empty"]);
     }
+    await this.must(["clean", "--quiet", "-fd"]);
   }
 
   async write(files: Readonly<Record<string, string>>): Promise<void> {
@@ -119,10 +132,11 @@ export class WorkingCopy {
 
   /** A command that talks to the door, with a statement made for it, and the statement kept out of what it says. */
   private async toTheDoor(args: readonly string[], refspec: string): Promise<Ran> {
-    const remote = await this.remote();
-    const ran = await this.run([...args, remote, refspec]);
-    const password = new URL(remote).password;
-    return { code: ran.code, out: password ? ran.out.replaceAll(password, "…") : ran.out };
+    const door = await this.door();
+    const ran = await this.run([...args, door.url, refspec], {
+      GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "http.extraHeader", GIT_CONFIG_VALUE_0: `Authorization: ${door.authorization}`,
+    });
+    return { code: ran.code, out: ran.out.replaceAll(door.authorization, "…") };
   }
 
   private async must(args: readonly string[]): Promise<string> {
@@ -131,8 +145,8 @@ export class WorkingCopy {
     return ran.out;
   }
 
-  private async run(args: readonly string[]): Promise<Ran> {
-    const child = Bun.spawn(["git", ...args], { cwd: this.path, stdout: "pipe", stderr: "pipe", env: this.env() });
+  private async run(args: readonly string[], settings: Readonly<Record<string, string>> = {}): Promise<Ran> {
+    const child = Bun.spawn(["git", ...args], { cwd: this.path, stdout: "pipe", stderr: "pipe", env: { ...this.env(), ...settings } });
     const [out, err, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
     return { code, out: `${out}${err}` };
   }

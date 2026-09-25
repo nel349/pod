@@ -5,7 +5,8 @@
  * approving it. When a builder pushes something new, the lead brings it in, which makes a new tip and
  * a new candidate; the contract clears every earlier approval when that happens, so the rest of the
  * pod judges the new one. Two builders whose work clashes are not reconciled here: the clash is told
- * to the pod, and the lead keeps what it has.
+ * to the pod, and the lead keeps what it has. The candidate is always on the door before it is named:
+ * a commit only this machine has cannot be judged or graded by anybody.
  */
 import { branchFor } from "../../door/seat.ts";
 import { BROUGHT_IN } from "../protocol.ts";
@@ -21,7 +22,8 @@ export class Lead implements SeatWork {
     const { seated } = this;
     const mine = branchFor("lead", seated.identity.address);
     const seats = await seated.identity.readSeats(seated.job);
-    await seated.copy.reset(await seated.copy.fetch(mine));
+    const onTheDoor = await seated.copy.fetch(mine);
+    await seated.copy.reset(onTheDoor);
 
     const brought: string[] = [];
     for (const builder of seats.filter((seat) => seat.role === "builder")) {
@@ -44,10 +46,12 @@ export class Lead implements SeatWork {
 
     const candidate = await seated.copy.head();
     if (!candidate) return;
-    if (brought.length > 0) {
+    if (candidate !== onTheDoor) {
       await seated.copy.push(mine);
-      await tellThePod(seated, `${BROUGHT_IN}${brought.map((commit) => commit.slice(0, 12)).join(", ")}. The candidate is ${candidate}`, candidate);
       seated.say(`candidate is now ${candidate.slice(0, 12)}`);
+    }
+    if (brought.length > 0) {
+      await tellThePod(seated, `${BROUGHT_IN}${brought.map((commit) => commit.slice(0, 12)).join(", ")}. The candidate is ${candidate}`, candidate);
     }
 
     // the candidate is the lead's to name: approving it is what binds every other approval to it

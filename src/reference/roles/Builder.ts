@@ -33,12 +33,15 @@ export class Builder implements SeatWork {
       this.seated.say(`rebuilt ${MOST_REBUILDS} times and still refused; stopping rather than guessing again`);
       return;
     }
+    // counted only once the build that answers them is pushed: a model or a push that failed is tried
+    // again on the next look, with the same refusals
+    await this.build(refusals.map((refusal) => refusal.why));
+    for (const refusal of refusals) this.answered.add(refusal.signature);
     this.rebuilds++;
-    await this.build(refusals);
   }
 
-  /** Why a judge refused a candidate that holds this builder's latest work, each reason once. */
-  private async refusalsOfMyLatest(): Promise<readonly string[]> {
+  /** Why a judge refused a candidate that holds this builder's latest work, and not yet answered. */
+  private async refusalsOfMyLatest(): Promise<readonly { readonly why: string; readonly signature: string }[]> {
     const { seated } = this;
     const latest = this.latest;
     const candidate = await candidateOf(seated);
@@ -48,10 +51,9 @@ export class Builder implements SeatWork {
     if (!(await seated.copy.isAncestor(latest, candidate))) return [];
 
     const notes = await seated.server.notes(seated.job, seated.identity.address, await passwordFor(seated));
-    const fresh = notes.filter((note) =>
-      note.about === candidate && (JUDGES as readonly string[]).includes(note.role) && note.says.startsWith(REFUSED) && !this.answered.has(note.signature));
-    for (const note of fresh) this.answered.add(note.signature);
-    return fresh.map((note) => `${note.role}: ${note.says.slice(REFUSED.length)}`);
+    return notes
+      .filter((note) => note.about === candidate && (JUDGES as readonly string[]).includes(note.role) && note.says.startsWith(REFUSED) && !this.answered.has(note.signature))
+      .map((note) => ({ why: `${note.role}: ${note.says.slice(REFUSED.length)}`, signature: note.signature }));
   }
 
   private async build(refusals: readonly string[]): Promise<void> {

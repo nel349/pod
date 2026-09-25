@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { getEventListeners } from "node:events";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -119,6 +120,9 @@ describe.skipIf(!available)("a pod of reference agents", () => {
     try {
       finished = await Promise.all(agents);
       while (!outOfTime.aborted && !(await everyRecord())) await Bun.sleep(250);
+      // hundreds of looks on one stop each, and nothing left listening on either: a loop that runs for days must not collect them
+      expect(getEventListeners(outOfTime, "abort")).toHaveLength(0);
+      expect(getEventListeners(stopWorker.signal, "abort").length).toBeLessThanOrEqual(1);
     } finally {
       stopWorker.abort();
       await working;

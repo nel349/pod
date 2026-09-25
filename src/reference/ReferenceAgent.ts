@@ -10,6 +10,8 @@
 import type { Address, Hex } from "viem";
 import type { Model } from "../broker.ts";
 import type { ListedJob } from "../door/index.ts";
+import { firstLine } from "../errors.ts";
+import { pause } from "../pause.ts";
 import { agentEmail } from "../door/seat.ts";
 import type { Role } from "../job.ts";
 import { IMAGE } from "../sandbox.ts";
@@ -68,7 +70,7 @@ export async function runReferenceAgent(options: ReferenceAgentOptions): Promise
   say(`holds the ${options.role} seat on ${job.jobId} (job ${job.onChainId} on the contract)`);
 
   const copy = await WorkingCopy.open(
-    async () => server.gitRemote(job, identity.address, await identity.doorPassword(job, options.role)),
+    async () => server.gitDoor(job, identity.address, await identity.doorPassword(job, options.role)),
     { name: `${options.role} ${identity.address.slice(0, 10)}`, email: agentEmail(identity.address) },
   );
   const seated: Seated = {
@@ -78,16 +80,16 @@ export async function runReferenceAgent(options: ReferenceAgentOptions): Promise
   const work = workFor(seated);
   try {
     while (!options.signal?.aborted) {
-      const over = await whyItIsOver(identity, job);
-      if (over) {
-        await askForTheRecord(server, identity, job, options.agentId, say);
-        return { jobId: job.jobId, why: over };
-      }
       try {
+        const over = await whyItIsOver(identity, job);
+        if (over) {
+          await askForTheRecord(server, identity, job, options.agentId, say);
+          return { jobId: job.jobId, why: over };
+        }
         await work.step();
       } catch (error) {
         // a turn that failed is tried again on the next look: the network, the chain and the model all have bad moments
-        say(`this turn failed, and will be tried again: ${(error as Error).message.split("\n")[0]}`);
+        say(`this turn failed, and will be tried again: ${firstLine(error)}`);
       }
       await pause(every, options.signal);
     }
@@ -113,17 +115,22 @@ async function takeASeat(
 ): Promise<ListedJob | undefined> {
   const owner = identity.ownerAddress.toLowerCase();
   while (!options.signal?.aborted) {
-    const open = (await server.jobs()).jobs.filter((job) =>
-      (options.jobId === undefined || job.jobId === options.jobId)
-      && job.free.includes(options.role)
-      && !job.owners.some((seated) => seated.toLowerCase() === owner));
+    let open: readonly ListedJob[] = [];
+    try {
+      open = (await server.jobs()).jobs.filter((job) =>
+        (options.jobId === undefined || job.jobId === options.jobId)
+        && job.free.includes(options.role)
+        && !job.owners.some((seated) => seated.toLowerCase() === owner));
+    } catch (error) {
+      say(`the job list could not be read, and will be again: ${firstLine(error)}`);
+    }
     for (const job of open) {
       try {
         await identity.takeSeat({ jobId: job.jobId, onChainId: BigInt(job.contract.jobId) }, options.role);
         return job;
       } catch (error) {
         // somebody else took it between the list and the transaction: the contract said so, and nothing was spent but gas
-        say(`could not take the ${options.role} seat on ${job.jobId}: ${(error as Error).message.split("\n")[0]}`);
+        say(`could not take the ${options.role} seat on ${job.jobId}: ${firstLine(error)}`);
       }
     }
     await pause(every, options.signal);
@@ -138,12 +145,12 @@ async function takeASeat(
 async function askForTheRecord(server: PodServer, identity: Identity, job: JobRef, agentId: bigint | undefined, say: (what: string) => void): Promise<void> {
   if (agentId === undefined) return;
   if (!identity.registries) return say("the server names no ERC-8004 registries, so no verdict is asked for");
-  if (!(await server.hasReceipt(job))) return say("the job ended with no verdict, so there is none to record");
   try {
+    if (!(await server.hasReceipt(job))) return say("the job ended with no verdict, so there is none to record");
     await identity.askForMyVerdict(agentId, server.receiptLink(job));
     say(`asked for the verdict to be recorded for agent #${agentId}`);
   } catch (error) {
-    say(`could not ask for the verdict to be recorded: ${(error as Error).message.split("\n")[0]}`);
+    say(`could not ask for the verdict to be recorded: ${firstLine(error)}`);
   }
 }
 
@@ -153,12 +160,4 @@ async function whyItIsOver(identity: Identity, job: JobRef): Promise<string | un
   if (onChain.state === "settled" || onChain.state === "refunded") return `the job is ${onChain.state}`;
   if ((await identity.now()) >= onChain.endsAt) return "the job's window has closed";
   return undefined;
-}
-
-/** Wait, unless told to stop. */
-function pause(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
-  });
 }
