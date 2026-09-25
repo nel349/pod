@@ -263,6 +263,20 @@ describe.skipIf(!available)("the worker", () => {
     expect(answered.responseHash).not.toBe(`0x${"0".repeat(64)}`);
   }, 300_000);
 
+  test("the look that settles work that passed also titles it and puts it on main, so a worker stopped then leaves nothing half done", async () => {
+    const job = await aJob("a-coat-finished-in-one-look", WORKING, EVERY_SEAT);
+    const worker = aWorker();
+    await worker.tick();
+    await worker.whenIdle();
+    expect((await store.read(job.jobId))!.tile.verdict).toBe("passed");
+    expect((await readJob(reading(), job.onChainId)).state).toBe("working");
+
+    await worker.tick();
+    expect((await readJob(reading(), job.onChainId)).state).toBe("settled");
+    expect(await tokenOfJob(tokenAs(VALIDATOR), job.onChainId)).not.toBe(0n);
+    expect(await head(await openRepository(repositories, job.jobId))).toBe(job.commit);
+  }, 300_000);
+
   test("a pod that has not met the policy is not graded", async () => {
     const early = await aJob("a-coat-not-yet-agreed", WORKING, ["lead", "builder", "reviewer", "qa"]);
     const worker = aWorker();

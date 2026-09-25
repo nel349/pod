@@ -130,6 +130,11 @@ export class Worker {
     if (graded && record.tile.verdict !== "running") {
       if (onChain.state === "working" && !NO_COMMIT.test(onChain.commit) && bytes32ToCommit(onChain.commit) === graded.commit) {
         await this.settle(record, onChainId);
+        // and straight on to the title and main for work that passed, rather than a look later: a
+        // worker stopped between the two would leave a paid job with no title until it started again
+        if (graded.verdict === "passed" && (await readJob(jobs, onChainId)).state === "settled") {
+          await this.titleAndMain((await store.read(jobId)) ?? record, onChainId, graded.commit);
+        }
         return;
       }
       if (onChain.state === "settled" && graded.verdict === "passed") {

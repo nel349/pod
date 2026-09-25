@@ -107,7 +107,9 @@ describe.skipIf(!available)("a pod of reference agents", () => {
       agentId: identities[role], say: (what) => said.push(what),
     }));
     const runner = privateKeyToAccount(VALIDATOR).address;
+    // what the test waits for is every end the worker is responsible for: a title, main, and each record
     const everyRecord = async (): Promise<boolean> => {
+      if ((await tokenOfJob({ address: pod$.token, publicClient: pod$.anvil.publicClient }, pod$.onChainId)) === 0n) return false;
       for (const role of Object.keys(pod) as Role[]) {
         if ((await record(pod$.anvil.publicClient, identities[role], `pod.${role}`, [runner], pod$.registries)).count === 0) return false;
       }
