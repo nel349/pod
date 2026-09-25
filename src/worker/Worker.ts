@@ -17,12 +17,14 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { privateKeyToAccount } from "viem/accounts";
-import type { Address, Hex } from "viem";
+import { isAddressEqual, type Address, type Hex } from "viem";
+import { branchFor } from "../door/seat.ts";
+import { firstLine } from "../errors.ts";
 import { START } from "../job.ts";
 import { policyMet, readApprovals, readJob, readSeats, settle, type Contract, type OnChainJob } from "../jobs.ts";
 import { gradeCommit } from "../pipeline.ts";
 import { publish } from "../publish.ts";
-import { bytes32ToCommit, commitToBytes32, has, openRepository, putOnMain } from "../repo.ts";
+import { bytes32ToCommit, commitToBytes32, has, onBranch, openRepository, putOnMain } from "../repo.ts";
 import { moneyMove } from "../runner.ts";
 import { jobPath } from "../routes.ts";
 import { SEATS } from "../seal.ts";
@@ -36,6 +38,8 @@ import { RegistryAnswers } from "./RegistryAnswers.ts";
 export const GRADED_AT_ONCE = 2;
 /** How often the worker looks at every job */
 export const LOOK_EVERY_MS = 10_000;
+/** How long a job whose grading failed is left before it is graded again: Docker, the chain and the disk have bad moments */
+export const GRADE_AGAIN_AFTER_MS = 5 * 60_000;
 
 export interface WorkerOptions {
   readonly store: JobStore;
@@ -57,6 +61,8 @@ export interface WorkerOptions {
    */
   readonly registry?: { readonly registries: Registries; readonly stateFolder: string };
   readonly gradedAtOnce?: number;
+  /** how long a job whose grading failed waits before it is graded again: GRADE_AGAIN_AFTER_MS unless said */
+  readonly gradeAgainAfterMs?: number;
   /** how many times the whole set of checks runs, which have to agree. Two at least */
   readonly times?: number;
   readonly say?: (what: string) => void;
@@ -66,6 +72,10 @@ const NO_COMMIT = /^0x0{64}$/i;
 
 export class Worker {
   private readonly grading = new Map<string, Promise<void>>();
+  /** when each job's last grading failed, so a job that keeps failing is not graded again every look */
+  private readonly failedAt = new Map<string, number>();
+  /** the look under way, so two never run at once */
+  private looking?: Promise<void>;
   /** every chain write, in order: one key, one nonce stream */
   private chainWrites: Promise<unknown> = Promise.resolve();
   private readonly runner: Address;
@@ -84,20 +94,25 @@ export class Worker {
     }
   }
 
-  /** One look at every job: start what can start, finish what can finish. */
-  async tick(): Promise<void> {
+  /** One look at every job: start what can start, finish what can finish. A look asked for during another is that one. */
+  tick(): Promise<void> {
+    if (!this.looking) this.looking = this.look().finally(() => { this.looking = undefined; });
+    return this.looking;
+  }
+
+  private async look(): Promise<void> {
     for (const record of await this.options.store.all()) {
       try {
         await this.advance(record.jobId);
       } catch (error) {
         // one job's trouble is not every job's: it is said, and tried again on the next look
-        this.say(`${record.jobId}: ${(error as Error).message.split("\n")[0]}`);
+        this.say(`${record.jobId}: ${firstLine(error)}`);
       }
     }
     try {
       await this.answers?.look();
     } catch (error) {
-      this.say(`the registry could not be read, and will be on the next look: ${(error as Error).message.split("\n")[0]}`);
+      this.say(`the registry could not be read, and will be on the next look: ${firstLine(error)}`);
     }
   }
 
@@ -122,13 +137,19 @@ export class Worker {
     const { store, jobs } = this.options;
     const record = await store.read(jobId);
     if (!record?.chain || record.chain.jobs.toLowerCase() !== jobs.address.toLowerCase()) return;
-    if (this.grading.has(jobId)) return;
+    if (this.grading.has(jobId) || this.isFinished(record)) return;
     const onChainId = BigInt(record.chain.jobId);
     const onChain = await readJob(jobs, onChainId);
 
     const graded = record.signed?.receipt;
     if (graded && record.tile.verdict !== "running") {
       if (onChain.state === "working" && !NO_COMMIT.test(onChain.commit) && bytes32ToCommit(onChain.commit) === graded.commit) {
+        // the contract settles nothing after the window, so a verdict that came too late is said, not sent
+        if ((await this.now()) >= onChain.endsAt) {
+          const why = "the verdict came after the job's window closed, and the contract settles nothing after it: the poster takes the money back";
+          if (record.waitingBecause !== why) await store.save({ ...record, waitingBecause: why });
+          return;
+        }
         await this.settle(record, onChainId);
         // and straight on to the title and main for work that passed, rather than a look later: a
         // worker stopped between the two would leave a paid job with no title until it started again
@@ -148,23 +169,58 @@ export class Worker {
 
     const ready = await this.readyToGrade(onChain, onChainId);
     if (!ready) return;
-    const repo = await openRepository(this.options.repositories, jobId);
-    if (!(await has(repo, ready))) {
-      const why = `the pod approved ${ready}, which was never pushed to the job's repository, so there is nothing to grade`;
-      if (record.waitingBecause !== why) await store.save({ ...record, waitingBecause: why });
+    const notOnTheLeadsBranch = await this.whyNotGradable(jobId, onChainId, ready);
+    if (notOnTheLeadsBranch) {
+      if (record.waitingBecause !== notOnTheLeadsBranch) await store.save({ ...record, waitingBecause: notOnTheLeadsBranch });
       return;
     }
+    const failed = this.failedAt.get(jobId);
+    if (failed !== undefined && Date.now() - failed < (this.options.gradeAgainAfterMs ?? GRADE_AGAIN_AFTER_MS)) return;
     if (this.grading.size >= (this.options.gradedAtOnce ?? GRADED_AT_ONCE)) return;
-    const work = this.grade(record, onChainId, ready).finally(() => this.grading.delete(jobId));
+    const work = this.grade(record, onChainId, ready)
+      .then(() => { this.failedAt.delete(jobId); })
+      // a grading that failed is said, and tried again later: it never takes the worker down with it
+      .catch((error: unknown) => {
+        this.failedAt.set(jobId, Date.now());
+        this.say(`${jobId}: the grading failed, and is tried again later: ${firstLine(error)}`);
+      })
+      .finally(() => this.grading.delete(jobId));
     this.grading.set(jobId, work);
+  }
+
+  /**
+   * Why an approved commit cannot be graded, or nothing if it can. It has to be in the repository and
+   * on the lead's branch: the lead names the candidate, and a commit that no branch holds was never
+   * checked by the git door's rules, whoever it says wrote it.
+   */
+  private async whyNotGradable(jobId: string, onChainId: bigint, commit: string): Promise<string | undefined> {
+    const repo = await openRepository(this.options.repositories, jobId);
+    if (!(await has(repo, commit))) return `the pod approved ${commit}, which was never pushed to the job's repository, so there is nothing to grade`;
+    const lead = (await readSeats(this.options.jobs, onChainId)).find((seat) => seat.role === "lead");
+    if (!lead || !(await onBranch(repo, commit, branchFor("lead", lead.agent)))) {
+      return `the pod approved ${commit}, which is not on the lead's branch, so it is not graded: a commit the pod ships is one the lead brought in`;
+    }
+    return undefined;
+  }
+
+  /**
+   * Whether there is nothing left for the worker to do on this job: its money has moved, and if it
+   * passed, its title is minted. Such a job is not read from the chain again.
+   */
+  private isFinished(record: JobRecord): boolean {
+    if (!record.chain?.settled || !record.signed) return false;
+    return record.signed.receipt.verdict !== "passed" || !this.options.token || record.chain.tokenId !== undefined;
+  }
+
+  private async now(): Promise<bigint> {
+    return (await this.options.jobs.publicClient.getBlock()).timestamp;
   }
 
   /** The commit to grade, if the chain says the pod is done with one and there is still time to settle it. */
   private async readyToGrade(onChain: OnChainJob, onChainId: bigint): Promise<string | undefined> {
     if (onChain.state !== "working" || NO_COMMIT.test(onChain.commit)) return undefined;
     // the contract refuses a settlement after the window, so a verdict then would change nothing
-    const now = (await this.options.jobs.publicClient.getBlock()).timestamp;
-    if (now >= onChain.endsAt) return undefined;
+    if ((await this.now()) >= onChain.endsAt) return undefined;
     if (!(await policyMet(this.options.jobs, onChainId, onChain.commit))) return undefined;
     return bytes32ToCommit(onChain.commit);
   }
@@ -192,10 +248,14 @@ export class Worker {
       });
 
       const seats = await readSeats(jobs, onChainId);
-      const approvedNow = new Set(seats.filter((seat) => seat.approved).map((seat) => `${seat.role}:${seat.agent.toLowerCase()}`));
-      const approvals = (await readApprovals(jobs, onChainId, commitToBytes32(commit)))
-        .filter((approval) => approvedNow.has(`${approval.role}:${approval.agent.toLowerCase()}`))
-        .map((approval) => ({ role: approval.role, agent: approval.agent, commit, at: new Date(Number(approval.at) * 1000).toISOString() }));
+      const approved = seats.filter((seat) => seat.approved);
+      const { found, lookedBackTo } = await readApprovals(jobs, onChainId, commitToBytes32(commit), approved);
+      // each approving seat with the time the contract recorded; one approved longer ago than was
+      // read back says so, rather than a time being made up for it
+      const approvals = approved.map((seat) => {
+        const when = found.find((approval) => approval.role === seat.role && isAddressEqual(approval.agent, seat.agent));
+        return { role: seat.role, agent: seat.agent, commit, at: when ? isoOf(when.at) : `before ${isoOf(lookedBackTo)}` };
+      });
 
       const published = await publish(store, {
         jobId: record.jobId, seal: record.seal, idea: spec.idea, mode: spec.mode, price: spec.price, report,
@@ -219,8 +279,10 @@ export class Worker {
     if (move === "hold") return;
     const commit = commitToBytes32(record.signed!.receipt.commit);
     const hash = await this.onTheChain(async () => {
-      // read again inside the queue: another look may have settled it while this one waited
-      if ((await readJob(this.options.jobs, onChainId)).state !== "working") return undefined;
+      // read again inside the queue: another look may have settled it while this one waited, or the
+      // pod moved to another commit, which a refund would otherwise take no notice of
+      const now = await readJob(this.options.jobs, onChainId);
+      if (now.state !== "working" || now.commit.toLowerCase() !== commit.toLowerCase()) return undefined;
       return settle(this.options.jobs, onChainId, commit, move === "pay");
     });
     if (!hash) return;
@@ -228,10 +290,14 @@ export class Worker {
     this.say(`${record.jobId}: settled, ${move === "pay" ? "the pod is paid" : "the poster is refunded"}`);
   }
 
-  /** On a job that passed and settled: the title to whoever paid, and the work on the main branch. Each once. */
+  /**
+   * On a job that passed and settled: the work on the main branch, then the title to whoever paid.
+   * Main first: once the title is written down the job is finished and not looked at again.
+   */
   private async titleAndMain(record: JobRecord, onChainId: bigint, commit: string): Promise<void> {
     const { token, jobs } = this.options;
-    if (token && !record.chain?.minted) {
+    await putOnMain(await openRepository(this.options.repositories, record.jobId), commit);
+    if (token && record.chain?.tokenId === undefined) {
       const minted = await this.onTheChain(async () => {
         if ((await tokenOfJob(token, onChainId)) !== 0n) return undefined;
         return mintPod(token, {
@@ -248,7 +314,6 @@ export class Worker {
       await this.remember(record.jobId, { ...(minted ? { minted } : {}), tokenId: tokenId.toString() });
       if (minted) this.say(`${record.jobId}: POD #${tokenId} minted to whoever paid`);
     }
-    await putOnMain(await openRepository(this.options.repositories, record.jobId), commit);
   }
 
   /** Keep what the chain did in the job's record, read fresh so nothing written meanwhile is lost. */
@@ -268,4 +333,9 @@ export class Worker {
   private say(what: string): void {
     (this.options.say ?? console.log)(`[worker] ${what}`);
   }
+}
+
+/** A time the chain gave in seconds, as the job page writes it. */
+function isoOf(seconds: bigint): string {
+  return new Date(Number(seconds) * 1000).toISOString();
 }

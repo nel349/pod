@@ -107,6 +107,15 @@ export async function readSeats(at: Omit<Contract, "wallet">, jobId: bigint): Pr
   return rows.flat();
 }
 
+/**
+ * The widest range of blocks Monad's public node reads events from in one go. Every reading of events
+ * here goes in slices this wide, whatever the chain, so what works on a local chain works on Monad.
+ */
+export const MOST_BLOCKS_A_LOG_READ_COVERS = 100n;
+
+/** How far back the approvals of a commit are looked for: about two hours of Monad's blocks */
+export const MOST_BLOCKS_LOOKED_BACK_FOR_APPROVALS = 20_000n;
+
 /** One approval as the contract recorded it: which seat, which key, and when its block was made. */
 export interface ApprovalOnChain {
   readonly role: Role;
@@ -116,23 +125,49 @@ export interface ApprovalOnChain {
   readonly at: bigint;
 }
 
+export interface ApprovalsFound {
+  /** the latest approval of the commit from each seat asked about, as far back as they were looked for */
+  readonly found: readonly ApprovalOnChain[];
+  /** the time of the oldest block read: a seat not found approved before it */
+  readonly lookedBackTo: bigint;
+}
+
 /**
- * Every approval a job's seats gave one commit, read from the contract's own record of them. Only the
- * latest from each seat: a seat that approved the same commit twice approved it once.
+ * When each of these seats approved one commit, read from the contract's own record of it.
+ *
+ * Read backwards from the newest block, in slices Monad's node allows, and stopped as soon as every
+ * seat is found: the approvals a grading needs are the ones that met the policy, which is recent, so
+ * this is usually a slice or two rather than the whole chain.
  */
-export async function readApprovals(at: Omit<Contract, "wallet">, jobId: bigint, commit: Hex): Promise<readonly ApprovalOnChain[]> {
-  const logs = await at.publicClient.getContractEvents({
-    address: at.address, abi: podJobsAbi, eventName: "Approved", args: { jobId }, fromBlock: 0n, strict: true,
-  });
-  const latest = new Map<string, ApprovalOnChain>();
-  for (const log of logs) {
-    if (log.args.commitHash.toLowerCase() !== commit.toLowerCase()) continue;
-    const role = ROLES.find((named) => roleNumber(named) === log.args.role);
-    if (!role) continue;
-    const block = await at.publicClient.getBlock({ blockHash: log.blockHash });
-    latest.set(`${role}:${log.args.agent.toLowerCase()}`, { role, agent: log.args.agent, commit: log.args.commitHash, at: block.timestamp });
+export async function readApprovals(
+  at: Omit<Contract, "wallet">, jobId: bigint, commit: Hex, seats: readonly { readonly role: Role; readonly agent: Address }[],
+  mostBlocksBack: bigint = MOST_BLOCKS_LOOKED_BACK_FOR_APPROVALS,
+): Promise<ApprovalsFound> {
+  const key = (role: Role, agent: Address): string => `${role}:${agent.toLowerCase()}`;
+  const wanted = new Set(seats.map((seat) => key(seat.role, seat.agent)));
+  const found = new Map<string, ApprovalOnChain>();
+  const latest = await at.publicClient.getBlockNumber({ cacheTime: 0 });
+  const floor = latest > mostBlocksBack ? latest - mostBlocksBack : 0n;
+  let to = latest;
+  let from = latest;
+  while (found.size < wanted.size && to >= floor) {
+    from = to - floor >= MOST_BLOCKS_A_LOG_READ_COVERS ? to - MOST_BLOCKS_A_LOG_READ_COVERS + 1n : floor;
+    const logs = await at.publicClient.getContractEvents({
+      address: at.address, abi: podJobsAbi, eventName: "Approved", args: { jobId }, fromBlock: from, toBlock: to, strict: true,
+    });
+    // newest first, so each seat is found at its latest approval
+    for (const log of [...logs].reverse()) {
+      if (log.args.commitHash.toLowerCase() !== commit.toLowerCase()) continue;
+      const role = ROLES.find((named) => roleNumber(named) === log.args.role);
+      if (!role || !wanted.has(key(role, log.args.agent)) || found.has(key(role, log.args.agent))) continue;
+      const block = await at.publicClient.getBlock({ blockHash: log.blockHash });
+      found.set(key(role, log.args.agent), { role, agent: log.args.agent, commit: log.args.commitHash, at: block.timestamp });
+    }
+    if (from === 0n) break;
+    to = from - 1n;
   }
-  return [...latest.values()];
+  const oldest = await at.publicClient.getBlock({ blockNumber: from });
+  return { found: [...found.values()], lookedBackTo: oldest.timestamp };
 }
 
 /** What each seat on a job pays and costs to take, read from the contract rather than worked out here. */

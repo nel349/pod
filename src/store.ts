@@ -90,6 +90,16 @@ export interface JobRecord {
   readonly podHolder?: string;
   /** why the worker has not graded it although the pod says it is done, such as the approved commit never having been pushed */
   readonly waitingBecause?: string;
+  /** the verdicts recorded in ERC-8004 for this job's seats: one per seat, and which request it answered */
+  readonly recorded?: readonly RecordedVerdict[];
+}
+
+/** A seat's verdict in ERC-8004: whose seat, which identity asked, and which of its requests was answered. */
+export interface RecordedVerdict {
+  readonly role: string;
+  readonly agent: Address;
+  readonly agentId: string;
+  readonly key: Hex;
 }
 
 const RECORD = "job.json";

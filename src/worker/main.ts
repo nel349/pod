@@ -15,6 +15,7 @@ import { live } from "../live.ts";
 import { MONAD_REGISTRIES } from "../registry.ts";
 import { IMAGE } from "../sandbox.ts";
 import { JobStore } from "../store.ts";
+import { holdTheLock } from "./lock.ts";
 import { Worker } from "./Worker.ts";
 
 const directory = process.env.POD_JOBS;
@@ -35,8 +36,13 @@ const worker = new Worker({
   registry: { registries: MONAD_REGISTRIES, stateFolder: join(directory, WORKER_FOLDER) },
 });
 
+const lock = await holdTheLock(join(directory, WORKER_FOLDER));
 const stop = new AbortController();
 process.once("SIGINT", () => stop.abort());
 process.once("SIGTERM", () => stop.abort());
 console.log(`the worker is watching ${contracts.jobs.address}, grading as ${contracts.validator}`);
-await worker.run(stop.signal);
+try {
+  await worker.run(stop.signal);
+} finally {
+  await lock.release();
+}
