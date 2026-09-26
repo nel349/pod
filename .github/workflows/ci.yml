@@ -48,7 +48,7 @@ jobs:
         working-directory: contracts
       # the checks the page has written are tried in the same pinned image a verdict uses
       - run: docker pull node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944
-      - run: bun test src/__tests__/post-in-browser.test.ts src/__tests__/claim-in-browser.test.ts
+      - run: bun test src/__tests__/post-in-browser.test.ts src/__tests__/claim-in-browser.test.ts src/__tests__/refund-in-browser.test.ts
 
   chain:
     name: the money path, on a real EVM

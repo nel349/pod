@@ -56,6 +56,11 @@ export function roleNumber(role: Role): number {
 export type JobState = "open" | "working" | "settled" | "refunded";
 const STATES: readonly JobState[] = ["open", "working", "settled", "refunded"];
 
+/** The contract's state number, in words */
+export function stateOf(state: number): JobState {
+  return STATES[state] ?? "open";
+}
+
 export interface OnChainJob {
   readonly poster: Address;
   readonly price: bigint;
@@ -183,7 +188,7 @@ export async function readJob(at: Omit<Contract, "wallet">, jobId: bigint): Prom
   const [poster, price, seal, endsAt, state, commit, reviewers] = await at.publicClient.readContract({
     address: at.address, abi: podJobsAbi, functionName: "jobs", args: [jobId],
   });
-  return { poster, price, seal, endsAt, state: STATES[state] ?? "open", commit, reviewers };
+  return { poster, price, seal, endsAt, state: stateOf(state), commit, reviewers };
 }
 
 export function seatDeposit(at: Omit<Contract, "wallet">, jobId: bigint, role: Role): Promise<bigint> {

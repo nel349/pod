@@ -6,7 +6,8 @@ import type { ReactElement } from "react";
 import type { MarketConfig } from "../../market.ts";
 import { useWalletPresent } from "../post/hooks/index.ts";
 import { ClaimBill, WhatSheet, WhereSheet } from "./components/index.ts";
-import { useClaim, useClaimable, useConnectedAccount } from "./hooks/index.ts";
+import { useConnectedAccount } from "../shared/index.ts";
+import { useClaim, useClaimable } from "./hooks/index.ts";
 import { COPY, type Claimable } from "./state/index.ts";
 
 function Notice({ children }: { readonly children: string }): ReactElement {

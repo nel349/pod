@@ -2,4 +2,3 @@
 export * from "./queryKeys.ts";
 export * from "./useClaim.ts";
 export * from "./useClaimable.ts";
-export * from "./useConnectedAccount.ts";

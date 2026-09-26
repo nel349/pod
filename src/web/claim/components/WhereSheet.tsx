@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactElement } from "react";
 import type { Address } from "viem";
 import { isAddressEqual } from "viem";
 import { CLAIM_STEPS, COPY, stepStates, type Claimable, type ClaimStatus } from "../state/index.ts";
-import { Sheet } from "./Sheet.tsx";
+import { Sheet } from "../../shared/index.ts";
 
 interface WhereSheetProps {
   readonly claimable: Claimable;

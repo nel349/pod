@@ -20,10 +20,11 @@ import { Claims } from "./claims.ts";
 import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard } from "./door/index.ts";
 import claimPage from "./web/claim/index.html";
 import postPage from "./web/post/index.html";
+import refundPage from "./web/refund/index.html";
 import { renderCard } from "./card.ts";
 import { renderJob } from "./jobpage.ts";
 import { checksArePublished, JobStore } from "./store.ts";
-import { checkFilePath, checksPath, isSafeName, jobPath, ROUTES, writingPath } from "./routes.ts";
+import { checkFilePath, checksPath, isSafeName, isWallName, jobPath, ROUTES, writingPath } from "./routes.ts";
 
 const TEXT = { "content-type": "text/plain; charset=utf-8" } as const;
 const HTML = { "content-type": "text/html; charset=utf-8" } as const;
@@ -122,6 +123,14 @@ export async function handle(request: Request, store: JobStore, { market, door, 
     const jobId = pathname.slice(ROUTES.postJob.length + 1);
     if (!isSafeName(jobId)) return Response.json({ why: `${jobId} is not a name a job can have` }, { status: 400 });
     return Response.json({ taken: (await store.read(jobId)) !== undefined }, { headers: NO_STORE });
+  }
+
+  // what the refund page needs to find a job on the chain; the chain itself says where the money is
+  if (pathname.startsWith(ROUTES.refundApi)) {
+    const jobId = pathname.slice(ROUTES.refundApi.length);
+    const record = isWallName(jobId) ? await store.read(jobId) : undefined;
+    if (!record?.chain) return Response.json({ why: "there is no job with money on the chain at that address" }, { status: 404 });
+    return Response.json({ jobId, idea: record.tile.idea, onChainId: record.chain.jobId }, { headers: NO_STORE });
   }
 
   if (pathname.startsWith(`${ROUTES.writeChecks}/`)) {
@@ -299,7 +308,7 @@ export function serve(store: JobStore, port: number, services: Services = {}): R
   return Bun.serve({
     port,
     development: process.env.NODE_ENV === "production" ? false : { hmr: true, console: true },
-    routes: { [ROUTES.post]: postPage, [`${ROUTES.claim}*`]: claimPage },
+    routes: { [ROUTES.post]: postPage, [`${ROUTES.claim}*`]: claimPage, [`${ROUTES.refund}*`]: refundPage },
     fetch: (request) => handle(request, store, services),
   });
 }

@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { COPY, shortRepository, type Claimable } from "../state/index.ts";
-import { Sheet } from "./Sheet.tsx";
+import { Sheet } from "../../shared/index.ts";
 
 /** The title, the repository it is title to, and who holds it now. */
 export function WhatSheet({ claimable, explorer }: { readonly claimable: Claimable; readonly explorer: string }): ReactElement {

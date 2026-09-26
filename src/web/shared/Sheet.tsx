@@ -3,7 +3,7 @@ import type { CSSProperties, ReactElement, ReactNode } from "react";
 /** how far a sheet leans, in degrees: the first one way, the second the other, never straight */
 const LEANS = [-0.5, 0.4] as const;
 
-/** One numbered sheet taped to the wall, as the posting page's steps are. */
+/** One numbered sheet taped to the wall, as the posting page's steps are: the claim and refund pages draw theirs with it. */
 export function Sheet({ number, id, title, children }: {
   readonly number: number;
   readonly id: string;

@@ -1,13 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import type { Address } from "viem";
 import { useConfig } from "wagmi";
-import { connect, getConnection, signMessage } from "wagmi/actions";
+import { signMessage } from "wagmi/actions";
 import { firstLine } from "../../../errors.ts";
 import { claimToSign } from "../../../messages.ts";
 import { claimApiPath } from "../../../routes.ts";
 import { readAnswer } from "../../post/hooks/index.ts";
-import { injectedConnector } from "../../post/wallet/index.ts";
+import { connected } from "../../shared/index.ts";
 import { ClaimedSchema, WhySchema, type Claimable, type ClaimStatus, type ClaimStep } from "../state/index.ts";
 import { CLAIM_QUERY_KEYS } from "./queryKeys.ts";
 
@@ -50,13 +49,4 @@ export function useClaim(claimable: Claimable): { readonly status: ClaimStatus; 
   });
 
   return { status, claim: (toAccount) => claiming.mutate(toAccount) };
-}
-
-/** The wallet's current account, connecting first if it is not connected yet. */
-async function connected(config: ReturnType<typeof useConfig>): Promise<Address> {
-  const connection = getConnection(config);
-  if (connection.status === "connected") return connection.address;
-  const [account] = (await connect(config, { connector: injectedConnector(config) })).accounts;
-  if (!account) throw new Error("the wallet did not give an address");
-  return account;
 }

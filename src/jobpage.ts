@@ -9,7 +9,7 @@ import type { Brief, CheckSaid, OnChain } from "./store.ts";
 import { verdictWords as verdictWordsFor } from "./gallery.ts";
 import type { Tile } from "./gallery.ts";
 import type { Receipt } from "./receipt.ts";
-import { cardPath, claimPath, ROUTES } from "./routes.ts";
+import { cardPath, claimPath, refundPath, ROUTES } from "./routes.ts";
 import { renderSeal } from "./seal.ts";
 
 export interface Approval {
@@ -111,6 +111,13 @@ ${page.repository ? `<p class="owns"><a href="${escape(claimPath(page.tile.jobId
       ? `<h2>Who owns it</h2><p class="owns">No title was minted for this job, so nobody can claim the repository yet.</p>`
       : "";
 
+  // money nobody has settled: once the window closes it is the poster's to take back. Work that passed
+  // or failed is settled by the grader; the page that takes it back reads the chain for itself
+  const settledByTheGrader = page.tile.verdict === "passed" || page.tile.verdict === "failed";
+  const money = page.chain && page.chain.settled === undefined && !settledByTheGrader
+    ? `<p class="owns">Not settled yet. If the window closes first, <a href="${escape(refundPath(page.tile.jobId))}">the poster takes the money back</a>.</p>`
+    : "";
+
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -148,6 +155,7 @@ ${page.repository ? `<p class="owns"><a href="${escape(claimPath(page.tile.jobId
   ${disagreed}
   ${repeat}
   ${ownership}
+  ${money}
 </main>
 </body></html>`;
 }
