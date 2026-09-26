@@ -6,7 +6,7 @@
  * believe a verdict here is not that we signed it, it is that anybody can repeat it.
  */
 import type { Brief, CheckSaid, OnChain } from "./store.ts";
-import { verdictWords as verdictWordsFor } from "./gallery.ts";
+import { standingWords, verdictWords as verdictWordsFor } from "./gallery.ts";
 import type { Tile } from "./gallery.ts";
 import type { Receipt } from "./receipt.ts";
 import { cardPath, claimPath, refundPath, ROUTES } from "./routes.ts";
@@ -38,16 +38,34 @@ const escape = (text: string): string =>
   text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
 /**
+ * How a stranger fetches the code at the graded commit, from wherever the receipt says it is. A
+ * receipt signed before the worker kept a fetchable copy names a folder on the grader's own machine:
+ * that cannot be changed, since the receipt is signed, so it is said, and the published repository,
+ * if there is one, is where to fetch it instead.
+ */
+function fetchTheCode(receipt: Receipt, publishedAt: string | undefined): readonly string[] {
+  const checkout = `cd work && git checkout ${receipt.commit}`;
+  const where = receipt.repository;
+  const isBundle = where.startsWith(ROUTES.bundle) || (/^https?:\/\//.test(where) && where.includes(ROUTES.bundle));
+  if (isBundle) {
+    // a history named without a host is this site's own: the reader is on it
+    const from = where.startsWith(ROUTES.bundle) ? `<this site>${where}` : where;
+    return [`curl -fsSL -o job.bundle ${from} && git clone job.bundle work && ${checkout}`];
+  }
+  if (/^https?:\/\//.test(where)) return [`git clone ${where} work && ${checkout}`];
+  const note = `# this receipt names a folder on the grader's machine, ${where || "nothing"}, which nobody else can fetch`;
+  return publishedAt ? [note, `git clone ${publishedAt} work && ${checkout}`] : [note, `# fetch the code at commit ${receipt.commit} some other way, then:`];
+}
+
+/**
  * The command a stranger runs to reach the same verdict.
  *
  * Pinned by digest, no route out, checks from outside the artefact's box: the same run we did,
  * written out so it can be checked rather than trusted.
  */
-export function repeatCommand(receipt: Receipt, checksURI: string): string {
+export function repeatCommand(receipt: Receipt, checksURI: string, publishedAt?: string): string {
   return [
-    ...(receipt.repository
-      ? [`git clone ${receipt.repository} work && cd work && git checkout ${receipt.commit}`]
-      : [`# fetch the code at commit ${receipt.commit}, then:`]),
+    ...fetchTheCode(receipt, publishedAt),
     `docker run --rm --network none \\`,
     `  --cap-drop ALL --security-opt no-new-privileges --read-only \\`,
     `  -v "$PWD":/repo:ro ${receipt.image} \\`,
@@ -74,7 +92,7 @@ export function renderJob(page: JobPage, checksURI: string): string {
   const repeat = page.receipt
     ? `<h2>Check it yourself</h2>
 <p>This is the run we did. Nothing about it is private.</p>
-<pre class="repeat">${escape(repeatCommand(page.receipt, checksURI))}</pre>`
+<pre class="repeat">${escape(repeatCommand(page.receipt, checksURI, page.repository))}</pre>`
     : "";
 
   const brief = page.brief && page.tile.verdict === "running" ? renderBrief(page.brief) : "";
@@ -132,7 +150,7 @@ ${page.repository ? `<p class="owns"><a href="${escape(claimPath(page.tile.jobId
   <div class="hero">${renderSeal(page.tile, { inner: 30, outer: 46 })}
     <div>
       <h1>${escape(page.tile.idea)}</h1>
-  <p class="line">${escape(page.tile.verdict)}${page.tile.commit ? ` · commit <code>${escape(page.tile.commit.slice(0, 10))}</code>` : ""}</p>
+  <p class="line">${escape(standingWords(page.tile))}${page.tile.commit ? ` · commit <code>${escape(page.tile.commit.slice(0, 10))}</code>` : ""}</p>
       <p class="sealed-as">sealed before it opened as <code>${escape(page.seal.slice(0, 18))}…</code></p>
     </div>
   </div>
@@ -140,14 +158,13 @@ ${page.repository ? `<p class="owns"><a href="${escape(claimPath(page.tile.jobId
   <h2>${checksHeading}</h2>
   <ul class="checks">${checks}</ul>
   ${page.tile.verdict === "running"
-    ? `<p class="fetch sealed">The checks are sealed until there is a verdict. The pod cannot see them either.</p>`
+    ? ""
     : `<p class="fetch"><a href="${escape(checksURI)}">Fetch the checks</a>, including the ones the pod
   could not see, and run them yourself.</p>`}
 
   <h2>Who signed what</h2>
   <div class="sideways"><table class="approvals"><thead><tr><th>seat</th><th>agent</th><th>commit</th><th>when</th></tr></thead>
   <tbody>${approvals}</tbody></table></div>
-  ${page.tile.securityHeldByUs ? `<p class="disclosure">The security seat was held by the platform, not by an independent agent.</p>` : ""}
 
   ${where}
   ${chain}

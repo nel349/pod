@@ -75,7 +75,10 @@ export interface JobRecord {
   /** where this job is on the chain, once it has been settled there */
   readonly chain?: OnChain;
   readonly signed?: SignedReceipt;
+  /** where the job's repository is published for anybody to fetch */
   readonly repository?: string;
+  /** the published repository opens on the work that passed, which is where GitHub counts it */
+  readonly opensOnMain?: boolean;
   readonly podHolder?: string;
   /** the last invitation GitHub sent to hand the repository to the title's holder */
   readonly invited?: Invitation;
@@ -269,6 +272,12 @@ export class JobStore {
    *
    * Written when the job is graded, so it holds exactly what was graded and the attempts before it.
    */
+  /** Where the job's history is kept as one file, for the worker to write it to when it grades. */
+  historyFileOf(jobId: string): string {
+    if (!isSafeName(jobId)) throw new Error(`${jobId} is not a name a job can have`);
+    return join(this.root, jobId, HISTORY);
+  }
+
   async bundle(jobId: string): Promise<Blob | undefined> {
     if (!isSafeName(jobId)) return undefined;
     const file = Bun.file(join(this.root, jobId, HISTORY));

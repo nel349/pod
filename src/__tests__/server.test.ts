@@ -25,7 +25,6 @@ function tile(over: Partial<Tile> = {}): Tile {
       { role: "lead", agent: LEAD, owner: LEAD },
       { role: "builder", agent: BUILDER, owner: BUILDER },
     ],
-    securityHeldByUs: true,
     finishedAt: "2026-09-17T10:00:00.000Z",
     ...over,
   };

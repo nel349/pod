@@ -12,7 +12,6 @@ const tile = (over: Partial<Tile> = {}): Tile => ({
   verdict: "passed",
   price: 10_000_000_000_000_000_000n,
   pod: [{ role: "lead", agent: AGENT, owner: AGENT }],
-  securityHeldByUs: false,
   finishedAt: "2026-09-17T10:00:00.000Z",
   ...over,
 });

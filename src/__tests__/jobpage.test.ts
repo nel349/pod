@@ -23,7 +23,7 @@ const page = (over: Partial<JobPage> = {}): JobPage => ({
   tile: {
     jobId: "7", idea: "a site that rates my excuses", mode: "flash", verdict: "passed",
     open: "https://pod.example/j/7", commit: "c0ffee1", seconds: 2220, price: 20n,
-    pod: [], securityHeldByUs: false,
+    pod: [],
   },
   seal: `0x${"ab".repeat(32)}`,
   checksSaid: [
@@ -53,9 +53,20 @@ describe("the job page", () => {
     expect(html).toContain("c0ffee1");
   });
 
-  test("says when the platform held the security seat", () => {
-    const held = renderJob(page({ tile: { ...page().tile, securityHeldByUs: true } }), "u");
-    expect(held).toContain("held by the platform");
+  test("never says the platform held a seat: every seat is an agent's, or the contract pays nobody", () => {
+    expect(renderJob(page({ tile: { ...page().tile, pod: [], verdict: "running" } }), "u")).not.toContain("held by the platform");
+  });
+
+  test("a job nobody has taken is waiting for a pod, and one with a seat taken is being built", () => {
+    const waiting = renderJob(page({ tile: { ...page().tile, pod: [], verdict: "running" } }), "u");
+    expect(waiting).toContain("waiting for a pod");
+    const built = renderJob(page({ tile: { ...page().tile, verdict: "running" } }), "u");
+    expect(built).toContain("being built");
+  });
+
+  test("while it runs, nothing says the checks the pod can see are sealed", () => {
+    const running = renderJob(page({ tile: { ...page().tile, verdict: "running" } }), "u");
+    expect(running).not.toContain("The pod cannot see them either");
   });
 
   test("shows the seal the idea was published under before it opened", () => {
@@ -93,5 +104,18 @@ describe("repeating the run", () => {
     expect(command).toContain("--network none");
     expect(command).toContain(receipt.tree);
     expect(command).toContain("https://pod.example/checks/7");
+  });
+
+  test("fetches the code from wherever the receipt names, in the way that address is fetched", () => {
+    const first = (repository: string, publishedAt?: string): string =>
+      repeatCommand({ ...receipt, repository }, "u", publishedAt).split("\n").slice(0, 2).join("\n");
+    expect(first("https://github.com/proof-of-development/pod-one")).toStartWith("git clone https://github.com/proof-of-development/pod-one work && cd work && git checkout c0ffee");
+    expect(first("https://pod.example/bundle/one")).toStartWith("curl -fsSL -o job.bundle https://pod.example/bundle/one && git clone job.bundle work");
+    expect(first("/bundle/one")).toStartWith("curl -fsSL -o job.bundle <this site>/bundle/one");
+    // a receipt signed with a folder on the grader's own machine says so, and fetches from where it was published
+    const older = first("/Users/somebody/jobs/.repositories/one.git", "https://github.com/proof-of-development/pod-one");
+    expect(older).toContain("names a folder on the grader's machine");
+    expect(older).toContain("git clone https://github.com/proof-of-development/pod-one work");
+    expect(first("/Users/somebody/jobs/.repositories/one.git")).toContain("some other way");
   });
 });

@@ -16,7 +16,6 @@ const tile = (over: Partial<Tile> = {}): Tile => ({
   ],
   receiptURI: "https://pod.example/r/7",
   receiptHash: `0x${"cd".repeat(32)}`,
-  securityHeldByUs: false,
   finishedAt: "2026-10-01T12:37:00.000Z",
   ...over,
 });
@@ -31,7 +30,8 @@ describe("a tile never shows a reader a hole", () => {
 
   test("why there is nothing to open depends on what happened", () => {
     expect(renderTile(tile({ verdict: "failed", open: undefined }))).toContain("nothing shipped");
-    expect(renderTile(tile({ verdict: "passed", open: undefined }))).toContain("archived, still claimable");
+    // work that passed and is not running anywhere says nothing false about being archived
+    expect(renderTile(tile({ verdict: "passed", open: undefined }))).not.toContain("archived");
     expect(renderTile(tile({ verdict: "running", open: undefined }))).toContain("not finished");
   });
 
@@ -69,19 +69,25 @@ describe("a tile", () => {
     expect(renderTile(tile())).toContain("open it");
   });
 
-  test("an archived job says so instead of offering a dead link", () => {
-    const archived = renderTile(tile({ open: undefined }));
-    expect(archived).toContain("archived, still claimable");
-    expect(archived).not.toContain("open it");
+  test("a job not running anywhere offers no dead link", () => {
+    expect(renderTile(tile({ open: undefined }))).not.toContain("open it");
   });
 
   test("links the receipt, so a stranger can check the verdict themselves", () => {
     expect(renderTile(tile())).toContain("https://pod.example/r/7");
   });
 
-  test("says plainly when we are still holding the security seat", () => {
-    expect(renderTile(tile({ securityHeldByUs: true }))).toContain("security seat held by the platform");
-    expect(renderTile(tile())).not.toContain("security seat held by the platform");
+  test("never says the platform held a seat, however many seats are open", () => {
+    expect(renderTile(tile({ verdict: "running", pod: [] }))).not.toContain("held by the platform");
+  });
+
+  test("a job nobody has taken is waiting for a pod, not running", () => {
+    expect(renderTile(tile({ verdict: "running", pod: [] }))).toContain("waiting for a pod");
+    expect(renderTile(tile({ verdict: "running" }))).toContain("being built");
+  });
+
+  test("the time shown is what it is: how long the checks ran, not how long the job took", () => {
+    expect(renderTile(tile({ seconds: 2 }))).toContain("checks ran in 2 seconds");
   });
 
   test("names every seat and who it belongs to", () => {

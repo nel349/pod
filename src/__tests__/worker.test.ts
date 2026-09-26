@@ -390,6 +390,24 @@ describe.skipIf(!available)("the worker", () => {
     expect(await head(await openRepository(repositories, job.jobId))).toBe(job.commit);
   }, 300_000);
 
+  test("the receipt names a copy of the work anybody can fetch, and it holds the commit that was graded", async () => {
+    const job = await aJob("a-coat-anybody-can-fetch", WORKING, SEATS);
+    const said: string[] = [];
+    await untilSettled(aWorker(said), said, async () => (await readJob(reading(), job.onChainId)).state === "settled");
+
+    const receipt = (await store.read(job.jobId))?.signed?.receipt;
+    expect(receipt?.repository).toBe(`${SITE}/bundle/${job.jobId}`);
+    // the server hands it out, and git clones the graded commit out of it
+    const history = await store.bundle(job.jobId);
+    if (!history) throw new Error("no history was kept");
+    const folder = await mkdtemp(join(tmpdir(), "pod-fetched-"));
+    await writeFile(join(folder, "job.bundle"), new Uint8Array(await history.arrayBuffer()));
+    const cloned = Bun.spawn(["git", "clone", "--quiet", join(folder, "job.bundle"), join(folder, "work")], { stderr: "pipe" });
+    expect(await cloned.exited).toBe(0);
+    const found = Bun.spawn(["git", "-C", join(folder, "work"), "cat-file", "-e", `${job.commit}^{commit}`]);
+    expect(await found.exited).toBe(0);
+  }, 240_000);
+
   test("GitHub refusing to publish holds up neither the money nor the title, and publishing is tried again", async () => {
     const job = await aJob("a-coat-github-refuses", WORKING, SEATS);
     const said: string[] = [];
@@ -408,6 +426,9 @@ describe.skipIf(!available)("the worker", () => {
       await worker.whenIdle();
       expect(refusals()).toBe(before + 1);
       expect((await store.read(job.jobId))?.repository).toBeUndefined();
+      // and the verdict was not held up for it: the receipt names this server's copy instead
+      expect((await store.read(job.jobId))?.signed?.receipt.repository).toBe(`${SITE}/bundle/${job.jobId}`);
+      expect(said.some((line) => line.startsWith(`[worker] ${job.jobId}: could not publish before grading`))).toBe(true);
     } finally {
       if (was === undefined) delete process.env.POD_GITHUB_TOKEN;
       else process.env.POD_GITHUB_TOKEN = was;

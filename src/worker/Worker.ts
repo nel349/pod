@@ -26,9 +26,9 @@ import { pause } from "../pause.ts";
 import { gradeCommit } from "../pipeline.ts";
 import { publish } from "../publish.ts";
 import { publishJob } from "../github.ts";
-import { BRANCH, bytes32ToCommit, commitToBytes32, existingRepository, has, onBranch, openRepository, putOnMain, shortCommit } from "../repo.ts";
+import { BRANCH, bundle, bytes32ToCommit, commitToBytes32, existingRepository, has, onBranch, openRepository, putOnMain, shortCommit, type Repository } from "../repo.ts";
 import { moneyMove } from "../runner.ts";
-import { jobPath } from "../routes.ts";
+import { bundlePath, jobPath } from "../routes.ts";
 import { SEATS } from "../seal.ts";
 import type { Registries } from "../registry.ts";
 import { readableToTheBox } from "../sandbox.ts";
@@ -217,7 +217,7 @@ export class Worker {
     if (!record.chain?.settled || !record.signed) return false;
     if (record.signed.receipt.verdict !== "passed") return true;
     const titled = !this.options.token || record.chain.tokenId !== undefined;
-    const published = !this.options.publishTo || record.repository !== undefined;
+    const published = !this.options.publishTo || record.opensOnMain === true;
     return titled && published;
   }
 
@@ -242,12 +242,14 @@ export class Worker {
       return;
     }
     this.say(`${record.jobId}: grading ${shortCommit(commit)}`);
+    const repo = await openRepository(this.options.repositories, record.jobId);
+    const fetchFrom = await this.whereAnybodyFetches(record, repo, onChainId);
     const checks = await mkdtemp(join(tmpdir(), "pod-worker-checks-"));
     try {
       for (const [name, contents] of Object.entries(await store.allCheckFiles(record.jobId))) await writeFile(join(checks, name), contents);
       await readableToTheBox(checks);
       const report = await gradeCommit({
-        repo: await openRepository(this.options.repositories, record.jobId),
+        repo, repository: fetchFrom.url,
         commit, seal: record.seal, start: START, checks,
         toRun: spec.checks.map((check) => ({ says: check.says, command: check.run, hidden: check.hidden })),
         image: this.options.image,
@@ -270,7 +272,7 @@ export class Worker {
         jobId: record.jobId, seal: record.seal, idea: spec.idea, mode: spec.mode, price: spec.price, report,
         pod: seats.map((seat) => ({ role: seat.role, agent: seat.agent, owner: seat.owner })),
         checksDirectory: checks, approvals,
-        ...(record.repository ? { repository: record.repository } : {}),
+        ...(fetchFrom.onGitHub ? { repository: fetchFrom.url } : record.repository ? { repository: record.repository } : {}),
         ...(record.podHolder ? { podHolder: record.podHolder } : {}),
       });
       // what the chain already knows about the job stays with it: the grading does not know it
@@ -340,8 +342,32 @@ export class Worker {
   private async publish(jobId: string, idea: string, owner: string): Promise<void> {
     const published = await publishJob(await openRepository(this.options.repositories, jobId), owner, jobId, idea, BRANCH);
     const record = await this.options.store.read(jobId);
-    if (record) await this.options.store.save({ ...record, repository: published.url });
-    this.say(`${jobId}: published at ${published.url}`);
+    if (record) await this.options.store.save({ ...record, repository: published.url, opensOnMain: true });
+    this.say(`${jobId}: published at ${published.url}, opening on the work that passed`);
+  }
+
+  /**
+   * Where anybody can fetch the work being graded, which is what the receipt names: a verdict nobody
+   * can clone is a verdict nobody can check. The job's whole history is kept on this server as one
+   * file, and published on GitHub too when the server names an owner, before anything is signed; the
+   * receipt names GitHub when that worked, and this server's copy when it did not, so GitHub having a
+   * bad moment never holds up a verdict. Failed work is published as well: both outcomes are evidence.
+   */
+  private async whereAnybodyFetches(record: JobRecord, repo: Repository, onChainId: bigint): Promise<{ readonly url: string; readonly onGitHub: boolean }> {
+    await bundle(repo, this.options.store.historyFileOf(record.jobId));
+    const onThisServer = { url: `${this.options.site ?? ""}${bundlePath(record.jobId)}`, onGitHub: false };
+    const owner = this.options.publishTo?.owner;
+    if (!owner) return onThisServer;
+    const lead = (await readSeats(this.options.jobs, onChainId)).find((seat) => seat.role === "lead");
+    if (!lead) return onThisServer;
+    try {
+      // it opens on the lead's branch, where the candidate is, until work that passed is on main
+      const published = await publishJob(repo, owner, record.jobId, record.tile.idea, branchFor("lead", lead.agent));
+      return { url: published.url, onGitHub: true };
+    } catch (error) {
+      this.say(`${record.jobId}: could not publish before grading, so the receipt names this server's copy: ${firstLine(error)}`);
+      return onThisServer;
+    }
   }
 
   /** Keep what the chain did in the job's record, read fresh so nothing written meanwhile is lost. */

@@ -27,7 +27,6 @@ function tile(over: Partial<Tile> = {}): Tile {
     seconds: 61,
     price: 25_000_000_000_000_000_000n,
     pod: [{ role: "lead", agent: RUNNER, owner: RUNNER }],
-    securityHeldByUs: true,
     finishedAt: "2026-09-17T10:00:00.000Z",
     receiptURI: receiptPath("coat-or-no-coat"),
     ...over,

@@ -50,7 +50,7 @@ function tile(over: Partial<Tile> = {}): Tile {
     mode: "flash", verdict: "passed", open: "https://example.test/coat", commit: "c0ffee1234abcdef0123456789abcdef01234567",
     seconds: 812, price: 25_000_000_000_000_000_000n,
     pod: [{ role: "lead", agent: AGENT, owner: AGENT }],
-    receiptURI: receiptPath("one-that-passed"), securityHeldByUs: false,
+    receiptURI: receiptPath("one-that-passed"),
     finishedAt: "2026-09-17T10:04:00.000Z", ...over,
   };
 }
@@ -106,7 +106,7 @@ describe.skipIf(!available)("the wall, driven the way a person drives it", () =>
     const text = await browser.text();
     expect(text).toContain("checks passed");
     expect(text).toContain("checks failed");
-    expect(text).toContain("running now");
+    expect(text).toContain("being built");
   }, 60_000);
 
   test("a tile is clickable across its whole surface, not only on its title", async () => {

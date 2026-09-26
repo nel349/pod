@@ -29,8 +29,6 @@ export interface Tile {
   /** where the receipt sits, and its hash, so anyone can check the verdict themselves */
   readonly receiptURI?: string;
   readonly receiptHash?: Hex;
-  /** true while the platform still holds the security seat itself */
-  readonly securityHeldByUs: boolean;
   readonly finishedAt?: string;
 }
 
@@ -59,8 +57,18 @@ export function verdictWords(verdict: Tile["verdict"]): string {
     case "passed": return "checks passed";
     case "failed": return "checks failed";
     case "not-reproducible": return "could not be reproduced";
-    case "running": return "running now";
+    case "running": return "being built";
   }
+}
+
+/**
+ * Where a job stands, in words: its verdict once it has one, and before that whether anybody has come
+ * to build it. A job nobody has taken a seat on is not being built, and saying "running" of it
+ * leaves its poster waiting on work nobody is doing.
+ */
+export function standingWords(tile: Pick<Tile, "verdict" | "pod">): string {
+  if (tile.verdict === "running" && tile.pod.length === 0) return "waiting for a pod";
+  return verdictWords(tile.verdict);
 }
 
 /**
@@ -85,7 +93,7 @@ export function renderTile(tile: Tile): string {
     failed: "nothing shipped",
     "not-reproducible": "nothing shipped",
     running: "not finished",
-    passed: "archived, still claimable",
+    passed: "",
   }[tile.verdict];
 
   const evidence = tile.receiptURI
@@ -96,13 +104,12 @@ export function renderTile(tile: Tile): string {
   <div class="mark">${renderSeal(tile)}</div>
   <div class="said">
     <h2><a href="${escape(jobPath(tile.jobId))}">${escape(tile.idea)}</a></h2>
-    <p class="verdict">${escape(verdictWords(tile.verdict))}</p>
+    <p class="verdict">${escape(standingWords(tile))}</p>
     <ul class="pod">${seats}${waiting}</ul>
   </div>
   <div class="facts">
-    ${tile.securityHeldByUs ? `<p class="disclosure">security seat held by the platform</p>` : ""}
     <p class="price">${money(tile.price)}</p>
-    <p class="meta">${escape(tile.mode)}${tile.seconds ? ` · ${took(tile.seconds)}` : ""}</p>
+    <p class="meta">${escape(tile.mode)}${tile.seconds ? ` · checks ran in ${took(tile.seconds)}` : ""}</p>
     ${tile.commit ? `<p class="meta"><code>${escape(tile.commit.slice(0, 7))}</code></p>` : ""}
     <p class="links">${tile.open
       ? `<a class="open" href="${escape(tile.open)}">open it</a>`

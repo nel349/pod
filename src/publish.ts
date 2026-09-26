@@ -7,7 +7,6 @@
  *
  * Every field here is copied, never computed from a guess: the verdict is the receipt's verdict, the
  * commit is the receipt's commit, the time is the time the rounds actually took. If the pod has no
- * security seat, the tile says the platform held it, because that is a disclosure and not a detail.
  */
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -44,11 +43,6 @@ export interface PublishJob {
   readonly podHolder?: string;
 }
 
-/** Nobody but the platform in the security seat is a disclosure the tile has to carry. */
-function securityHeldByUs(pod: readonly Seat[]): boolean {
-  return !pod.some((seat) => seat.role === "security");
-}
-
 export function tileFor(job: PublishJob): Tile {
   const { receipt } = job.report.signed;
   const seconds = job.report.rounds.reduce((total, round) => total + round.seconds, 0);
@@ -64,7 +58,6 @@ export function tileFor(job: PublishJob): Tile {
     pod: job.pod,
     receiptURI: receiptPath(job.jobId),
     receiptHash: job.report.signed.hash,
-    securityHeldByUs: securityHeldByUs(job.pod),
     finishedAt: receipt.finishedAt,
   };
 }
@@ -139,7 +132,6 @@ export async function openJob(store: JobStore, job: OpenJob): Promise<JobRecord>
       verdict: "running",
       price: shown.price,
       pod: taken.map((seat) => seat.seat!),
-      securityHeldByUs: !job.seats.some((seat) => seat.role === "security" && seat.seat !== undefined),
     },
     checksSaid: shown.checks.map((check) => ({ says: check.says, hidden: check.hidden })),
     approvals: [],

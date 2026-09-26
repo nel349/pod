@@ -4,6 +4,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openJob, recordFor, tileFor, type PublishJob, type Seat } from "../publish.ts";
+import { standingWords } from "../gallery.ts";
 import { JobStore } from "../store.ts";
 import { handle } from "../server.ts";
 import { jobPath } from "../routes.ts";
@@ -88,11 +89,6 @@ describe("what the wall is told about a graded job", () => {
     expect(tile.receiptHash?.startsWith("0x")).toBe(true);
   });
 
-  test("a pod with nobody in the security seat says so on the tile", async () => {
-    expect(tileFor(await job()).securityHeldByUs).toBe(true);
-    expect(tileFor(await job({ pod: [SEATS.lead!, SEATS.security!] })).securityHeldByUs).toBe(false);
-  });
-
   test("the hidden check is on the record, marked hidden rather than left out", async () => {
     const record = recordFor(await job());
     expect(record.checksSaid).toHaveLength(2);
@@ -155,13 +151,15 @@ describe("a job that is open, before anybody has built anything", () => {
     expect(await response.text()).toContain("published when it has a verdict");
   });
 
-  test("a pod with nobody in the security seat is disclosed while it is still open", async () => {
+  test("an open job with one seat taken is being built, and its page says nothing of the platform holding a seat", async () => {
     const store = new JobStore(await mkdtemp(join(tmpdir(), "pod-open-")));
     const record = await openJob(store, {
       jobId: "coat-from-a-postcode", seal: SEAL, spec,
       endsAt: new Date("2026-09-18T10:00:00.000Z"),
       seats: [{ role: "lead", seat: SEATS.lead! }, { role: "security" }],
     });
-    expect(record.tile.securityHeldByUs).toBe(true);
+    expect(standingWords(record.tile)).toBe("being built");
+    const page = await (await handle(new Request(`http://pod.test${jobPath("coat-from-a-postcode")}`), store)).text();
+    expect(page).not.toContain("held by the platform");
   });
 });
