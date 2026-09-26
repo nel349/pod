@@ -39,6 +39,8 @@ export function paymentWords(input: {
     amount,
     terms: COPY.pay.plain(amount, windowInWords(mode)),
     button,
-    paid: payment ? COPY.pay.paidAs(payment.onChainId, payment.hash) : undefined,
+    paid: payment
+      ? `${COPY.pay.paidAs(payment.onChainId, payment.hash)}${input.status.kind === "idle" ? `. ${COPY.pay.comeBack}` : ""}`
+      : undefined,
   };
 }

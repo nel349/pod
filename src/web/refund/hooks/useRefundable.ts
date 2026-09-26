@@ -5,7 +5,7 @@ import { podJobsAbi, stateOf } from "../../../jobs.ts";
 import type { MarketConfig } from "../../../market.ts";
 import { refundApiPath } from "../../../routes.ts";
 import { readAnswer } from "../../post/hooks/index.ts";
-import { RefundableSchema, WhySchema, type OnChainNow, type Refundable } from "../state/index.ts";
+import { COPY, type OnChainNow, type Refundable, RefundableSchema, type RefundTarget, WhySchema } from "../state/index.ts";
 import { REFUND_QUERY_KEYS } from "./queryKeys.ts";
 
 export type RefundableState =
@@ -14,12 +14,15 @@ export type RefundableState =
   | { readonly kind: "ready"; readonly job: Refundable; readonly onChain: OnChainNow };
 
 /** The job, from the server, and where it stands, from the chain itself: the chain is what decides. */
-export function useRefundable(jobId: string, market: MarketConfig): RefundableState {
+export function useRefundable(target: RefundTarget, market: MarketConfig): RefundableState {
+  const jobId = target.by === "name" ? target.jobId : `#${target.onChainId}`;
   const config = useConfig();
   const job = useQuery({
     queryKey: REFUND_QUERY_KEYS.refundable(jobId),
-    queryFn: async () => {
-      const response = await fetch(refundApiPath(jobId), { cache: "no-store" });
+    queryFn: async (): Promise<Refundable> => {
+      // a job never published is on the chain only: its number is all there is to go on
+      if (target.by === "number") return { jobId, idea: COPY.unpublished(target.onChainId), onChainId: target.onChainId };
+      const response = await fetch(refundApiPath(target.jobId), { cache: "no-store" });
       if (!response.ok) throw new Error((await readAnswer(response, WhySchema)).why);
       return readAnswer(response, RefundableSchema);
     },

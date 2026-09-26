@@ -14,16 +14,20 @@ import { readyToSeal } from "../../checkwriting/written.ts";
 import type { MarketConfig } from "../../market.ts";
 import { Bill, ChecksStep, IdeaStep, LinesStep, PayStep, ProgressStrip, TermsStep } from "./components/index.ts";
 import {
-  useCheckWriting, useChecksView, usePayAndPost, usePointerDrift, usePostJob,
+  keptPaymentStore, useCheckWriting, useChecksView, usePayAndPost, usePointerDrift, usePostJob,
   useSealedJob, useWalletPresent, useWriteTheChecks,
 } from "./hooks/index.ts";
 import {
-  BLANK_FORM, freshSalt, isFresh, PostFormSchema, priceInWei, progressOf, toWriteRequest,
+  BLANK_FORM, formOfPaidJob, freshSalt, isFresh, PostFormSchema, priceInWei, progressOf, toWriteRequest,
   type DraftForm, type PostForm, type StepName,
 } from "./state/index.ts";
 
 export function PostJobPage({ market }: { readonly market: MarketConfig }): ReactElement {
-  const form = useForm<PostForm>({ resolver: zodResolver(PostFormSchema), defaultValues: BLANK_FORM, mode: "onSubmit" });
+  // a payment this browser sent before and never saw published: the page comes back to that job
+  const [kept] = useState(() => keptPaymentStore.read(market));
+  const form = useForm<PostForm>({
+    resolver: zodResolver(PostFormSchema), defaultValues: kept ? formOfPaidJob(kept) : BLANK_FORM, mode: "onSubmit",
+  });
   const draft: DraftForm = useWatch({ control: form.control });
   const request = toWriteRequest(draft);
   usePointerDrift();
@@ -34,8 +38,8 @@ export function PostJobPage({ market }: { readonly market: MarketConfig }): Reac
   const checksView = useChecksView({ writing, request, refusal: writeTheChecks.refusal, onWrite: writeTheChecks.write });
   const { sealed, error: sealError } = useSealedJob(draft, writing.written, salt);
   const hasWallet = useWalletPresent();
-  const { post, steps, payment } = usePostJob(market);
-  const { status, payAndPost } = usePayAndPost({ form, request, written: writing.written, sealed, sealError, payment, post });
+  const { post, steps, payment, published } = usePostJob(market, kept);
+  const { status, payAndPost } = usePayAndPost({ form, request, written: writing.written, sealed, sealError, payment, post, published });
 
   const areChecksReady = isFresh(writing.written, request) && readyToSeal(writing.written?.checks ?? []);
   const progress = progressOf({ form: draft, areChecksReady, isPosted: status.kind === "posted" });

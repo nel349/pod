@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import type { Mode } from "../../../job.ts";
 import type { MarketConfig } from "../../../market.ts";
+import { refundByNumberPath } from "../../../routes.ts";
 import {
   canPress, COPY, paymentWords, POSTING_STEPS,
   type PayStatus, type Payment, type PostingStep, type SealedJob, type StepState,
@@ -31,7 +32,10 @@ export function PayStep({ market, payment }: { readonly market: MarketConfig; re
   return (
     <Step name="pay" title={COPY.pay.title}>
       <p className="terms-plain">{words.terms}</p>
-      {words.paid && <p className="paid-as">{words.paid}</p>}
+      {words.paid && <p className="paid-as" id="paid-as">{words.paid}</p>}
+      {paid?.onChainId !== undefined && !isPosted && (
+        <p className="paid-as"><a href={refundByNumberPath(paid.onChainId)}>{COPY.pay.takeBack}</a>.</p>
+      )}
       <button type="submit" id="submit" className="primary" data-state={status.kind}
         disabled={!canPress(status) || payment.isSubmitting}>
         {words.button}

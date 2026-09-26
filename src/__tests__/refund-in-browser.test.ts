@@ -9,7 +9,7 @@ import { sealSpec } from "../job.ts";
 import { post, readJob } from "../jobs.ts";
 import { readerFor } from "../posting.ts";
 import { openJob } from "../publish.ts";
-import { refundPath } from "../routes.ts";
+import { refundByNumberPath, refundPath } from "../routes.ts";
 import { serve } from "../server.ts";
 import { JobStore } from "../store.ts";
 import { COPY } from "../web/refund/state/index.ts";
@@ -43,6 +43,7 @@ let base = "";
 let server: { stop: () => void } | undefined;
 let browser: Browser | undefined;
 const onChainIds = new Map<string, bigint>();
+let unpublished = 0n;
 
 async function aJobNobodyTook(store: JobStore, jobId: string): Promise<void> {
   const now = (await anvil.publicClient.getBlock()).timestamp;
@@ -60,6 +61,9 @@ beforeAll(async () => {
   const store = new JobStore(await mkdtemp(join(tmpdir(), "pod-refund-")));
   // one job whose window then closes, and one posted after, whose window is still open
   await aJobNobodyTook(store, CLOSED);
+  // paid for and never published: the chain has it, the wall does not
+  const now = (await anvil.publicClient.getBlock()).timestamp;
+  unpublished = await post({ address: jobs, publicClient: anvil.publicClient, wallet: anvil.wallet(POSTER) }, { seal: await sealSpec(TITLED_SPEC), endsAt: now + 3600n, reviewers: 1, price: PRICE });
   await anvil.publicClient.request({ method: "evm_increaseTime" as never, params: [7200] as never });
   await anvil.publicClient.request({ method: "evm_mine" as never, params: [] as never });
   await aJobNobodyTook(store, OPEN);
@@ -87,11 +91,11 @@ afterAll(() => {
   anvil?.stop();
 });
 
-async function openTheRefund(jobId: string, as: Address): Promise<Browser> {
+async function openTheRefund(jobId: string, as: Address, path = refundPath(jobId)): Promise<Browser> {
   browser = await Browser.start();
   await browser.resize(1440, 900);
   await browser.beforeEveryPage(walletInThePage({ rpc: anvil.rpc, address: as, chainId: 31337, startsOn: 31337 }));
-  await browser.open(base + refundPath(jobId));
+  await browser.open(base + path);
   await browser.until(`document.querySelector("#standing")`, "the job's standing to appear");
   return browser;
 }
@@ -142,5 +146,14 @@ describe.skipIf(!available)("taking the money back from a browser", () => {
     expect(await anvil.publicClient.getBalance({ address: POSTED_BY })).toBeGreaterThan(before + PRICE - parseEther("0.01"));
     expect(await isDisabled(page)).toBe(true);
     await photograph(page, "done");
+  }, 120_000);
+
+  test("a job paid for and never published is found by its number, and the poster takes the money back", async () => {
+    const page = await openTheRefund("", POSTED_BY, refundByNumberPath(unpublished.toString()));
+    await page.until(`document.querySelector("#standing").dataset.standing === "ready"`, "the job to read as ready");
+    expect(await page.evaluate<string>(`document.querySelector("#stands").textContent`)).toContain(COPY.unpublished(unpublished.toString()));
+    await page.click("#refund");
+    await page.until(`document.querySelector("#said").classList.contains("done")`, "the refund to be done", 60, SAYS);
+    expect((await readJob({ address: jobs, publicClient: anvil.publicClient }, unpublished)).state).toBe("refunded");
   }, 120_000);
 });

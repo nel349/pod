@@ -11,7 +11,7 @@ import { useMarket } from "../post/hooks/index.ts";
 import { walletConfig } from "../post/wallet/index.ts";
 import { RefundBill } from "./components/index.ts";
 import { RefundPage } from "./RefundPage.tsx";
-import { COPY, jobIdFrom } from "./state/index.ts";
+import { COPY, targetFrom } from "./state/index.ts";
 
 function Notice({ children }: { readonly children: string }): ReactElement {
   return (
@@ -26,7 +26,7 @@ function OnTheChain({ market }: { readonly market: MarketConfig }): ReactElement
   const config = useMemo(() => walletConfig(market), [market]);
   return (
     <WagmiProvider config={config}>
-      <RefundPage jobId={jobIdFrom(window.location.pathname)} market={market} />
+      <RefundPage target={targetFrom(window.location.pathname, window.location.search)} market={market} />
     </WagmiProvider>
   );
 }

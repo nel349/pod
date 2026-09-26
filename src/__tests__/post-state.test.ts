@@ -4,10 +4,11 @@ import { refusalOf } from "../checkwriting/request.ts";
 import { PostingSchema } from "../posting.ts";
 import type { TriedCheck, Written } from "../checkwriting/written.ts";
 import {
-  asSentence, canPress, COPY, cutTheSeal, isFresh, nextPosting, paymentWords, PostFormSchema, priceInWei, progressOf, requestKey, sealJob,
+  asSentence, canPress, COPY, cutTheSeal, formOfPaidJob, isFresh, keepPayment, keptPaymentKey, readKeptPayment, nextPosting, paymentWords, PostFormSchema, priceInWei, progressOf, requestKey, sealJob,
   stepId, stepNumber, STEPS, toWriteRequest, trialsOf, verdictOn, whatIsMissing, windowInWords, writingLine,
   type PostForm, type WrittenFor,
 } from "../web/post/state/index.ts";
+import { targetFrom } from "../web/refund/state/index.ts";
 import { COAT_IDEA, DRY, WET } from "./support/coat.ts";
 
 /**
@@ -174,7 +175,8 @@ describe("the words the page uses", () => {
     const words = paymentWords({ price: 5n * 10n ** 18n, coin: "MON", mode: "project", status: { kind: "idle" }, hasWallet: true, payment });
     expect(words.button).toBe(COPY.pay.finish);
     expect(words.terms).toBe(COPY.pay.plain("0.1 MON", "two hours"));
-    expect(words.paid).toBe(COPY.pay.paidAs("7", "0xabc"));
+    // idle with a payment is the poster back at a paid job, so it also says how to finish it
+    expect(words.paid).toBe(`${COPY.pay.paidAs("7", "0xabc")}. ${COPY.pay.comeBack}`);
   });
 
   test("a job already paid for is finished, never paid for again, even when the form has changed", async () => {
@@ -231,5 +233,57 @@ describe("the seal, as the poster fills in the form", () => {
       expect(cy + shard.scatter.y).toBeGreaterThanOrEqual(-40);
       expect(cy + shard.scatter.y).toBeLessThanOrEqual(240);
     }
+  });
+});
+
+describe("a payment kept in the browser until its job is published", () => {
+  const paidFor = async () => {
+    const sealed = await sealJob({ ...FORM, price: "1.25" }, CHECKS, "a-salt");
+    return { payment: { hash: `0x${"ab".repeat(32)}` as const, poster: "0x1111111111111111111111111111111111111111" as const, sealed, onChainId: "7" }, name: "a-coat-kept" };
+  };
+
+  test("comes back exactly as it was kept, the price to the wei and the seal unchanged", async () => {
+    const kept = await paidFor();
+    const back = readKeptPayment(keepPayment(kept));
+    expect(back).toEqual(kept);
+    expect(back?.payment.sealed.spec.price).toBe(1_250_000_000_000_000_000n);
+    // and what comes back seals to the same seal, so publishing it matches what the chain holds
+    expect(await sealSpec(back?.payment.sealed.spec ?? kept.payment.sealed.spec)).toBe(kept.payment.sealed.seal);
+  });
+
+  test("anything that cannot be read, from an old page or a hand that edited it, is ignored rather than trusted", () => {
+    for (const text of [null, "", "not json", "{}", JSON.stringify({ version: 1, hash: "nope" }), JSON.stringify({ version: 2 })]) {
+      expect(readKeptPayment(text)).toBeUndefined();
+    }
+  });
+
+  test("is kept apart for each chain and contract, so a payment on one deployment never shows on another", () => {
+    const one = keptPaymentKey(10143, "0xBAD56C4b830c8B4Aa71A6880D870049270f2A2F2");
+    expect(one).toBe(keptPaymentKey(10143, "0xbad56c4b830c8b4aa71a6880d870049270f2a2f2"));
+    expect(one).not.toBe(keptPaymentKey(31337, "0xBAD56C4b830c8B4Aa71A6880D870049270f2A2F2"));
+  });
+
+  test("rebuilds the form the job was paid for from what was sealed, brief and exam apart", async () => {
+    const kept = await paidFor();
+    expect(formOfPaidJob(kept)).toEqual({
+      idea: COAT_IDEA, kind: "service", brief: [{ says: WET }], exam: [{ says: DRY }],
+      price: "1.25", mode: "flash", name: "a-coat-kept",
+    });
+  });
+
+  test("on return the page says the job was paid for and how to finish it, and only while nothing is under way", async () => {
+    const { payment } = await paidFor();
+    const words = (status: Parameters<typeof paymentWords>[0]["status"]) =>
+      paymentWords({ price: 1n, coin: "MON", mode: "flash", status, hasWallet: true, payment }).paid;
+    expect(words({ kind: "idle" })).toBe(`${COPY.pay.paidAs("7", payment.hash)}. ${COPY.pay.comeBack}`);
+    expect(words({ kind: "posting" })).toBe(COPY.pay.paidAs("7", payment.hash));
+  });
+});
+
+describe("which job the refund page is about", () => {
+  test("by its name on the wall, or by its number on the contract when it was never published", () => {
+    expect(targetFrom("/refund/a-coat", "")).toEqual({ by: "name", jobId: "a-coat" });
+    expect(targetFrom("/refund/", "?job=12")).toEqual({ by: "number", onChainId: "12" });
+    expect(targetFrom("/refund/a-coat", "?job=not-a-number")).toEqual({ by: "name", jobId: "a-coat" });
   });
 });

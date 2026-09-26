@@ -2,7 +2,8 @@ import { useRef, useState, type BaseSyntheticEvent } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { firstLine } from "../../../errors.ts";
 import { NameTakenSchema } from "../../../market.ts";
-import { jobNamePath } from "../../../routes.ts";
+import { z } from "zod";
+import { jobNamePath, jobPath, refundApiPath } from "../../../routes.ts";
 import {
   asSentence, canPress, COPY, NoWallet, PostingStopped, whatIsMissing,
   type DraftRequest, type PayStatus, type Payment, type PostForm, type SealedJob, type WrittenFor,
@@ -33,8 +34,9 @@ export function usePayAndPost(input: {
   readonly sealError: string | undefined;
   readonly payment: Payment | undefined;
   readonly post: PostJobState["post"];
+  readonly published: PostJobState["published"];
 }): PayAndPost {
-  const { form, request, written, sealed, sealError, payment, post } = input;
+  const { form, request, written, sealed, sealError, payment, post, published } = input;
   const [status, setStatus] = useState<PayStatus>({ kind: "idle" });
   // set before the first wait, so a second press, or Enter held down, cannot start a second posting
   const inFlight = useRef(false);
@@ -54,6 +56,14 @@ export function usePayAndPost(input: {
         return;
       }
       try {
+        // the paid job may be on the wall already, published from another tab or just before a reload:
+        // that is done, not a name somebody else took
+        if (payment?.onChainId !== undefined && (await isOnTheWallAs(valid.name, payment.onChainId))) {
+          published();
+          setStatus({ kind: "posted", url: jobPath(valid.name) });
+          release();
+          return;
+        }
         if (await isNameTaken(valid.name)) {
           setStatus({ kind: "idle", problem: asSentence(COPY.problems.nameTaken(valid.name)) });
           release();
@@ -80,6 +90,16 @@ export function usePayAndPost(input: {
 
   return { status, payAndPost };
 }
+
+/** Whether the job on the wall by this name is this one on the contract. */
+async function isOnTheWallAs(name: string, onChainId: string): Promise<boolean> {
+  const response = await fetch(refundApiPath(name), { cache: "no-store" });
+  if (response.status === 404) return false;
+  if (!response.ok) throw new Error(`the server said ${response.status}`);
+  return (await readAnswer(response, OnTheWallSchema)).onChainId === onChainId;
+}
+
+const OnTheWallSchema = z.object({ onChainId: z.string() });
 
 /** Whether the wall already has a job by this name. Asked, not assumed: the wall is the authority. */
 async function isNameTaken(name: string): Promise<boolean> {

@@ -129,6 +129,10 @@ export const COPY = {
     /** where a paid-for job stands, once the payment exists */
     paidAs: (onChainId: string | undefined, hash: string) =>
       onChainId === undefined ? `Payment sent: ${hash}` : `Paid: job ${onChainId} on the contract`,
+    /** said when the poster comes back to a job they paid for and never saw published */
+    comeBack: "You paid for this job and it is not on the wall yet. Press Sign and publish to finish it: you will not be charged again.",
+    /** the other way out of a paid job that cannot be published */
+    takeBack: "Or leave it unpublished and take the money back once its time is up",
     steps: {
       connect: "Connect your wallet",
       chain: (chain: string) => `Switch to ${chain}`,

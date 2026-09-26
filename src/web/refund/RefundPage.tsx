@@ -8,7 +8,7 @@ import { useWalletPresent } from "../post/hooks/index.ts";
 import { useConnectedAccount } from "../shared/index.ts";
 import { RefundBill, StandsSheet, TakeSheet } from "./components/index.ts";
 import { useRefund, useRefundable } from "./hooks/index.ts";
-import { COPY, standingOf, type OnChainNow, type Refundable } from "./state/index.ts";
+import { COPY, standingOf, type OnChainNow, type Refundable, type RefundTarget } from "./state/index.ts";
 
 function Notice({ children }: { readonly children: string }): ReactElement {
   return <main className="sheets"><section className="sheet notice"><p>{children}</p></section></main>;
@@ -28,8 +28,8 @@ function Refunding({ job, onChain, market }: { readonly job: Refundable; readonl
   );
 }
 
-export function RefundPage({ jobId, market }: { readonly jobId: string; readonly market: MarketConfig }): ReactElement {
-  const state = useRefundable(jobId, market);
+export function RefundPage({ target, market }: { readonly target: RefundTarget; readonly market: MarketConfig }): ReactElement {
+  const state = useRefundable(target, market);
   return (
     <div className="poster">
       <RefundBill />

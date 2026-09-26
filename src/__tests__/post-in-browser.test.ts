@@ -290,6 +290,62 @@ describe.skipIf(!available)("a stranger posts a job from a browser", () => {
     expect(await anvil.publicClient.getBalance({ address: jobs })).toBe(held + PRICE);
   }, 300_000);
 
+  test("paid, then the page is closed before publishing: on return the same job is there to finish, paid for once", async () => {
+    const page = await openThePage(true);
+    await describeTheJob(page, "closed-after-paying");
+    await writeTheChecks(page);
+    const held = await anvil.publicClient.getBalance({ address: jobs });
+
+    // publishing is refused after the payment has gone through, and then the page is closed and opened again
+    const away = `${provenFolder}-away`;
+    await rename(provenFolder, away);
+    await page.click("#submit");
+    await page.until(`document.querySelector("#said").textContent.includes("held by the contract")`, "publishing to fail after paying", 90, POSTING_SAYS);
+    await rename(away, provenFolder);
+    await page.open(base + ROUTES.post);
+    await page.until(`document.querySelector("#paid-as")`, "the paid job to be there on return");
+
+    // the job it paid for, and what to do about it, with nothing to write again
+    expect(await page.evaluate<string>(`document.querySelector("#paid-as").textContent`)).toContain(COPY.pay.comeBack);
+    expect(await page.evaluate<string>(`document.querySelector("#idea").value`)).toBe(COAT_IDEA);
+    expect(await page.evaluate<string>(`document.querySelector("#name").value`)).toBe("closed-after-paying");
+    expect(await page.evaluate<string>(`document.querySelector("#submit").textContent`)).toBe(COPY.pay.finish);
+
+    await page.click("#submit");
+    await page.until(`document.querySelector("#said").textContent.includes("Posted")`, "the paid job to be published", 90, POSTING_SAYS);
+    expect(await store.read("closed-after-paying")).toBeDefined();
+    expect(await anvil.publicClient.getBalance({ address: jobs })).toBe(held + PRICE);
+
+    // once it is on the wall the browser forgets it: a fresh visit is a fresh form
+    await page.open(base + ROUTES.post);
+    await page.until(`document.querySelector("#idea")`, "the form to appear");
+    expect(await page.evaluate<string>(`document.querySelector("#idea").value`)).toBe("");
+  }, 300_000);
+
+  test("a kept payment whose job is on the wall already, published from another tab, is taken as done, not as a name somebody took", async () => {
+    const page = await openThePage(true);
+    await describeTheJob(page, "published-elsewhere");
+    await writeTheChecks(page);
+    const away = `${provenFolder}-away`;
+    await rename(provenFolder, away);
+    await page.click("#submit");
+    await page.until(`document.querySelector("#said").textContent.includes("held by the contract")`, "publishing to fail after paying", 90, POSTING_SAYS);
+    await rename(away, provenFolder);
+    // what this browser kept, as another tab would find it once this one publishes
+    const keptKey = `pod.payment.31337.${jobs.toLowerCase()}`;
+    const kept = await page.evaluate<string>(`localStorage.getItem(${JSON.stringify(keptKey)})`);
+    await page.click("#submit");
+    await page.until(`document.querySelector("#said").textContent.includes("Posted")`, "the paid job to be published", 90, POSTING_SAYS);
+
+    await page.evaluate(`localStorage.setItem(${JSON.stringify(keptKey)}, ${JSON.stringify(kept)})`);
+    await page.open(base + ROUTES.post);
+    await page.until(`document.querySelector("#paid-as")`, "the kept payment to be there");
+    await page.click("#submit");
+    await page.until(`document.querySelector("#said").textContent.includes("Posted")`, "the page to see the job is on the wall", 60, POSTING_SAYS);
+    expect(await page.evaluate<string>(`document.querySelector("#said").textContent`)).not.toContain("already a job");
+    expect(await page.evaluate<string | null>(`localStorage.getItem(${JSON.stringify(keptKey)})`)).toBeNull();
+  }, 300_000);
+
   test("a server that restarts while writing is noticed: the poster is told to write again, and the page stops asking", async () => {
     const page = await openThePage(false);
     await describeTheJob(page, "written-through-a-restart");

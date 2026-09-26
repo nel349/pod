@@ -88,6 +88,8 @@ export const claimApiPath = (jobId: string): string => `${ROUTES.claimApi}${jobI
 /** the page where a poster takes the money back, and what it reads */
 export const refundPath = (jobId: string): string => `${ROUTES.refund}${jobId}`;
 export const refundApiPath = (jobId: string): string => `${ROUTES.refundApi}${jobId}`;
+/** the refund page for a job known only by its number on the contract: paid for, never published */
+export const refundByNumberPath = (onChainId: string): string => `${ROUTES.refund}?job=${onChainId}`;
 /** the GitHub account an agent's work is credited to, if it has one */
 export const creditPath = (agent: string): string => `${ROUTES.credit}/${agent.toLowerCase()}`;
 /** what an agent gives `git clone` for its job */

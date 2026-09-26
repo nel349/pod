@@ -39,8 +39,18 @@ export function standingOf(job: OnChainNow): Standing {
   return { kind: "ready" };
 }
 
-export function jobIdFrom(pathname: string): string {
-  return decodeURIComponent(pathname.slice(ROUTES.refund.length).split("/")[0] ?? "");
+/**
+ * Which job the page's own address names: by its name on the wall, /refund/<job>, or, for a job paid
+ * for and never published, by its number on the contract, /refund/?job=<n>, which the chain alone knows.
+ */
+export type RefundTarget =
+  | { readonly by: "name"; readonly jobId: string }
+  | { readonly by: "number"; readonly onChainId: string };
+
+export function targetFrom(pathname: string, search: string): RefundTarget {
+  const number = new URLSearchParams(search).get("job");
+  if (number !== null && /^[0-9]+$/.test(number)) return { by: "number", onChainId: number };
+  return { by: "name", jobId: decodeURIComponent(pathname.slice(ROUTES.refund.length).split("/")[0] ?? "") };
 }
 
 export type RefundStep = "wallet" | "send" | "confirm";
@@ -73,6 +83,8 @@ export const COPY = {
     stand: "When a job's window closes and it was never settled, the money is the poster's again, and every deposit goes home. The poster's wallet sends for it; nobody here holds it.",
   },
   loading: "Reading the job from the chain…",
+  /** what a job known only by its number is called, having no idea published for it */
+  unpublished: (onChainId: string) => `Job ${onChainId} on the contract, paid for and never published`,
   closed: "This server answers to no chain, so there is nothing to take back here.",
   noWallet: "This browser has no wallet in it. Open this page where the wallet that posted the job lives.",
   stands: {
