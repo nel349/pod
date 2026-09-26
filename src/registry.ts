@@ -14,9 +14,10 @@
  *   several requests, which is also the honest shape of the claim.
  */
 import {
-  createPublicClient, encodeFunctionData, http, parseAbi,
+  createPublicClient, encodeFunctionData, parseAbi,
   type Address, type Hex, type PublicClient, type WalletClient,
 } from "viem";
+import { politeHttp } from "./rpc.ts";
 
 /** Monad testnet, checked on chain 2026-09-16. */
 export const MONAD_TESTNET = {
@@ -60,7 +61,7 @@ export const validationAbi = parseAbi([
 ]);
 
 export function readOnlyClient(rpcUrl: string = MONAD_TESTNET.rpc): PublicClient {
-  return createPublicClient({ transport: http(rpcUrl) }) as PublicClient;
+  return createPublicClient({ transport: politeHttp(rpcUrl) }) as PublicClient;
 }
 
 /**

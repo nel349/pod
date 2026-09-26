@@ -317,14 +317,14 @@ export function serve(store: JobStore, port: number, services: Services = {}): R
 async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string): Promise<Services> {
   const configured = process.env.POD_JOBS_ADDRESS;
   if (!configured) return {};
-  const { createPublicClient, http, isAddress } = await import("viem");
+  const { isAddress } = await import("viem");
   if (!isAddress(configured)) throw new Error(`POD_JOBS_ADDRESS is not an address: ${configured}`);
   const jobs = configured;
   const { readJob, readSeats, readTerms } = await import("./jobs.ts");
-  const { monadTestnet } = await import("./live.ts");
+  const { monadClient } = await import("./live.ts");
   const { MONAD_REGISTRIES, MONAD_TESTNET } = await import("./registry.ts");
   const rpc = process.env.MONAD_TESTNET_RPC ?? MONAD_TESTNET.rpc;
-  const publicClient = createPublicClient({ chain: monadTestnet, transport: http(rpc) });
+  const publicClient = monadClient(rpc);
   const { claudeOnThisMachine } = await import("./broker.ts");
   const { IMAGE } = await import("./sandbox.ts");
   const { join } = await import("node:path");

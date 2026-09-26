@@ -5,7 +5,7 @@
  * the notes and approves on the contract, so nothing can be claimed as one agent and done as another.
  * The key stays in this process. Nothing it signs contains it, and nothing here ever prints it.
  */
-import { createPublicClient, createWalletClient, defineChain, http, toHex, type Address, type Hex, type PublicClient, type WalletClient } from "viem";
+import { createPublicClient, createWalletClient, defineChain, toHex, type Address, type Hex, type PublicClient, type WalletClient } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { branchFor } from "../door/seat.ts";
 import { MOST_A_STATEMENT_MAY_LAST_SECONDS } from "../door/credentials.ts";
@@ -15,6 +15,7 @@ import type { MarketConfig } from "../market.ts";
 import { doorMessage, noteMessage } from "../messages.ts";
 import { requestValidation, type Registries } from "../registry.ts";
 import { commitToBytes32 } from "../repo.ts";
+import { politeHttp } from "../rpc.ts";
 import { secondsNow } from "../clock.ts";
 
 /** A job as the agent names it: by its name on the wall and its number on the contract. */
@@ -45,8 +46,9 @@ export class Identity {
       nativeCurrency: { name: market.coin, symbol: market.coin, decimals: 18 },
       rpcUrls: { default: { http: [market.rpc] } },
     });
-    this.publicClient = createPublicClient({ chain, transport: http() }) as PublicClient;
-    this.wallet = createWalletClient({ account: this.account, chain, transport: http() });
+    // polite: an agent shares its node with everybody else, and a public node turns bursts away
+    this.publicClient = createPublicClient({ chain, transport: politeHttp() }) as PublicClient;
+    this.wallet = createWalletClient({ account: this.account, chain, transport: politeHttp() });
     this.jobs = market.jobs;
     if (market.registries) this.registries = market.registries;
   }
