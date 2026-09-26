@@ -7,6 +7,8 @@ import { useElapsed } from "./useElapsed.ts";
 export interface ChecksView {
   readonly line: WritingLine;
   readonly checks: readonly Written[];
+  /** how the checks ask for what the poster left open, in plain words, when they had to */
+  readonly howItIsAsked: string | undefined;
   readonly verdict: Verdict | undefined;
   readonly isFresh: boolean;
   readonly isBusy: boolean;
@@ -28,6 +30,7 @@ export function useChecksView(input: {
   return {
     line: writingLine({ stage: writing.stage, seconds, error: writing.error, refusal }),
     checks,
+    howItIsAsked: writing.written?.howItIsAsked?.plainly,
     verdict: writing.written && !isBusy ? verdictOn(checks, fresh) : undefined,
     isFresh: fresh,
     isBusy,

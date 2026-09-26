@@ -21,12 +21,12 @@ export interface SealedState {
 export function useSealedJob(draft: DraftForm, written: WrittenFor | undefined, salt: string): SealedState {
   const form = PostFormSchema.safeParse(draft);
   const readyToSeal = form.success && written !== undefined && !whatIsMissing(written, toWriteRequest(draft))
-    ? { form: form.data, checks: written.checks }
+    ? { form: form.data, checks: written.checks, howItIsAsked: written.howItIsAsked }
     : undefined;
   const sealing = useQuery({
     queryKey: QUERY_KEYS.sealed([draft.idea, draft.kind, draft.mode, draft.price, written?.key, written?.writtenAt, salt]),
     queryFn: () => (readyToSeal
-      ? sealJob(readyToSeal.form, readyToSeal.checks, salt)
+      ? sealJob(readyToSeal.form, readyToSeal.checks, salt, readyToSeal.howItIsAsked)
       : Promise.reject(new Error("nothing to seal yet"))),
     enabled: readyToSeal !== undefined,
     staleTime: Infinity,

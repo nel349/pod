@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IMAGE, readableToTheBox } from "../sandbox.ts";
 import {
-  CheckWriting, isStillWriting, ProvenChecks, readyToSeal, refusalOf, writeChecks, WritingSchema, type Written,
+  CheckWriting, isStillWriting, ProvenChecks, readyToSeal, refusalOf, writeChecks, WritingSchema, type Written, type WriteRequest,
 } from "../checkwriting/index.ts";
 import { digestOf } from "../job.ts";
 import { handle, type Market } from "../server.ts";
@@ -107,7 +107,7 @@ describe.skipIf(!withDocker)("how many are written at once", () => {
 
 describe.skipIf(!withDocker)("every check is tried before it can be sealed", () => {
   test("good checks pass the working version, fail their near miss, and fail nothing built", async () => {
-    const written = await writeChecks(COAT_REQUEST, writerWith(replying(GOOD_REPLY).model));
+    const { checks: written } = await writeChecks(COAT_REQUEST, writerWith(replying(GOOD_REPLY).model));
 
     expect(written.map(proven)).toEqual([
       { working: true, nearMiss: true, nothing: true },
@@ -124,7 +124,7 @@ describe.skipIf(!withDocker)("every check is tried before it can be sealed", () 
     // the bug this guards: counting a check as having caught the near miss because the near miss
     // crashed, when the check never ran against it at all
     const crashing = { ...good(1), nearMissServer: "process.exit(1);" };
-    const written = await writeChecks(COAT_REQUEST, writerWith(replying({ working: WORKING, checks: [good(0), crashing] }).model));
+    const { checks: written } = await writeChecks(COAT_REQUEST, writerWith(replying({ working: WORKING, checks: [good(0), crashing] }).model));
 
     expect(proven(written[1]!)).toEqual({ working: true, nearMiss: false, nothing: true });
     const saw = written[1]!.checkable ? written[1]!.saw.nearMiss : "";
@@ -134,7 +134,7 @@ describe.skipIf(!withDocker)("every check is tried before it can be sealed", () 
 
   test("the model's words reach the poster with no em dashes in them, however the model wrote them", async () => {
     const dashing = { ...good(0), asks: "Asks while it is raining — hard", nearMiss: "It never says take a coat—ever" };
-    const written = await writeChecks(COAT_REQUEST, writerWith(replying({ working: WORKING, checks: [dashing, good(1)] }).model));
+    const { checks: written } = await writeChecks(COAT_REQUEST, writerWith(replying({ working: WORKING, checks: [dashing, good(1)] }).model));
     const first = written[0]!;
     expect(first.checkable && [first.asks, first.nearMiss]).toEqual(["Asks while it is raining, hard", "It never says take a coat, ever"]);
   }, 240_000);
@@ -142,7 +142,7 @@ describe.skipIf(!withDocker)("every check is tried before it can be sealed", () 
   test("a near miss that breaks everything is no near miss, so it proves nothing about its check", async () => {
     // a check that catches this proves only that something is broken, which "nothing built" already shows
     const breaksEverything = { ...good(1), nearMissServer: serverSaying("null", "null") };
-    const written = await writeChecks(COAT_REQUEST, writerWith(replying({ working: WORKING, checks: [good(0), breaksEverything] }).model));
+    const { checks: written } = await writeChecks(COAT_REQUEST, writerWith(replying({ working: WORKING, checks: [good(0), breaksEverything] }).model));
 
     expect(proven(written[1]!)).toEqual({ working: true, nearMiss: false, nothing: true });
     expect(written[1]!.checkable && written[1]!.saw.nearMiss).toBe(`the near miss breaks more than one thing: "${WET}" fails against it too`);
@@ -151,7 +151,7 @@ describe.skipIf(!withDocker)("every check is tried before it can be sealed", () 
 
   test("a near miss identical to the working version is missing nothing, and is refused as one", async () => {
     const unchanged = { ...good(1), nearMissServer: WORKING };
-    const written = await writeChecks(COAT_REQUEST, writerWith(replying({ working: WORKING, checks: [good(0), unchanged] }).model));
+    const { checks: written } = await writeChecks(COAT_REQUEST, writerWith(replying({ working: WORKING, checks: [good(0), unchanged] }).model));
 
     expect(proven(written[1]!)).toEqual({ working: true, nearMiss: false, nothing: true });
     expect(written[1]!.checkable && written[1]!.saw.nearMiss).toBe("the near miss is the working version, unchanged");
@@ -159,7 +159,7 @@ describe.skipIf(!withDocker)("every check is tried before it can be sealed", () 
 
   test("a writer whose first answer is unusable is told why, and its second, good answer is used", async () => {
     const { model, asked, prompts } = replyingInTurn("I would be happy to help with that!", GOOD_REPLY);
-    const written = await writeChecks(COAT_REQUEST, writerWith(model));
+    const { checks: written } = await writeChecks(COAT_REQUEST, writerWith(model));
 
     expect(asked()).toBe(2);
     expect(prompts()[1]).toContain("Your last reply could not be used");
@@ -168,7 +168,7 @@ describe.skipIf(!withDocker)("every check is tried before it can be sealed", () 
 
   test("a writer that answers two sentences with one check is asked again, and told the count", async () => {
     const { model, prompts } = replyingInTurn({ working: WORKING, checks: [good(0)] }, GOOD_REPLY);
-    const written = await writeChecks(COAT_REQUEST, writerWith(model));
+    const { checks: written } = await writeChecks(COAT_REQUEST, writerWith(model));
 
     expect(prompts()[1]).toContain("there were 2 sentences and 1 checks");
     expect(readyToSeal(written)).toBe(true);
@@ -176,7 +176,7 @@ describe.skipIf(!withDocker)("every check is tried before it can be sealed", () 
 
   test("a check that passes anything is caught: it lets the near miss and nothing built through", async () => {
     const anything = { ...good(1), check: `console.log("fine"); process.exit(0);` };
-    const written = await writeChecks(COAT_REQUEST, writerWith(replying({ working: WORKING, checks: [good(0), anything] }).model));
+    const { checks: written } = await writeChecks(COAT_REQUEST, writerWith(replying({ working: WORKING, checks: [good(0), anything] }).model));
 
     expect(proven(written[1]!)).toEqual({ working: true, nearMiss: false, nothing: false });
     expect(readyToSeal(written)).toBe(false);
@@ -189,7 +189,7 @@ describe.skipIf(!withDocker)("every check is tried before it can be sealed", () 
       check: `const a = await (await fetch(process.env.TARGET + "/?rain=yes")).json();
 if (a.umbrella !== true) { console.log("no umbrella"); process.exit(1); }`,
     };
-    const written = await writeChecks(COAT_REQUEST, writerWith(replying({ working: WORKING, checks: [impossible, good(1)] }).model));
+    const { checks: written } = await writeChecks(COAT_REQUEST, writerWith(replying({ working: WORKING, checks: [impossible, good(1)] }).model));
 
     expect(proven(written[0]!)).toEqual({ working: false, nearMiss: true, nothing: true });
     expect(written[0]!.checkable && written[0]!.saw.working).toBe("no umbrella");
@@ -198,13 +198,71 @@ if (a.umbrella !== true) { console.log("no umbrella"); process.exit(1); }`,
 
   test("a sentence no program can decide comes back as that, with how to say it instead", async () => {
     const taste = { checkable: false, why: "Say what you would see, for example the answer is in large type" };
-    const written = await writeChecks(
+    const { checks: written } = await writeChecks(
       { ...COAT_REQUEST, statements: [COAT_REQUEST.statements[0]!, { says: "It looks lovely", secret: true }] },
       writerWith(replying({ working: WORKING, checks: [good(0), taste] }).model),
     );
 
     expect(written[1]).toEqual({ checkable: false, says: "It looks lovely", secret: true, why: taste.why });
     expect(readyToSeal(written)).toBe(false);
+  }, 240_000);
+
+  test("a line that depends on the time of day is not refused: the checks ask for a chosen hour, and say so plainly and exactly", async () => {
+    // the poster's own words, which a check cannot decide by waiting for night
+    const request: WriteRequest = {
+      idea: "A page that shows awake faces by day and sleeping faces at night", kind: "page",
+      statements: [{ says: "When it is day, it shows awake faces", secret: false }, { says: "When it is night, it shows sleeping faces", secret: true }],
+    };
+    const page = (awake: string, asleep: string): string => `require("http").createServer((request, response) => {
+  const url = new URL(request.url, "http://x");
+  const hour = url.searchParams.has("hour") ? Number(url.searchParams.get("hour")) : new Date().getHours();
+  response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+  response.end("<p>" + (hour >= 6 && hour < 18 ? "${awake}" : "${asleep}") + "</p>");
+}).listen(3000);`;
+    const shows = (hour: number, face: string): string => `const html = await (await fetch(process.env.TARGET + "/?hour=${hour}")).text().catch(() => "");
+if (!html.includes("${face}")) { console.log("hour=${hour} showed no ${face}"); process.exit(1); }
+console.log("hour=${hour} showed ${face}");`;
+    const asked = {
+      plainly: "To check day and night without waiting for them, the checks ask the page for a chosen hour — 10 in the morning and 10 at night",
+      exactly: "The page accepts hour=0 to 23 in its address, and uses the server's clock when none is given. Day is 6:00 to 17:59.",
+    };
+    const writer = replyingInTurn({
+      working: page("😀", "😴"), howItIsAsked: asked,
+      checks: [
+        { checkable: true, asks: "Asks for 10 in the morning", expects: "An awake face", check: shows(10, "😀"), nearMiss: "It is always asleep", nearMissServer: page("😴", "😴") },
+        { checkable: true, asks: "Asks for 10 at night", expects: "A sleeping face", check: shows(22, "😴"), nearMiss: "It is always awake", nearMissServer: page("😀", "😀") },
+      ],
+    });
+    const set = await writeChecks(request, writerWith(writer.model));
+
+    // both lines became checks that proved themselves, asking for a chosen hour
+    expect(set.checks.map(proven)).toEqual([
+      { working: true, nearMiss: true, nothing: true },
+      { working: true, nearMiss: true, nothing: true },
+    ]);
+    // and how they ask comes back, in the poster's words and the builder's, with no em dash left in either
+    expect(set.howItIsAsked).toEqual({
+      plainly: "To check day and night without waiting for them, the checks ask the page for a chosen hour, 10 in the morning and 10 at night",
+      exactly: asked.exactly,
+    });
+    // the writer was told not to refuse what changes on its own, and to say how it asks instead
+    expect(writer.prompts()[0]).toContain("are not a reason to refuse");
+    expect(writer.prompts()[0]).toContain("howItIsAsked");
+  }, 240_000);
+
+  test("checks that did not need to ask for anything come back with nothing to say about it", async () => {
+    const set = await writeChecks(COAT_REQUEST, writerWith(replying({ ...GOOD_REPLY, howItIsAsked: null }).model));
+    expect(set.howItIsAsked).toBeUndefined();
+    expect(readyToSeal(set.checks)).toBe(true);
+  }, 240_000);
+
+  test("a writer that gives how it asks in only one version is asked again", async () => {
+    const halfSaid = { ...GOOD_REPLY, howItIsAsked: { plainly: "the checks ask for an hour" } };
+    const writer = replyingInTurn(halfSaid, GOOD_REPLY);
+    const set = await writeChecks(COAT_REQUEST, writerWith(writer.model));
+    expect(writer.asked()).toBe(2);
+    expect(writer.prompts()[1]).toContain("without both a plain and an exact version");
+    expect(set.howItIsAsked).toBeUndefined();
   }, 240_000);
 
   test("a writer that says it is done and leaves nonsense is refused, not believed", async () => {

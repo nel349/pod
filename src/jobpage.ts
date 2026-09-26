@@ -173,6 +173,7 @@ function renderBrief(brief: Brief): string {
 
   return `<h2>What is being asked for</h2>
 <p class="asked">${escape(brief.asked)}</p>
+${brief.howItIsAsked ? `<p class="how-asked"><strong>How the checks ask:</strong> ${escape(brief.howItIsAsked)}</p>` : ""}
 <p class="sealed-count">${brief.sealedChecks === 0
     ? "Every check on this job is published above."
     : `${brief.sealedChecks} ${brief.sealedChecks === 1 ? "check is" : "checks are"} sealed until there is a verdict. The pod cannot read ${brief.sealedChecks === 1 ? "it" : "them"} either.`}</p>

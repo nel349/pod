@@ -19,12 +19,12 @@ import { z } from "zod";
 import { runInBox } from "../agent.ts";
 import type { CheckToRun } from "../blackbox.ts";
 import { openBroker, type Broker, type Model } from "../broker.ts";
-import { checkCommand, PORT } from "../job.ts";
+import { checkCommand, PORT, type HowItIsAsked } from "../job.ts";
 import { writableByTheBox } from "../sandbox.ts";
 import { jsonFromTheBox, plainDashes, textFromTheBox } from "./fromTheBox.ts";
 import { prove, type Tried } from "./prove.ts";
 import type { Statement, WriteRequest } from "./request.ts";
-import type { Stage, Written } from "./written.ts";
+import { HowItIsAskedSchema, type Stage, type Written, type WrittenSet } from "./written.ts";
 
 /** What writing and trying the checks needs: a model, the image the boxes run, and the agents. */
 export interface CheckWriter {
@@ -52,12 +52,15 @@ const checkFileFor = (index: number): string => `check-${index + 1}.mjs`;
 /** What the writer program says it did, in .pod/say.json. */
 const SaidSchema = z.object({ decision: z.string(), why: z.string() });
 
-/** What the writer program leaves in .pod/readback.json, one entry per sentence. */
-const ReadBackSchema = z.array(z.discriminatedUnion("checkable", [
-  z.object({ checkable: z.literal(true), asks: z.string(), expects: z.string(), nearMiss: z.string() }),
-  z.object({ checkable: z.literal(false), why: z.string() }),
-]));
-type ReadBack = z.infer<typeof ReadBackSchema>[number];
+/** What the writer program leaves in .pod/readback.json: one entry per sentence, and how the checks ask, if they had to. */
+const ReadBackSchema = z.object({
+  checks: z.array(z.discriminatedUnion("checkable", [
+    z.object({ checkable: z.literal(true), asks: z.string(), expects: z.string(), nearMiss: z.string() }),
+    z.object({ checkable: z.literal(false), why: z.string() }),
+  ])),
+  howItIsAsked: HowItIsAskedSchema.nullable(),
+});
+type ReadBack = z.infer<typeof ReadBackSchema>["checks"][number];
 
 /** One sentence, what the writer made of it, and where its check lives. */
 interface Planned {
@@ -79,7 +82,7 @@ export async function writeChecks(
   request: WriteRequest,
   writer: CheckWriter,
   onStage: (stage: Stage) => void = () => {},
-): Promise<readonly Written[]> {
+): Promise<WrittenSet> {
   const made: string[] = [];
   let broker: Broker | undefined;
   try {
@@ -93,7 +96,7 @@ export async function writeChecks(
     });
 
     onStage("writing");
-    const plan = await runTheWriter(request, writer, workspace, broker);
+    const { plan, howItIsAsked } = await runTheWriter(request, writer, workspace, broker);
 
     onStage("trying");
     const checks = join(workspace, "checks");
@@ -104,7 +107,7 @@ export async function writeChecks(
       nearMiss: new Map(checkable.map((planned) => [planned.command, planned.nearMissDirectory])),
     }, writer.image);
 
-    return await Promise.all(plan.map(async ({ statement, entry, file, command }): Promise<Written> => {
+    const written = await Promise.all(plan.map(async ({ statement, entry, file, command }): Promise<Written> => {
       const { says, secret } = statement;
       if (!entry.checkable) return { checkable: false, says, secret, why: plainDashes(entry.why) };
       const trial = tried.get(command);
@@ -117,6 +120,7 @@ export async function writeChecks(
         file, source, proof: trial.proof, saw: trial.saw,
       };
     }));
+    return howItIsAsked ? { checks: written, howItIsAsked } : { checks: written };
   } finally {
     await broker?.stop();
     await Promise.all(made.map((folder) => rm(folder, { recursive: true, force: true })));
@@ -126,7 +130,7 @@ export async function writeChecks(
 /** Run the writer program in its box, and read back what it said it wrote, one entry per sentence. */
 async function runTheWriter(
   request: WriteRequest, writer: CheckWriter, workspace: string, broker: Broker,
-): Promise<readonly Planned[]> {
+): Promise<{ readonly plan: readonly Planned[]; readonly howItIsAsked?: HowItIsAsked }> {
   await mkdir(join(workspace, ".pod"), { recursive: true });
   await writeFile(join(workspace, ".pod", "ask.json"), JSON.stringify({ ...request, port: PORT }));
   await writeFile(join(workspace, ".pod", "brief.md"), `${request.idea}\n\n${request.statements
@@ -145,12 +149,14 @@ async function runTheWriter(
   const readback = await jsonFromTheBox(join(workspace, ".pod", "readback.json"), ReadBackSchema);
   if (!readback) throw new Error("the check writer said it was done and left nothing that could be read");
 
-  return request.statements.map((statement, i) => {
-    const entry = readback[i];
-    if (!entry || readback.length !== request.statements.length) {
+  const plan = request.statements.map((statement, i) => {
+    const entry = readback.checks[i];
+    if (!entry || readback.checks.length !== request.statements.length) {
       throw new Error("the check writer said it was done and left a different number of checks");
     }
     const file = checkFileFor(i);
     return { statement, entry, file, command: checkCommand(file), nearMissDirectory: join(workspace, "near-miss", String(i + 1)) };
   });
+  const asked = readback.howItIsAsked;
+  return asked ? { plan, howItIsAsked: { plainly: plainDashes(asked.plainly), exactly: plainDashes(asked.exactly) } } : { plan };
 }

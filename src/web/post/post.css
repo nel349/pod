@@ -397,6 +397,12 @@ button.add:hover { background: var(--ink); color: var(--yellow); text-decoration
 .written.stale { opacity: 0.4; filter: grayscale(1); }
 
 .written-check { padding: 22px 0 22px; border-top: 3px solid var(--ink); }
+
+/* how the checks ask for what the poster left open: a note pinned under the checks, read before paying */
+.asked-note { margin: 4px 0 0; padding: 14px 16px; background: var(--yellow); box-shadow: 5px 5px 0 var(--ink); max-width: 62ch; transition: opacity 240ms ease, filter 240ms ease; }
+.asked-note.stale { opacity: 0.4; filter: grayscale(1); }
+.asked-note p { margin: 0; font: 400 16px/1.45 var(--read); }
+.asked-note .asked-title { margin: 0 0 6px; font: 900 20px/1 var(--shout); text-transform: uppercase; }
 .written-check .which {
   display: inline-block;
   margin: 0 0 10px;

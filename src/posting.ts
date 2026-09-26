@@ -20,7 +20,7 @@
  */
 import { isAddress, recoverMessageAddress, type Address, type Hex } from "viem";
 import { z } from "zod";
-import { filesMatchSeal, sealSpec, type Spec } from "./job.ts";
+import { filesMatchSeal, howItIsAskedDigest, sealSpec, type Spec } from "./job.ts";
 import { openJob } from "./publish.ts";
 import { isSafeName, isWallName } from "./routes.ts";
 import type { JobRecord, JobStore } from "./store.ts";
@@ -128,6 +128,12 @@ export async function acceptPosting(store: JobStore, chain: ChainReader, asked: 
     if (!check.digest || !(await proven.has(check.digest))) {
       return refuse(409, `"${check.says}" was never tried here: write the checks on the posting page, and post the ones that passed`);
     }
+  }
+
+  // and how they ask for what the poster left open, which they were proven with: said differently, the
+  // pod would build to one way of asking while the checks, the hidden ones too, ask another
+  if (spec.howItIsAsked && !(await proven.has(await howItIsAskedDigest(spec.howItIsAsked)))) {
+    return refuse(409, "how the checks ask was never proven with them here: post it as the posting page wrote it");
   }
 
   const opened = await openJob(store, {

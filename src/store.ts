@@ -33,6 +33,8 @@ export interface Brief {
   readonly endsAt: string;
   /** how many checks are sealed until there is a verdict */
   readonly sealedChecks: number;
+  /** how the checks ask for what the poster's words left open, in plain words, when they had to */
+  readonly howItIsAsked?: string;
   readonly seats: readonly { readonly role: string; readonly taken: boolean }[];
 }
 

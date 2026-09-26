@@ -61,6 +61,9 @@ function prompt(job) {
     "Reply with one JSON object and nothing else, shaped like this:",
     "{",
     '  "working": "<the whole of a server.js that does everything asked, and every sentence holds>",',
+    '  "howItIsAsked": null, or when the checks ask for something the sentences left open (see below):',
+    '    { "plainly": "<one or two sentences for the person, with the values the checks use>",',
+    '      "exactly": "<for the builder: what the work must accept, its name and form, and what it does without it>" },',
     '  "checks": [ one entry per numbered sentence, in order:',
     '    { "checkable": true,',
     '      "asks": "<what the check does to it, in everyday words, no code, no URLs>",',
@@ -68,8 +71,8 @@ function prompt(job) {
     '      "check": "<an ES module, see below>",',
     '      "nearMiss": "<one sentence: the plausible mistake the near miss makes>",',
     '      "nearMissServer": "<the whole of the working server.js with only that mistake in it>" }',
-    '    or, when a program cannot decide the sentence from outside (taste, looks, anything needing the internet):',
-    '    { "checkable": false, "why": "<one sentence the person can act on: how to say it so it can be checked>" }',
+    '    or, only when a program truly cannot decide the sentence from outside (taste, looks, anything needing the internet):',
+    '    { "checkable": false, "why": "<one or two sentences the person can act on, see below>" }',
     "  ]",
     "}",
     "",
@@ -81,10 +84,22 @@ function prompt(job) {
     "  compare words case-insensitively, and do not require exact wording the person did not ask for",
     "- must pass against your working version and fail against that sentence's near miss",
     "",
+    "Things that change on their own, such as the time of day, the date or chance, are not a reason to refuse.",
+    "A check cannot wait for night or for a six, so it asks for one: choose the obvious way to ask, the same for every",
+    "sentence that needs it (for example the work takes an hour in its address, as hour=22, and uses the real clock",
+    "when none is given), build the working version that way, write every check that way, and say it in howItIsAsked.",
+    "Where the sentences leave a line to draw, such as when day begins, choose the ordinary one and say it. Say the",
+    "plain version so a person who has never programmed understands it, with the values the checks use (10 in the",
+    "morning, 10 at night), and no code, addresses or parameter names. Say the exact version so a builder can build it.",
+    "",
+    "Refuse a sentence only when no program could decide it. Say why in words for a person who has never programmed:",
+    "no code, no addresses, no parameter names. When a sentence only repeats another, say which one, and suggest a",
+    "different situation to check instead, for example midnight rather than night again.",
+    "",
     "Each near miss changes the working version so that one sentence no longer holds while everything else",
     "still works. Make it the mistake a hurried builder would really make, not a crash.",
     "",
-    "Write asks, expects, nearMiss and why in plain sentences, with commas and full stops. Do not use em dashes.",
+    "Write asks, expects, nearMiss, why and howItIsAsked in plain sentences, with commas and full stops. Do not use em dashes.",
   ].join("\n");
 }
 
@@ -95,6 +110,10 @@ function parse(answer) {
   const parsed = JSON.parse(text);
   if (typeof parsed.working !== "string") throw new Error("there was no working version");
   if (!Array.isArray(parsed.checks)) throw new Error("there were no checks");
+  const asked = parsed.howItIsAsked;
+  if (asked !== undefined && asked !== null && (typeof asked.plainly !== "string" || typeof asked.exactly !== "string" || !asked.plainly || !asked.exactly)) {
+    throw new Error("howItIsAsked was given without both a plain and an exact version");
+  }
   return parsed;
 }
 
@@ -128,14 +147,16 @@ function wellFormed(entry) {
     if (!written) { say("refuse", `could not write the checks: ${problem}`); return; }
 
     write("/work/working/server.js", written.working);
-    const readback = written.checks.map((entry, i) => {
+    const checks = written.checks.map((entry, i) => {
       if (entry.checkable === false) return { checkable: false, why: entry.why };
       write(`/work/checks/check-${i + 1}.mjs`, entry.check);
       write(`/work/near-miss/${i + 1}/server.js`, entry.nearMissServer);
       return { checkable: true, asks: entry.asks, expects: entry.expects, nearMiss: entry.nearMiss };
     });
-    write("/work/.pod/readback.json", JSON.stringify(readback, null, 2));
-    say("shipped", `wrote ${readback.filter((entry) => entry.checkable).length} of ${readback.length} checks`);
+    const asked = written.howItIsAsked;
+    const howItIsAsked = asked ? { plainly: asked.plainly, exactly: asked.exactly } : null;
+    write("/work/.pod/readback.json", JSON.stringify({ checks, howItIsAsked }, null, 2));
+    say("shipped", `wrote ${checks.filter((entry) => entry.checkable).length} of ${checks.length} checks`);
   } catch (error) {
     say("refuse", `could not write the checks: ${error.message}`);
   }

@@ -65,6 +65,7 @@ export function briefFor(listed: ListedJob): string {
     "",
     "What will be checked, in the open (there are more checks, sealed until the verdict):",
     ...listed.visibleChecks.map((check) => `- ${check.says}`),
+    ...(listed.howItIsAsked ? ["", `How every check asks, the sealed ones too, which the work must accept: ${listed.howItIsAsked.exactly}`] : []),
     "",
     listed.allowedHosts.length === 0
       ? "It may not open a connection out to any other host."

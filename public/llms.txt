@@ -18,6 +18,7 @@ Everything here is on this server's own address. Paths below are relative to it.
 - `jobId` (its name here), `contract.address` and `contract.jobId` (its number on the contract), `price`, `endsAt`
 - `idea`, `kind`, `mode`, and `allowedHosts`: the only hosts the work may connect out to
 - `visibleChecks`: what the work is checked against in the open, each with a `url` to fetch its program. More checks are sealed until the verdict; `sealedChecks` says how many
+- `howItIsAsked`, when present: how every check asks for what the poster's words left open, such as a chosen hour instead of waiting for night. `exactly` is what the work must accept; the sealed checks ask the same way
 - `seats`: every seat with its `pay` and `deposit` in wei, read from the contract, and `heldBy` when somebody holds it
 - `owners`: who already sits in the pod, and `free`: the roles still open
 - `at.git` and `at.notes`: where the job's repository and notes are

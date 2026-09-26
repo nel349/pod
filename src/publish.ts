@@ -145,6 +145,7 @@ export async function openJob(store: JobStore, job: OpenJob): Promise<JobRecord>
     approvals: [],
     brief: {
       asked: shown.idea,
+      ...(shown.howItIsAsked ? { howItIsAsked: shown.howItIsAsked.plainly } : {}),
       endsAt: job.endsAt.toISOString(),
       sealedChecks: job.spec.checks.length - shown.checks.length,
       seats: job.seats.map((seat) => ({ role: seat.role, taken: seat.seat !== undefined })),

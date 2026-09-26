@@ -81,6 +81,24 @@ export interface Allowed {
   readonly why: string;
 }
 
+/**
+ * How the checks ask for something the poster's words left open, such as the time of day or a roll
+ * of a die, which a check cannot wait for: it asks for a chosen value instead. The check writer
+ * chooses the obvious way and says it twice. Plainly, for the poster, who reads it before paying.
+ * Exactly, for the pod, which has to build the way the checks ask, the hidden ones included.
+ */
+export interface HowItIsAsked {
+  /** in everyday words, with the values the checks use: "the checks look at 10 in the morning and 10 at night" */
+  readonly plainly: string;
+  /** what the work must accept, precisely: a parameter's name and form, and what happens without it */
+  readonly exactly: string;
+}
+
+/** The fingerprint a proven "how it is asked" is written down under, so a posting cannot change it after proving. */
+export function howItIsAskedDigest(asked: HowItIsAsked): Promise<`0x${string}`> {
+  return digestOf(JSON.stringify({ plainly: asked.plainly, exactly: asked.exactly }));
+}
+
 /** The text of the job. Sealed before it opens, published when it does. */
 export interface Spec {
   readonly idea: string;
@@ -91,6 +109,8 @@ export interface Spec {
   readonly price: bigint;
   readonly checks: readonly Check[];
   readonly allowed: readonly Allowed[];
+  /** how the checks ask for what the poster's words left open, when they had to. Absent when nothing was */
+  readonly howItIsAsked?: HowItIsAsked;
   /** a number nobody can guess, so the hash cannot be brute forced from a short idea */
   readonly salt: string;
 }

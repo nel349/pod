@@ -40,6 +40,9 @@ const passedItsTrials = (source: string): TriedCheck => ({
   saw: { working: "ok", nearMiss: "caught", nothing: "caught" },
 });
 
+/** how the checks of a job that needed it ask for what its poster left open, proven with them */
+const ASKED = { plainly: "The checks ask for a chosen temperature: 2 degrees for a cold day", exactly: "The page accepts temperature=<degrees> in its address." };
+
 async function specOf(hidden = HIDDEN): Promise<Spec> {
   return {
     idea: "A page that tells me whether to take a coat",
@@ -93,12 +96,26 @@ beforeAll(async () => {
   });
   // the two checks every honest posting below carries have been through their trials here
   proven = new ProvenChecks(await mkdtemp(join(tmpdir(), "pod-proven-")));
-  await proven.remember([passedItsTrials(VISIBLE), passedItsTrials(HIDDEN)]);
+  await proven.remember({ checks: [passedItsTrials(VISIBLE), passedItsTrials(HIDDEN)], howItIsAsked: ASKED });
 }, 120_000);
 
 afterAll(() => anvil?.stop());
 
 describe.skipIf(!available)("a stranger posts a job", () => {
+  test("how the checks ask is published with the job when it was proven with them, and a posting that says it otherwise is refused", async () => {
+    const withAsked = { ...(await specOf()), howItIsAsked: ASKED };
+    const store = await aStore();
+    const accepted = await acceptPosting(store, reader, await signed({ jobId: "a-coat-asked", onChainId: await paid(withAsked), spec: withAsked }), proven);
+    expect(accepted.ok).toBe(true);
+    expect((await store.read("a-coat-asked"))?.brief?.howItIsAsked).toBe(ASKED.plainly);
+    expect((await store.spec("a-coat-asked"))?.howItIsAsked).toEqual(ASKED);
+
+    // the same checks, and a way of asking they were never proven with: sealed and paid for all the same
+    const reworded = { ...(await specOf()), howItIsAsked: { ...ASKED, exactly: "The page accepts cold=yes in its address." } };
+    const refused = await acceptPosting(await aStore(), reader, await signed({ jobId: "a-coat-reworded", onChainId: await paid(reworded), spec: reworded }), proven);
+    expect(refused).toEqual({ ok: false, status: 409, why: expect.stringContaining("how the checks ask was never proven") });
+  }, 120_000);
+
   test("a job paid for on the chain, signed by who paid, with the files it sealed, is published", async () => {
     const spec = await specOf();
     const store = await aStore();

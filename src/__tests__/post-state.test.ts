@@ -93,6 +93,16 @@ describe("the job the page seals", () => {
     const asService = await sealJob(FORM, CHECKS, "a-salt");
     expect(asPage.seal).not.toBe(asService.seal);
   });
+
+  test("seals how the checks ask, so the pod builds to what was paid for, and a job that needed nothing seals as before", async () => {
+    const asked = { plainly: "The checks ask for a chosen hour", exactly: "The page accepts hour=0 to 23 in its address." };
+    const without = await sealJob(FORM, CHECKS, "a-salt");
+    const withIt = await sealJob(FORM, CHECKS, "a-salt", asked);
+    const askedOtherwise = await sealJob(FORM, CHECKS, "a-salt", { ...asked, exactly: "The page accepts h=0 to 23." });
+    expect(withIt.spec.howItIsAsked).toEqual(asked);
+    expect(new Set([without.seal, withIt.seal, askedOtherwise.seal]).size).toBe(3);
+    expect(without.spec).not.toHaveProperty("howItIsAsked");
+  });
 });
 
 describe("what the checks step says", () => {

@@ -4,7 +4,7 @@
  * Pure: the same form and the same checks always make the same job, with the same seal, which is what
  * lets the server rebuild it and refuse anything that does not match.
  */
-import { checkCommand, digestOf, sealSpec, type Check, type Spec } from "../../../job.ts";
+import { checkCommand, digestOf, sealSpec, type Check, type HowItIsAsked, type Spec } from "../../../job.ts";
 import { isProven, readyToSeal, type Written } from "../../../checkwriting/written.ts";
 import { COPY } from "./copy.ts";
 import { priceInWei, requestKey, type DraftRequest, type PostForm } from "./form.ts";
@@ -16,6 +16,8 @@ const SALT_BYTES = 16;
 export interface WrittenFor {
   readonly key: string;
   readonly checks: readonly Written[];
+  /** how the checks ask for what the poster left open, when they had to: sealed with them */
+  readonly howItIsAsked?: HowItIsAsked;
   /** when the writing that produced them started, which tells one set of checks from the next */
   readonly writtenAt: number;
 }
@@ -45,7 +47,7 @@ export function whatIsMissing(written: WrittenFor | undefined, request: DraftReq
 }
 
 /** Build the job from a complete form and its proven checks, and seal it. */
-export async function sealJob(form: PostForm, checks: readonly Written[], salt: string): Promise<SealedJob> {
+export async function sealJob(form: PostForm, checks: readonly Written[], salt: string, howItIsAsked?: HowItIsAsked): Promise<SealedJob> {
   const price = priceInWei(form.price);
   if (price === undefined) throw new Error(COPY.problems.price);
 
@@ -58,7 +60,10 @@ export async function sealJob(form: PostForm, checks: readonly Written[], salt: 
       file: check.file, digest: await digestOf(check.source),
     });
   }
-  const spec: Spec = { idea: form.idea.trim(), kind: form.kind, mode: form.mode, price, checks: sealed, allowed: [], salt };
+  const spec: Spec = {
+    idea: form.idea.trim(), kind: form.kind, mode: form.mode, price, checks: sealed, allowed: [],
+    ...(howItIsAsked ? { howItIsAsked } : {}), salt,
+  };
   return { spec, files, seal: await sealSpec(spec) };
 }
 

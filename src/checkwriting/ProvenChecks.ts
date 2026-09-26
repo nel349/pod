@@ -11,22 +11,27 @@
  */
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { digestOf } from "../job.ts";
-import { isProven, type Written } from "./written.ts";
+import { digestOf, howItIsAskedDigest } from "../job.ts";
+import { isProven, type WrittenSet } from "./written.ts";
 
 const FINGERPRINT = /^0x[0-9a-f]{64}$/;
 
 export class ProvenChecks {
   constructor(private readonly folder: string) {}
 
-  /** Write down the fingerprint of every check in the set that passed all three trials. */
-  async remember(checks: readonly Written[]): Promise<void> {
-    const proven = checks.filter(isProven);
+  /**
+   * Write down the fingerprint of every check in the set that passed all three trials, and of how
+   * they ask for what the poster left open: the checks were proven against a working version built
+   * that way, so it is proven with them, and a posting that says otherwise is refused.
+   */
+  async remember(set: WrittenSet): Promise<void> {
+    const proven = set.checks.filter(isProven);
     if (proven.length === 0) return;
     await mkdir(this.folder, { recursive: true });
     for (const check of proven) {
       await writeFile(join(this.folder, await digestOf(check.source)), "");
     }
+    if (set.howItIsAsked) await writeFile(join(this.folder, await howItIsAskedDigest(set.howItIsAsked)), "");
   }
 
   /** Whether a check with this fingerprint passed all three trials here. */

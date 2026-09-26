@@ -83,7 +83,9 @@ export function useCheckWriting(): CheckWritingState {
   const writing = progress.data;
   if (writing !== lastSeen) {
     setLastSeen(writing);
-    if (writing?.stage === "written" && run) setWritten({ key: run.key, checks: writing.checks, writtenAt: run.startedAt });
+    if (writing?.stage === "written" && run) {
+      setWritten({ key: run.key, checks: writing.checks, writtenAt: run.startedAt, ...(writing.howItIsAsked ? { howItIsAsked: writing.howItIsAsked } : {}) });
+    }
   }
 
   const failed = writing?.stage === "failed" ? writing.why : undefined;

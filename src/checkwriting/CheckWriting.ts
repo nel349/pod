@@ -71,9 +71,9 @@ export class CheckWriting {
     const work: Promise<void> = writeChecks(parsed.data, this.writer, (stage) => move({ stage }))
       // written down before the poster is shown them, so there is no moment they could pay for a
       // proven check the server has not yet recorded as proven
-      .then(async (checks) => {
-        await this.proven.remember(checks);
-        move({ stage: "written", checks, ready: readyToSeal(checks) });
+      .then(async (set) => {
+        await this.proven.remember(set);
+        move({ stage: "written", checks: set.checks, ...(set.howItIsAsked ? { howItIsAsked: set.howItIsAsked } : {}), ready: readyToSeal(set.checks) });
       })
       .catch((error: unknown) => move({ stage: "failed", why: firstLine(error) }))
       .finally(() => this.underWay.delete(work));

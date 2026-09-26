@@ -58,6 +58,11 @@ export const ListedJobSchema = z.object({
     file: z.string().refine(isSafeName, "a check's file is a plain file name").optional(),
     url: z.string().optional(),
   })),
+  /**
+   * How the checks ask for what the poster's words left open, such as a chosen hour, when they had to.
+   * It holds for the sealed checks too, so a pod builds to it
+   */
+  howItIsAsked: z.object({ plainly: z.string(), exactly: z.string() }).optional(),
   /** how many checks are sealed until the verdict. Counted, never shown */
   sealedChecks: z.number().int().nonnegative(),
   seats: z.array(ListedSeatSchema),
@@ -146,6 +151,7 @@ export class JobList {
           says: check.says, run: check.run,
           ...(check.file ? { file: check.file, url: checkFilePath(jobId, check.file) } : {}),
         })),
+        ...(shown.howItIsAsked ? { howItIsAsked: shown.howItIsAsked } : {}),
         sealedChecks: spec.checks.length - shown.checks.length,
         seats,
         owners: [...new Set(held.map((seat) => seat.owner))],

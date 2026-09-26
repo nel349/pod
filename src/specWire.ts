@@ -23,6 +23,7 @@ export const SpecOnTheWireSchema = z.object({
     digest: z.string().refine((digest): digest is `0x${string}` => FINGERPRINT.test(digest), "a check's fingerprint is 32 bytes of hex").optional(),
   })).readonly(),
   allowed: z.array(z.object({ host: z.string(), why: z.string() })).readonly(),
+  howItIsAsked: z.object({ plainly: z.string().min(1), exactly: z.string().min(1) }).optional(),
   salt: z.string(),
 });
 

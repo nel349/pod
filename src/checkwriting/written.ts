@@ -46,16 +46,30 @@ export const WrittenSchema = z.discriminatedUnion("checkable", [
   }),
 ]);
 
+/** How the checks ask for what the poster's words left open: see HowItIsAsked in job.ts */
+export const HowItIsAskedSchema = z.object({ plainly: z.string().min(1), exactly: z.string().min(1) });
+
 /** Where the writing is, for the page to show while the poster waits. */
 export const STAGES = ["writing", "trying"] as const;
 
 export const WritingSchema = z.discriminatedUnion("stage", [
   z.object({ stage: z.enum(STAGES) }),
-  z.object({ stage: z.literal("written"), checks: z.array(WrittenSchema).readonly(), ready: z.boolean() }),
+  z.object({
+    stage: z.literal("written"),
+    checks: z.array(WrittenSchema).readonly(),
+    /** how the checks ask for what the poster left open, when they had to */
+    howItIsAsked: HowItIsAskedSchema.optional(),
+    ready: z.boolean(),
+  }),
   z.object({ stage: z.literal("failed"), why: z.string() }),
 ]);
 
 export type Proof = z.infer<typeof ProofSchema>;
+/** What writing the checks comes back with: one entry per sentence, and how they ask, when they had to */
+export interface WrittenSet {
+  readonly checks: readonly Written[];
+  readonly howItIsAsked?: z.infer<typeof HowItIsAskedSchema>;
+}
 export type Written = z.infer<typeof WrittenSchema>;
 /** A sentence that became a check and was tried, whether or not it passed its trials. */
 export type TriedCheck = Extract<Written, { readonly checkable: true }>;

@@ -6,7 +6,7 @@ import { WrittenCheck } from "./WrittenCheck.tsx";
 
 /** Having the checks written, watching them be tried, and reading what came back. Draws; decides nothing. */
 export function ChecksStep({ view }: { readonly view: ChecksView }): ReactElement {
-  const { line, checks, verdict } = view;
+  const { line, checks, verdict, howItIsAsked } = view;
   return (
     <Step name="checks" title={COPY.checks.title} guide={COPY.checks.guide}>
       <div className="write-row">
@@ -24,6 +24,12 @@ export function ChecksStep({ view }: { readonly view: ChecksView }): ReactElemen
           {/* a sentence appears once in a request, so it names its check for as long as the list is shown */}
           {checks.map((check) => <WrittenCheck key={`${check.secret ? "exam" : "brief"}:${check.says}`} check={check} />)}
         </ol>
+      )}
+      {checks.length > 0 && howItIsAsked && (
+        <aside id="how-it-is-asked" className={view.isFresh ? "asked-note" : "asked-note stale"}>
+          <p className="asked-title">{COPY.checks.howItIsAsked.title}</p>
+          <p>{howItIsAsked} {COPY.checks.howItIsAsked.told}</p>
+        </aside>
       )}
       {verdict && (
         <div id="written-verdict" className="written-verdict" data-state={verdict.state} aria-live="polite">

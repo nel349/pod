@@ -76,7 +76,11 @@ export const COPY = {
     exam: "Exam",
     theCheck: "The check",
     goodAnswer: "A good answer",
-    cannot: (why: string) => `A program cannot decide this one. ${why}`,
+    cannot: (why: string) => `Say this one another way. ${why}`,
+    howItIsAsked: {
+      title: "How the checks ask",
+      told: "The builders are told this too, so they build it the same way.",
+    },
     trials: {
       working: { held: "Passes a version that works", broke: "Did not pass a version that works." },
       nearMiss: {
