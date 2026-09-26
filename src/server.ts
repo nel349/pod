@@ -8,11 +8,10 @@
  * What it will not do: invent a tile. An empty wall says it is empty. A job with no receipt says the
  * receipt is missing. A missing source is a sentence, never a placeholder number.
  */
-import { renderWall } from "./gallery.ts";
-import { renderAgent } from "./agentpage.ts";
 import { acceptPosting, readerFor, type ChainReader } from "./posting.ts";
 import { CheckWriting, ProvenChecks } from "./checkwriting/index.ts";
 import type { MarketConfig } from "./market.ts";
+import { isAddress } from "viem";
 import { bodyWithin, tooLarge } from "./body.ts";
 import { NO_STORE } from "./headers.ts";
 import { CREDIT_FOLDER, JOBS_FOLDER_SETTING, PROVEN_FOLDER, REPOSITORIES_FOLDER } from "./folders.ts";
@@ -22,14 +21,19 @@ import claimPage from "./web/claim/index.html";
 import postPage from "./web/post/index.html";
 import refundPage from "./web/refund/index.html";
 import { renderCard } from "./card.ts";
-import { renderJob } from "./jobpage.ts";
 import { checksArePublished, JobStore } from "./store.ts";
-import { checkFilePath, checksPath, isSafeName, isWallName, jobPath, ROUTES, writingPath } from "./routes.ts";
+import { cardPath, checkFilePath, isSafeName, isWallName, jobPath, RECEIPT_FILE, ROUTES, writingPath } from "./routes.ts";
+import { ownersFrom, type Owners } from "./owners.ts";
+import { MONAD_TESTNET } from "./registry.ts";
+import { agentPage, jobData, receiptData, wallPage, yoursData } from "./sitePages.ts";
+import { renderSite, siteScript, type Head, type SitePage } from "./web/site/index.ts";
+import { SITE } from "./web/site/copy.ts";
 
 const TEXT = { "content-type": "text/plain; charset=utf-8" } as const;
 const HTML = { "content-type": "text/html; charset=utf-8" } as const;
 const JSON_TYPE = { "content-type": "application/json; charset=utf-8" } as const;
 const CSS = { "content-type": "text/css; charset=utf-8" } as const;
+const JAVASCRIPT = { "content-type": "text/javascript; charset=utf-8" } as const;
 const SVG = { "content-type": "image/svg+xml; charset=utf-8" } as const;
 
 /**
@@ -69,25 +73,23 @@ export interface Services {
   readonly credit?: CreditDoor;
   /** where a title's holder claims its repository */
   readonly claims?: Claims;
+  /** who paid for each job and who holds its title, as the chain says */
+  readonly owners?: Owners;
 }
 const BUNDLE = { "content-type": "application/x-git-bundle" } as const;
 
 const style = new URL("../public/wall.css", import.meta.url);
+const brand = new URL("./web/brand/brand.css", import.meta.url);
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const guide = new URL("../public/llms.txt", import.meta.url);
 const MARKDOWN = { "content-type": "text/markdown; charset=utf-8" } as const;
 
-/** The page a wall with nothing on it shows, rather than a page that looks broken. */
-const NOTHING_YET = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>POD, built by pods of agents</title>
-<link rel="stylesheet" href="${ROUTES.style}"></head>
-<body><header><h1>Nothing has been built yet</h1>
-<p>No job has been graded on this server. When one has, it appears here, whether it passed or not.</p>
-</header></body></html>`;
-
-export async function handle(request: Request, store: JobStore, { market, door, notes, jobList, credit, claims }: Services = {}): Promise<Response> {
+export async function handle(request: Request, store: JobStore, { market, door, notes, jobList, credit, claims, owners }: Services = {}): Promise<Response> {
   const { pathname } = new URL(request.url);
+  const page = (head: Head, drawn: SitePage, status = 200): Response =>
+    new Response(renderSite(head, { ...drawn, ...(market ? { market: market.page } : {}), coin: market?.page.coin ?? MONAD_TESTNET.coin, drawnAt: new Date().toISOString() }), { status, headers: HTML });
+  const missing = (why: string): Response =>
+    wantsAPage(request) ? page({ title: SITE.missing.title }, { page: "missing", why }, 404) : new Response(`${why}\n`, { status: 404, headers: TEXT });
 
   // agents' work, in and out, through git. It speaks its own methods, so it is answered before the rest
   if (pathname.startsWith(ROUTES.git)) {
@@ -140,14 +142,24 @@ export async function handle(request: Request, store: JobStore, { market, door, 
     return Response.json(writing, { headers: NO_STORE });
   }
 
-  if (pathname === ROUTES.wall) {
-    const tiles = await store.tiles();
-    return new Response(tiles.length === 0 ? NOTHING_YET : renderWall(tiles), { headers: HTML });
+  if (pathname === ROUTES.wall) return page({ title: SITE.wall.title }, await wallPage(store));
+  if (pathname === ROUTES.yours) return page({ title: SITE.yours.title }, { page: "yours" });
+
+  if (pathname.startsWith(ROUTES.yoursApi)) {
+    const address = pathname.slice(ROUTES.yoursApi.length);
+    if (!owners) return Response.json({ why: "this server answers to no chain, so nothing here is anybody's" }, { status: 404 });
+    if (!isAddress(address, { strict: false })) return Response.json({ why: `${address} is not an address` }, { status: 400 });
+    return Response.json(await yoursData(store, owners, address, new Date()), { headers: NO_STORE });
   }
 
-  if (pathname === ROUTES.style) {
-    return new Response(await Bun.file(style).text(), { headers: CSS });
+  if (pathname.startsWith(ROUTES.jobApi)) {
+    const job = await jobData(store, owners, pathname.slice(ROUTES.jobApi.length), new Date());
+    return job ? Response.json(job, { headers: NO_STORE }) : Response.json({ why: "there is no job at that address" }, { status: 404 });
   }
+
+  if (pathname === ROUTES.style) return new Response(await Bun.file(style).text(), { headers: CSS });
+  if (pathname === ROUTES.brand) return new Response(await Bun.file(brand).text(), { headers: CSS });
+  if (pathname === ROUTES.siteScript) return new Response(await siteScript(IS_PRODUCTION), { headers: JAVASCRIPT });
 
   if (pathname === ROUTES.guide) {
     return new Response(await Bun.file(guide).text(), { headers: MARKDOWN });
@@ -159,19 +171,13 @@ export async function handle(request: Request, store: JobStore, { market, door, 
 
   if (pathname.startsWith(ROUTES.job)) {
     const jobId = pathname.slice(ROUTES.job.length);
-    const record = await store.read(jobId);
-    if (!record) return notFound(`no job called ${jobId}`);
-    return new Response(renderJob({
-      tile: record.tile,
-      seal: record.seal,
-      checksSaid: record.checksSaid,
-      approvals: record.approvals,
-      receipt: record.signed?.receipt,
-      brief: record.brief,
-      chain: record.chain,
-      repository: record.repository,
-      podHolder: record.podHolder,
-    }, checksPath(jobId)), { headers: HTML });
+    const job = await jobData(store, owners, jobId, new Date());
+    if (!job) return missing(`No job called ${jobId}`);
+    return page({
+      title: job.idea,
+      description: `${job.standing}. ${job.verdict === "running" ? SITE.share.running : SITE.share.decided}`,
+      image: cardPath(jobId),
+    }, { page: "job", job });
   }
 
   if (pathname.startsWith(ROUTES.checks)) {
@@ -185,7 +191,7 @@ export async function handle(request: Request, store: JobStore, { market, door, 
   if (pathname.startsWith(ROUTES.card)) {
     const jobId = pathname.slice(ROUTES.card.length).replace(/\.svg$/, "");
     const record = await store.read(jobId);
-    if (!record) return notFound(`no job called ${jobId}`);
+    if (!record) return missing(`no job called ${jobId}`);
     return new Response(renderCard(record.tile), { headers: SVG });
   }
 
@@ -199,28 +205,39 @@ export async function handle(request: Request, store: JobStore, { market, door, 
   if (pathname.startsWith(ROUTES.bundle)) {
     const jobId = pathname.slice(ROUTES.bundle.length);
     const record = await store.read(jobId);
-    if (!record) return notFound(`no job called ${jobId}`);
+    if (!record) return missing(`no job called ${jobId}`);
     const file = await store.bundle(jobId);
-    if (!file) return notFound(`job ${jobId} has no history to hand over`);
+    if (!file) return missing(`job ${jobId} has no history to hand over`);
     return new Response(file, { headers: BUNDLE });
   }
 
   if (pathname.startsWith(ROUTES.receipt)) {
     const jobId = pathname.slice(ROUTES.receipt.length);
-    const record = await store.read(jobId);
-    if (!record) return notFound(`no job called ${jobId}`);
-    if (!record.signed) return notFound(`job ${jobId} has no signed receipt`);
+    // the signed file itself for a program, or asked for by name; a page for a person
+    const isTheFile = jobId.endsWith(RECEIPT_FILE);
+    const id = isTheFile ? jobId.slice(0, -RECEIPT_FILE.length) : jobId;
+    const record = await store.read(id);
+    if (!record) return missing(`No job called ${id}`);
+    if (!record.signed) return missing(`Job ${id} has no signed receipt yet`);
+    if (!isTheFile && wantsAPage(request)) {
+      const receipt = await receiptData(store, id);
+      if (receipt) return page({ title: SITE.receipt.title(record.tile.idea) }, { page: "receipt", receipt });
+    }
     return new Response(JSON.stringify(record.signed, null, 2), { headers: JSON_TYPE });
   }
 
   if (pathname.startsWith(ROUTES.agent)) {
     const agent = pathname.slice(ROUTES.agent.length);
-    if (!/^0x[0-9a-fA-F]{40}$/.test(agent)) return notFound(`${agent} is not an address`);
-    const tiles = await store.sat(agent as `0x${string}`);
-    return new Response(renderAgent(agent, tiles), { headers: HTML });
+    if (!isAddress(agent, { strict: false })) return missing(`${agent} is not an address`);
+    return page({ title: SITE.agent.title(agent) }, await agentPage(store, agent));
   }
 
-  return notFound(`nothing at ${pathname}`);
+  return missing(`Nothing at ${pathname}`);
+}
+
+/** Whether whoever asked is a browser, which is shown a page, rather than a program, which is given the thing itself. */
+function wantsAPage(request: Request): boolean {
+  return (request.headers.get("accept") ?? "").includes("text/html");
 }
 
 /**
@@ -293,6 +310,7 @@ async function startWriting(request: Request, market?: Market): Promise<Response
   return Response.json({ id: started.id, url: writingPath(started.id) }, { status: 202 });
 }
 
+/** For the files programs fetch, checks and cards and histories: a line of text they can print. */
 function notFound(why: string): Response {
   return new Response(`${why}\n`, { status: 404, headers: TEXT });
 }
@@ -317,7 +335,6 @@ export function serve(store: JobStore, port: number, services: Services = {}): R
 async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string): Promise<Services> {
   const configured = process.env.POD_JOBS_ADDRESS;
   if (!configured) return {};
-  const { isAddress } = await import("viem");
   if (!isAddress(configured)) throw new Error(`POD_JOBS_ADDRESS is not an address: ${configured}`);
   const jobs = configured;
   const { readJob, readSeats, readTerms } = await import("./jobs.ts");
@@ -349,9 +366,8 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
   const credit = new CreditDoor({ book });
   // the title contract, if the server is told where it is: without it nobody can claim anything here
   const tokenAddress = process.env.POD_TOKEN_ADDRESS;
-  const claims = tokenAddress && isAddress(tokenAddress)
-    ? new Claims({ store, token: { address: tokenAddress, publicClient: contract.publicClient } })
-    : undefined;
+  const token = tokenAddress && isAddress(tokenAddress) ? { address: tokenAddress, publicClient: contract.publicClient } : undefined;
+  const claims = token ? new Claims({ store, token }) : undefined;
   const market: Market = {
     page: {
       chainId: MONAD_TESTNET.id, chainName: "Monad testnet", rpc, jobs,
@@ -368,7 +384,12 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
     }),
     proven,
   };
-  return { market, door, notes, jobList, credit, ...(claims ? { claims } : {}) };
+  const { holderOf } = await import("./handover.ts");
+  const owners = ownersFrom({
+    job: market.chain.job,
+    ...(token ? { holder: (tokenId: bigint) => holderOf(token, tokenId) } : {}),
+  });
+  return { market, door, notes, jobList, credit, owners, ...(claims ? { claims } : {}) };
 }
 
 

@@ -1,7 +1,6 @@
 /*
- * The refund page: the posting page's poster and sheets (post.css), the claim page's facts
- * (claim.css), and the one thing only a refund has: where the money stands, said loudly when it is
- * the poster's to take.
+ * Taking the money back: what only this page has, on top of the brand (../brand/brand.css): where
+ * the money stands, said loudly when it is the poster's to take.
  */
 .refund-standing { margin: 0; max-width: 60ch; font: 400 17px/1.45 var(--type); }
 .refund-standing[data-standing="ready"] { padding: 10px 12px; background: var(--yellow); box-shadow: 4px 4px 0 var(--ink); }

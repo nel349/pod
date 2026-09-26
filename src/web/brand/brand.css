@@ -1,0 +1,366 @@
+/*
+ * POD's one look, for every page: a riot poster and the flyers taped up beside it.
+ *
+ * Left, a bill in safety yellow with the loudest type on the page. Right, what the page holds, as
+ * photocopied sheets on black, never quite straight, stamped with a number or a word. Every colour,
+ * face and space is defined here once, and every page, drawn by the server or in the browser, takes
+ * them from here and nowhere else. A page adds only what is particular to it, in its own small file.
+ *
+ * One visual world, on purpose: no page follows the viewer's light or dark setting, so every colour is
+ * painted explicitly and holds on any ground.
+ */
+
+:root {
+  --yellow: #ffe500;
+  --pink: #ff2e88;
+  --ink: #0b0b0b;
+  --night: #151515;
+  --paper: #f3f3ee;
+  --white: #ffffff;
+  --grey: #5b5b55;
+  --rule: #c9c9c1;
+
+  --shout: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --read: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --type: "Special Elite", "Courier New", ui-monospace, monospace;
+  --code: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --slam: cubic-bezier(0.2, 0.9, 0.25, 1.15);
+
+  /* the header every page carries, which the sticky bill sits under */
+  --header-h: 56px;
+}
+
+* { box-sizing: border-box; min-width: 0; }
+
+html { background: var(--night); }
+body {
+  margin: 0;
+  background: var(--night);
+  color: var(--ink);
+  font: 400 16px/1.55 var(--read);
+  -webkit-font-smoothing: antialiased;
+  overflow-wrap: anywhere;
+}
+
+:focus-visible { outline: 3px solid var(--pink); outline-offset: 3px; }
+
+/* read aloud, never drawn: what a mark or a colour says to somebody who cannot see it */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ================= the poster: a bill on the left, the sheets on the right ================= */
+
+.poster {
+  display: grid;
+  grid-template-columns: minmax(340px, 42fr) 58fr;
+  min-height: calc(100vh - var(--header-h));
+}
+
+.bill {
+  position: sticky;
+  top: var(--header-h);
+  height: calc(100vh - var(--header-h));
+  /* on a short screen the bill scrolls on its own rather than cutting off the line saying what is next */
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: clamp(24px, 3.4vw, 52px);
+  background: var(--yellow);
+  color: var(--ink);
+}
+
+.eyebrow { margin: 0; font: 400 14px/1.2 var(--type); letter-spacing: 0.04em; color: var(--ink); }
+.eyebrow a { color: var(--ink); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+
+/* the shout, misprinted: a pink pass lands a few pixels off the black one, the way a cheap press does */
+.shout {
+  margin: 4px 0 0;
+  font: 900 clamp(40px, min(4.9vw, 9.5vh), 92px)/0.86 var(--shout);
+  text-transform: uppercase;
+  letter-spacing: -0.005em;
+}
+.shout span { position: relative; display: block; width: fit-content; white-space: nowrap; }
+.shout span:not(.strap)::before {
+  content: attr(data-text);
+  content: attr(data-text) / "";
+  position: absolute;
+  inset: 0;
+  color: var(--pink);
+  transform: translate(4px, 3px);
+  z-index: -1;
+  animation: misprint 7s steps(1) infinite;
+}
+.shout span:nth-child(2)::before { animation-delay: -2.3s; }
+.shout span { isolation: isolate; }
+
+/* the promise, pasted on under the shout like a strip cut from another poster */
+.shout .strap {
+  margin-top: 0.28em;
+  padding: 0.14em 0.3em 0.06em;
+  font-size: 0.4em;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  background: var(--ink);
+  color: var(--yellow);
+  transform: rotate(-1.5deg);
+  box-shadow: 0.12em 0.12em 0 var(--pink);
+  white-space: normal;
+}
+
+@keyframes misprint {
+  0%, 92%, 100% { transform: translate(4px, 3px); }
+  93% { transform: translate(-5px, 2px); }
+  95% { transform: translate(7px, -2px); }
+  97% { transform: translate(2px, 5px); }
+}
+
+.stand { margin: 0; max-width: 46ch; font: 500 14.5px/1.5 var(--read); }
+
+/* ================= the sheets ================= */
+
+.sheets {
+  display: grid;
+  align-content: start;
+  gap: clamp(26px, 3vw, 40px);
+  padding: clamp(28px, 4vw, 64px) clamp(16px, 4vw, 64px) 140px;
+  background:
+    radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1.3px) 0 0 / 7px 7px,
+    var(--night);
+}
+
+.sheet {
+  position: relative;
+  padding: clamp(24px, 3vw, 40px) clamp(20px, 3vw, 40px) clamp(24px, 3vw, 36px);
+  background:
+    radial-gradient(rgba(0, 0, 0, 0.05) 0.8px, transparent 1.1px) 0 0 / 5px 5px,
+    var(--paper);
+  color: var(--ink);
+  box-shadow: 8px 10px 0 rgba(0, 0, 0, 0.55);
+  transform: rotate(var(--lean, 0deg));
+  animation: slap 560ms var(--slam) calc(var(--order, 0) * 80ms) backwards;
+}
+@keyframes slap {
+  0% { transform: rotate(calc(var(--lean, 0deg) * 7)) translateY(-18px) scale(1.015); }
+  100% { transform: rotate(var(--lean, 0deg)); }
+}
+
+.tape {
+  position: absolute;
+  top: -13px;
+  left: calc(50% - 60px);
+  width: 120px;
+  height: 26px;
+  background: color-mix(in srgb, var(--yellow) 78%, transparent);
+  transform: rotate(-2.5deg);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
+}
+.sheet:nth-of-type(even) .tape { left: 36px; transform: rotate(3deg); background: color-mix(in srgb, var(--pink) 70%, transparent); }
+
+.stamp {
+  position: absolute;
+  top: 10px;
+  right: 22px;
+  margin: 0;
+  font: 900 clamp(52px, 6vw, 84px)/1 var(--shout);
+  color: var(--pink);
+  transform: rotate(7deg);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.sheet h2 {
+  margin: 0 64px 12px 0;
+  font: 900 clamp(30px, 3.6vw, 48px)/0.92 var(--shout);
+  text-transform: uppercase;
+  letter-spacing: 0.005em;
+}
+.sheet h2 label { cursor: text; }
+.guide { margin: 0 0 20px; max-width: 60ch; color: var(--grey); font-size: 16px; }
+.note { margin: 16px 0 0; max-width: 60ch; font: 400 14px/1.45 var(--type); color: var(--grey); }
+.notice p { margin: 0; font: 400 18px/1.4 var(--type); }
+
+/* ---------------- fields ---------------- */
+
+.sheets input[type="text"], .sheets textarea {
+  width: 100%;
+  font: 500 17px/1.4 var(--read);
+  color: var(--ink);
+  background: var(--white);
+  border: 3px solid var(--ink);
+  border-radius: 0;
+  padding: 12px 14px;
+  transition: box-shadow 140ms ease, transform 140ms ease;
+}
+.sheets textarea#idea { font: 600 clamp(20px, 2vw, 24px)/1.35 var(--read); resize: vertical; }
+.sheets input[type="text"]:focus-visible, .sheets textarea:focus-visible {
+  outline: 0;
+  box-shadow: 6px 6px 0 var(--pink);
+  transform: translate(-2px, -2px);
+}
+.sheets ::placeholder { color: #9a9a92; }
+
+.field { display: grid; gap: 8px; margin: 0 0 20px; font: 400 14px/1.2 var(--type); }
+
+/* ---------------- buttons ---------------- */
+
+button { font: inherit; }
+
+button.primary {
+  font: 900 24px/1 var(--shout);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--yellow);
+  background: var(--ink);
+  border: 0;
+  border-radius: 0;
+  padding: 15px 26px 13px;
+  cursor: pointer;
+  box-shadow: 5px 5px 0 var(--pink);
+  transition: transform 120ms var(--slam), box-shadow 120ms var(--slam);
+}
+button.primary:hover { transform: translate(-3px, -3px); box-shadow: 8px 8px 0 var(--pink), -4px -4px 0 var(--yellow); }
+button.primary:active { transform: translate(4px, 4px); box-shadow: 0 0 0 var(--pink); }
+button.primary:disabled { opacity: 0.5; cursor: progress; transform: none; box-shadow: 5px 5px 0 var(--pink); }
+
+/* working, not broken: hazard stripes crawl across the button while the checks are written */
+button.primary[data-busy] { position: relative; opacity: 1; padding-bottom: 21px; }
+button.primary[data-busy]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 8px;
+  background: repeating-linear-gradient(-45deg, var(--yellow) 0 7px, var(--ink) 7px 14px) 0 0 / 20px 20px;
+  animation: hazard 700ms linear infinite;
+}
+@keyframes hazard { to { background-position: 20px 0; } }
+
+button.quiet {
+  background: none;
+  border: 0;
+  padding: 6px 8px;
+  font: 400 14px/1 var(--type);
+  color: var(--grey);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+button.quiet:hover { color: var(--pink); text-decoration: line-through; }
+
+/* ---------------- what happened ---------------- */
+
+.said-status { margin: 18px 0 0; min-height: 1.4em; max-width: 60ch; font: 400 15px/1.45 var(--type); color: var(--pink); }
+.said-status.done { color: var(--ink); }
+.said-status a { color: var(--ink); background: var(--yellow); padding: 0 4px; font-weight: 700; }
+
+.progress { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; font: 400 15px/1.3 var(--type); color: var(--grey); }
+.progress li { position: relative; padding-left: 26px; width: fit-content; }
+.progress li::before { content: "○"; position: absolute; left: 0; }
+.progress li[data-state="doing"] { color: var(--ink); }
+.progress li[data-state="doing"]::before { content: "●"; color: var(--pink); animation: blink 800ms steps(1) infinite; }
+.progress li[data-state="done"] { color: var(--ink); background: linear-gradient(transparent 55%, var(--yellow) 55%, var(--yellow) 92%, transparent 92%); }
+.progress li[data-state="done"]::before { content: "✓"; }
+.progress li[data-state="failed"] { color: var(--pink); }
+.progress li[data-state="failed"]::before { content: "✕"; }
+
+
+/* ================= the header every page carries ================= */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  gap: clamp(12px, 2.4vw, 32px);
+  padding: 0 clamp(16px, 3vw, 40px);
+  background: var(--ink);
+  color: var(--paper);
+  border-bottom: 3px solid var(--yellow);
+}
+.site-header .mark { font: 900 30px/1 var(--shout); color: var(--yellow); text-decoration: none; letter-spacing: 0.02em; }
+.site-header nav { display: flex; gap: clamp(10px, 2vw, 24px); flex: 1 1 auto; min-width: 0; overflow-x: auto; }
+.site-header nav a {
+  font: 400 14px/1 var(--type);
+  color: var(--paper);
+  text-decoration: none;
+  white-space: nowrap;
+  padding: 6px 2px;
+  border-bottom: 2px solid transparent;
+}
+.site-header nav a:hover { color: var(--yellow); }
+.site-header nav a[aria-current="page"] { color: var(--yellow); border-bottom-color: var(--pink); }
+.wallet { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; font: 400 13px/1.2 var(--type); }
+.wallet button {
+  font: 900 16px/1 var(--shout);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  background: var(--yellow);
+  border: 0;
+  padding: 9px 12px 7px;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 var(--pink);
+}
+.wallet button:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--pink); }
+.wallet .who { color: var(--yellow); }
+.wallet .who::before { content: "● "; color: #3ddc84; }
+.wallet .wrong { color: var(--pink); }
+.wallet .none { color: #a8a89f; }
+
+/* a link that is a button: the loudest thing a sheet or a bill asks you to do */
+a.primary {
+  display: inline-block;
+  font: 900 24px/1 var(--shout);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--yellow);
+  background: var(--ink);
+  padding: 15px 26px 13px;
+  text-decoration: none;
+  box-shadow: 5px 5px 0 var(--pink);
+  transition: transform 120ms var(--slam), box-shadow 120ms var(--slam);
+}
+a.primary:hover { transform: translate(-3px, -3px); box-shadow: 8px 8px 0 var(--pink), -4px -4px 0 var(--paper); }
+
+/* the one sentence a sheet is about, read before anything else on it */
+.lede { margin: 0 0 18px; max-width: 40ch; font: 600 clamp(20px, 2vw, 24px)/1.35 var(--read); }
+
+/* facts laid out in two columns: a word, then what it is */
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 18px; margin: 0 0 18px; align-items: baseline; }
+.facts dt { font: 900 22px/1 var(--shout); text-transform: uppercase; }
+.facts dd { margin: 0; font: 400 15px/1.4 var(--type); }
+.facts a { color: var(--ink); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.facts code { font: 400 14px/1.4 var(--code); overflow-wrap: anywhere; }
+
+/* ================= calmer, for those who asked ================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* ================= a phone ================= */
+
+@media (max-width: 900px) {
+  .poster { grid-template-columns: minmax(0, 1fr); }
+  .bill { position: relative; top: 0; height: auto; overflow: visible; }
+  .sheet { transform: none; animation: none; }
+  .stamp { font-size: 48px; right: 14px; }
+  .sheet h2 { margin-right: 52px; }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .facts dd { margin-bottom: 10px; }
+}

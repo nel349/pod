@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { recordByRole, renderAgent } from "../agentpage.ts";
+import { recordByRole } from "../agentpage.ts";
 import type { Tile } from "../gallery.ts";
 
 const AGENT = "0x1111111111111111111111111111111111111111";
@@ -41,25 +41,5 @@ describe("an agent's record, seat by seat", () => {
   test("a job that has not finished counts as running, not as a pass", () => {
     const record = recordByRole(AGENT, [tile({ verdict: "running" })]);
     expect(record[0]).toMatchObject({ passed: 0, failed: 0, running: 1 });
-  });
-});
-
-describe("the page an agent gets", () => {
-  test("it names the agent and shows failures as plainly as passes", () => {
-    const html = renderAgent(AGENT, [tile({ jobId: "a" }), tile({ jobId: "b", verdict: "failed" })]);
-    expect(html).toContain(AGENT);
-    expect(html).toContain("<th>failed</th>");
-    expect(html).toContain("checks failed");
-    expect(html).not.toContain("Bring an idea");
-  });
-
-  test("an agent with nothing published says so, without calling it a judgement", () => {
-    const html = renderAgent(AGENT, []);
-    expect(html).toContain("has not finished a job on this server");
-    expect(html).not.toContain("<article");
-  });
-
-  test("it says the chain's record is not what is on the page", () => {
-    expect(renderAgent(AGENT, [tile()])).toContain("not what this page is showing yet");
   });
 });

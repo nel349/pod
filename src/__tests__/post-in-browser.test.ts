@@ -13,7 +13,7 @@ import { JobStore } from "../store.ts";
 import { readerFor } from "../posting.ts";
 import { readJob } from "../jobs.ts";
 import { CheckWriting, ProvenChecks } from "../checkwriting/index.ts";
-import { checkFilePath, checksPath, jobPath, ROUTES } from "../routes.ts";
+import { checkFilePath, checksPath, jobApiPath, jobPath, ROUTES } from "../routes.ts";
 import { COPY } from "../web/post/state/index.ts";
 import { dockerAvailable } from "./support/tools.ts";
 
@@ -232,7 +232,12 @@ describe.skipIf(!available)("a stranger posts a job from a browser", () => {
     const text = (await page.text()).toLowerCase();
     expect(text).toContain(WET.toLowerCase());
     expect(text).not.toContain(DRY.toLowerCase());
-    expect(text).toContain("1 check is sealed until there is a verdict");
+    expect(text).toContain("1 more check is sealed until there is a verdict");
+    // nor anywhere in what the server sent, the data the page is brought to life with included
+    const source = await (await fetch(base + jobPath("the-exam-stays-sealed"))).text();
+    expect(source).not.toContain(DRY);
+    const followed = await (await fetch(base + jobApiPath("the-exam-stays-sealed"))).text();
+    expect(followed).not.toContain(DRY);
 
     // while the job runs, the checks list holds the brief's check, which the builders build against,
     // and never the exam's
@@ -368,6 +373,28 @@ describe.skipIf(!available)("a stranger posts a job from a browser", () => {
 
     // the stopped server's writing still finishes and takes its boxes down, rather than being cut off
     await before.writing.whenIdle();
+  }, 300_000);
+
+  test("a draft left behind is there on return, the checks written for it included, until the poster starts again", async () => {
+    const page = await openThePage(false);
+    await describeTheJob(page, "a-coat-drafted");
+    await writeTheChecks(page);
+
+    // they leave, and come back
+    await page.open(base + ROUTES.wall);
+    await page.open(base + ROUTES.post);
+    await page.until(`document.querySelector(".draft-back")`, "the draft to be back");
+    expect(await page.evaluate<string>(`document.querySelector("#idea").value`)).toBe(COAT_IDEA);
+    expect(await page.evaluate<string>(`document.querySelector('[data-lines="exam"] input').value`)).toBe(DRY);
+    expect(await page.evaluate<string | undefined>(`document.querySelector("#written-verdict")?.dataset.state`)).toBe("ready");
+
+    await page.click(".draft-back button");
+    await page.until(`document.querySelector("#idea").value === ""`, "the form to be blank again");
+    expect(await page.evaluate<boolean>(`document.querySelector("#written-verdict") === null`)).toBe(true);
+    // and it stays thrown away
+    await page.open(base + ROUTES.post);
+    await page.until(`document.querySelector("#idea")`, "the form to appear");
+    expect(await page.evaluate<boolean>(`document.querySelector(".draft-back") === null && document.querySelector("#idea").value === ""`)).toBe(true);
   }, 300_000);
 
   test("on a phone the page does not scroll sideways", async () => {

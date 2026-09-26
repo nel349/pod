@@ -129,8 +129,8 @@ describe("a job that is open, before anybody has built anything", () => {
 
     expect(body).toContain("What will be checked");
     expect(body).toContain("the page answers with a verdict for today");
-    expect(body).toContain("2 checks are sealed until there is a verdict");
-    expect(body).toContain("security · open");
+    expect(body).toContain("2 more checks are sealed until there is a verdict");
+    expect(body).toMatch(/seat-role">security<\/p>.*?>open</);
 
     // neither the hidden checks nor the salt reach the page
     expect(body).not.toContain("a cold, wet forecast");

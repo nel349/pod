@@ -9,18 +9,26 @@
  * as it stands rather than a picture taken once and left to rot.
  */
 import type { Tile } from "./gallery.ts";
-import { verdictWords } from "./gallery.ts";
+import { standingWords } from "./gallery.ts";
+import { inCoins, lengthOf, SITE, stampOf } from "./web/site/copy.ts";
 import { MONAD_TESTNET } from "./registry.ts";
 
 const escape = (text: string): string =>
   text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-const COLOURS: Record<Tile["verdict"], string> = {
-  passed: "#1d6f45",
-  failed: "#9a3412",
-  "not-reproducible": "#6b5b16",
-  running: "#2f4fd4",
+/**
+ * The ink each verdict is stamped in: the same as the pages' --paid-ink and its neighbours in
+ * public/wall.css, which an image cannot read, so they are written here as well.
+ */
+const INKS: Record<Tile["verdict"], string> = {
+  passed: "#117a43",
+  failed: "#ff2e88",
+  "not-reproducible": "#9a6a00",
+  running: "#2448d6",
 };
+
+/** The poster's colours and faces, for an image that cannot load the stylesheet or the fonts. */
+const POSTER = { yellow: "#ffe500", ink: "#0b0b0b", pink: "#ff2e88", shout: "'Big Shoulders Display', Impact, 'Arial Narrow', sans-serif", type: "'Special Elite', 'Courier New', monospace" } as const;
 
 /** Break a line into at most three, at word boundaries, the way a headline is set. */
 export function headline(idea: string, perLine = 30, lines = 3): readonly string[] {
@@ -40,32 +48,28 @@ export function headline(idea: string, perLine = 30, lines = 3): readonly string
   return out;
 }
 
-const took = (seconds?: number): string => {
-  if (seconds === undefined) return "";
-  if (seconds < 90) return `${Math.round(seconds)} seconds`;
-  const minutes = Math.round(seconds / 60);
-  return minutes < 90 ? `${minutes} minutes` : `${(minutes / 60).toFixed(1)} hours`;
-};
-
 export function renderCard(tile: Tile): string {
-  const lines = headline(tile.idea);
-  const colour = COLOURS[tile.verdict];
-  const price = `${(Number(tile.price) / 1e18).toFixed(2)} ${MONAD_TESTNET.coin}`;
+  const lines = headline(tile.idea.toUpperCase(), 26);
+  const ink = INKS[tile.verdict];
   const crew = `${tile.pod.length} ${tile.pod.length === 1 ? "seat" : "seats"}`;
-  const time = took(tile.seconds);
+  const facts = [tile.seconds ? lengthOf(tile.seconds) : "", inCoins(tile.price.toString(), MONAD_TESTNET.coin), crew].filter(Boolean).join("  ·  ");
+  const standing = standingWords(tile);
 
   const title = lines.map((line, i) =>
-    `<text x="64" y="${232 + i * 62}" font-size="52" font-weight="700" fill="#17181c">${escape(line)}</text>`,
+    `<text x="64" y="${224 + i * 76}" font-family="${POSTER.shout}" font-size="72" font-weight="900" fill="${POSTER.ink}">${escape(line)}</text>`,
   ).join("\n  ");
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
-  <title>${escape(tile.idea)}: ${escape(verdictWords(tile.verdict))}</title>
-  <rect width="1200" height="630" fill="#f6f5f2"/>
-  <rect x="0" y="0" width="1200" height="10" fill="${colour}"/>
-  <text x="64" y="112" font-size="22" letter-spacing="3" fill="#5d6068">PROOF OF DEVELOPMENT</text>
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <title>${escape(tile.idea)}: ${escape(standing)}</title>
+  <rect width="1200" height="630" fill="${POSTER.yellow}"/>
+  <rect x="0" y="0" width="1200" height="64" fill="${POSTER.ink}"/>
+  <text x="64" y="44" font-family="${POSTER.shout}" font-size="36" font-weight="900" fill="${POSTER.yellow}">POD</text>
+  <text x="150" y="42" font-family="${POSTER.type}" font-size="20" fill="${POSTER.yellow}">Proof of Development</text>
   ${title}
-  <text x="64" y="486" font-size="30" font-weight="600" fill="${colour}">${escape(verdictWords(tile.verdict))}</text>
-  <text x="64" y="532" font-size="24" fill="#5d6068">${escape([time, price, crew].filter(Boolean).join("  ·  "))}</text>
-  <text x="64" y="578" font-size="20" fill="#5d6068">Nobody was paid until somebody else ran the checks again.</text>
+  <g transform="rotate(-6 1000 470)"><rect x="840" y="428" width="320" height="84" fill="none" stroke="${ink}" stroke-width="6"/>
+  <text x="1000" y="492" text-anchor="middle" font-family="${POSTER.shout}" font-size="60" font-weight="900" fill="${ink}">${escape(stampOf(tile).toUpperCase())}</text></g>
+  <text x="64" y="500" font-family="${POSTER.type}" font-size="30" font-weight="700" fill="${POSTER.ink}">${escape(standing)}</text>
+  <text x="64" y="546" font-family="${POSTER.type}" font-size="24" fill="${POSTER.ink}">${escape(facts)}</text>
+  <text x="64" y="590" font-family="${POSTER.type}" font-size="22" fill="${POSTER.ink}">${escape(tile.verdict === "running" ? SITE.share.running : SITE.share.decided)}</text>
 </svg>`;
 }

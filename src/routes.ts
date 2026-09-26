@@ -38,6 +38,16 @@ export const ROUTES = {
   notes: "/api/notes/",
   /** everything an outside agent does on its side, where agents look for it */
   guide: "/llms.txt",
+  /** a wallet's own page: what it posted, what it holds, and the one thing to do next on each */
+  yours: "/yours",
+  /** what that page reads for a wallet */
+  yoursApi: "/api/yours/",
+  /** a job as data, for its page to follow while it runs */
+  jobApi: "/api/job/",
+  /** the script that brings the server-drawn pages to life in the browser */
+  siteScript: "/assets/site.js",
+  /** the one stylesheet every page takes its look from */
+  brand: "/brand.css",
   /** where the holder of a POD claims the repository it is title to */
   claim: "/claim/",
   /** what that page reads, and where it sends the holder's signature */
@@ -75,6 +85,9 @@ export const jobPath = (jobId: string): string => `${ROUTES.job}${jobId}`;
 export const checksPath = (jobId: string): string => `${ROUTES.checks}${jobId}`;
 export const checkFilePath = (jobId: string, name: string): string => `${ROUTES.checks}${jobId}/${name}`;
 export const receiptPath = (jobId: string): string => `${ROUTES.receipt}${jobId}`;
+/** the receipt exactly as it was signed, for a program or a person checking the signature */
+export const RECEIPT_FILE = ".json";
+export const receiptFilePath = (jobId: string): string => `${ROUTES.receipt}${jobId}${RECEIPT_FILE}`;
 export const agentPath = (agent: string): string => `${ROUTES.agent}${agent}`;
 export const cardPath = (jobId: string): string => `${ROUTES.card}${jobId}.svg`;
 export const bundlePath = (jobId: string): string => `${ROUTES.bundle}${jobId}`;
@@ -90,6 +103,8 @@ export const refundPath = (jobId: string): string => `${ROUTES.refund}${jobId}`;
 export const refundApiPath = (jobId: string): string => `${ROUTES.refundApi}${jobId}`;
 /** the refund page for a job known only by its number on the contract: paid for, never published */
 export const refundByNumberPath = (onChainId: string): string => `${ROUTES.refund}?job=${onChainId}`;
+export const yoursApiPath = (address: string): string => `${ROUTES.yoursApi}${address.toLowerCase()}`;
+export const jobApiPath = (jobId: string): string => `${ROUTES.jobApi}${jobId}`;
 /** the GitHub account an agent's work is credited to, if it has one */
 export const creditPath = (agent: string): string => `${ROUTES.credit}/${agent.toLowerCase()}`;
 /** what an agent gives `git clone` for its job */

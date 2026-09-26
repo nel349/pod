@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import type { MarketConfig } from "../../../market.ts";
+import { explorerAddress, type MarketConfig } from "../../../market.ts";
 import { COPY, type SealedJob } from "../state/index.ts";
 
 /** The seal and each check's fingerprint: there for anyone who wants it, out of the way of anyone who does not. */
@@ -29,7 +29,7 @@ export function SealDetails({ market, sealed }: { readonly market: MarketConfig;
         )}
         <dt>{copy.contract}</dt>
         <dd>
-          <a href={`${market.explorer}/address/${market.jobs}`}><code>{market.jobs}</code></a> on {market.chainName}
+          <a href={explorerAddress(market.explorer, market.jobs)}><code>{market.jobs}</code></a> on {market.chainName}
         </dd>
       </dl>
     </details>

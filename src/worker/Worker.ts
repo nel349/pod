@@ -275,8 +275,8 @@ export class Worker {
         ...(fetchFrom.onGitHub ? { repository: fetchFrom.url } : record.repository ? { repository: record.repository } : {}),
         ...(record.podHolder ? { podHolder: record.podHolder } : {}),
       });
-      // what the chain already knows about the job stays with it: the grading does not know it
-      await store.save({ ...published, chain: record.chain });
+      // what the chain already knows about the job, and who paid for it, stay with it: the grading knows neither
+      await store.save({ ...published, chain: record.chain, ...(record.poster ? { poster: record.poster } : {}) });
       this.say(`${record.jobId}: ${report.signed.receipt.verdict}`);
     } finally {
       await rm(checks, { recursive: true, force: true });

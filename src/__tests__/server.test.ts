@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { handle } from "../server.ts";
 import { JobStore, type JobRecord } from "../store.ts";
-import { ROUTES, cardPath, checkFilePath, checksPath, jobPath, receiptPath } from "../routes.ts";
+import { ROUTES, cardPath, checkFilePath, checksPath, jobApiPath, jobPath, receiptFilePath, receiptPath, yoursApiPath } from "../routes.ts";
+import type { SignedReceipt } from "../receipt.ts";
+import { JobViewSchema } from "../web/site/index.ts";
 import type { Tile } from "../gallery.ts";
 
 const LEAD = "0x1111111111111111111111111111111111111111" as const;
@@ -56,12 +58,29 @@ async function storeWith(...records: readonly JobRecord[]): Promise<JobStore> {
 const get = (store: JobStore, path: string): Promise<Response> =>
   handle(new Request(`http://pod.test${path}`), store);
 
+/** asked for the way a browser asks: it wants a page */
+const open = (store: JobStore, path: string): Promise<Response> =>
+  handle(new Request(`http://pod.test${path}`, { headers: { accept: "text/html,application/xhtml+xml,*/*;q=0.8" } }), store);
+
+const signed: SignedReceipt = {
+  receipt: {
+    version: "pod.receipt.v1", seal: `0x${"ab".repeat(32)}`, commit: "c0ffee1234abcdef0123456789abcdef01234567",
+    repository: "https://github.com/proof-of-development/pod-a-weather-page", tree: `0x${"cd".repeat(32)}`,
+    image: "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944", start: "node server.js",
+    checks: [{ says: "the page answers", command: "node loads.mjs", exitCode: 0, seconds: 0.3, hidden: false }],
+    runs: 3, verdict: "passed", allowedHosts: [], undeclaredCalls: [], runner: "0x00000000000000000000000000000000000000cc",
+    finishedAt: "2026-09-17T10:00:00.000Z",
+  },
+  hash: `0x${"ef".repeat(32)}`,
+  signature: `0x${"12".repeat(65)}`,
+};
+
 describe("the wall", () => {
   test("an empty wall says it is empty rather than looking broken", async () => {
     const response = await get(await storeWith(), ROUTES.wall);
     const body = await response.text();
     expect(response.status).toBe(200);
-    expect(body).toContain("Nothing has been built yet");
+    expect(body).toContain("Nothing built yet");
     expect(body).not.toContain("<article");
   });
 
@@ -73,8 +92,8 @@ describe("the wall", () => {
     const body = await (await get(store, ROUTES.wall)).text();
     expect(body.indexOf(jobPath("newer"))).toBeLessThan(body.indexOf(jobPath("older")));
     expect(body).toContain("checks failed");
-    expect(body).toContain("1 paid");
-    expect(body).toContain("1 refused");
+    expect(body).toContain("<b>1</b> paid");
+    expect(body).toContain("<b>1</b> refused");
   });
 
   test("what is running is at the top, then what happened, newest first", async () => {
@@ -114,7 +133,7 @@ describe("one job, opened", () => {
   test("a job that has a repository links it, and says what is in it", async () => {
     const store = await storeWith(record({ repository: "https://github.com/kuiralabs/pod-a-weather-page" }));
     const body = await (await get(store, jobPath("a-weather-page"))).text();
-    expect(body).toContain("The work itself");
+    expect(body).toContain("Who owns it");
     expect(body).toContain("https://github.com/kuiralabs/pod-a-weather-page");
     expect(body).toContain("including the ones that failed");
   });
@@ -137,10 +156,9 @@ describe("one job, opened", () => {
     }));
 
     const body = await (await get(store, jobPath("a-weather-page"))).text();
-    expect(body).toContain("What is being asked for");
-    expect(body).toContain("from my postcode");
-    expect(body).toContain("2 checks are sealed until there is a verdict");
-    expect(body).toContain("security · open");
+    expect(body).toContain("What is asked");
+    expect(body).toContain("2 more checks are sealed until there is a verdict");
+    expect(body).toMatch(/seat-role">security<\/p>.*?>open</);
   });
 
   test("a graded job is described by its receipt, not by a brief", async () => {
@@ -153,15 +171,15 @@ describe("one job, opened", () => {
       },
     }));
     const body = await (await get(store, jobPath("a-weather-page"))).text();
-    expect(body).not.toContain("What is being asked for");
+    expect(body).toContain("What was asked");
+    expect(body).not.toContain("What is asked");
   });
 
   test("a job the runs disagreed on says what that means for the money", async () => {
     const store = await storeWith(record({ tile: tile({ verdict: "not-reproducible" }) }));
     const body = await (await get(store, jobPath("a-weather-page"))).text();
-    expect(body).toContain("The runs disagreed");
+    expect(body).toContain("did not give the same answer every time");
     expect(body).toContain("nothing was settled");
-    expect(body).toContain("when the job's window closes");
   });
 
   test("a job nobody posted is a 404 that names what was asked for", async () => {
@@ -220,7 +238,12 @@ describe("the server itself", () => {
     expect(page).toContain(`href="${ROUTES.style}"`);
     const css = await get(store, ROUTES.style);
     expect(css.headers.get("content-type")).toContain("text/css");
-    expect(await css.text()).toContain(".tile");
+    expect(await css.text()).toContain(".flyer");
+    // and the one look every page takes first
+    expect(page).toContain(`href="${ROUTES.brand}"`);
+    const brand = await get(store, ROUTES.brand);
+    expect(brand.headers.get("content-type")).toContain("text/css");
+    expect(await brand.text()).toContain(".site-header");
   });
 
   test("a job's card is an image, and the page points at it", async () => {
@@ -241,4 +264,54 @@ describe("the server itself", () => {
     const posted = await handle(new Request(`http://pod.test${ROUTES.wall}`, { method: "POST" }), store);
     expect(posted.status).toBe(405);
   });
+});
+
+describe("pages for people, files for programs", () => {
+  test("an address with nothing at it is a page for a browser and a line of text for a program", async () => {
+    const store = await storeWith(record());
+    const page = await open(store, jobPath("never-happened"));
+    expect(page.status).toBe(404);
+    expect(page.headers.get("content-type")).toContain("text/html");
+    expect(await page.text()).toContain("Back to the wall");
+    const text = await get(store, jobPath("never-happened"));
+    expect(text.headers.get("content-type")).toContain("text/plain");
+  });
+
+  test("a receipt is a page for a person, and the signed file for a program or whoever asks for it by name", async () => {
+    const store = await storeWith(record({ signed }));
+    const page = await open(store, receiptPath("a-weather-page"));
+    expect(page.headers.get("content-type")).toContain("text/html");
+    expect(await page.text()).toContain(signed.hash);
+    expect(await (await get(store, receiptPath("a-weather-page"))).json()).toEqual(signed);
+    const file = await open(store, receiptFilePath("a-weather-page"));
+    expect(file.headers.get("content-type")).toContain("application/json");
+    expect(await file.json()).toEqual(signed);
+  });
+
+  test("a job is data at its own address, in the shape its page follows it by", async () => {
+    const store = await storeWith(record({ tile: tile({ verdict: "running" }) }));
+    const answer = await get(store, jobApiPath("a-weather-page"));
+    expect(answer.status).toBe(200);
+    const job = JobViewSchema.parse(await answer.json());
+    expect(job.verdict).toBe("running");
+    // while it runs, the hidden check is not in it
+    expect(job.checks.map((check) => check.says)).toEqual(["the page answers"]);
+    expect((await get(store, jobApiPath("never-happened"))).status).toBe(404);
+  });
+
+  test("your own page is a page on any server; what is yours needs a server that answers to a chain", async () => {
+    const store = await storeWith(record());
+    const page = await open(store, ROUTES.yours);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("nothing of yours to find here");
+    expect((await get(store, yoursApiPath(LEAD))).status).toBe(404);
+  });
+
+  test("the script that brings the pages to life is built and served as a script", async () => {
+    const store = await storeWith(record());
+    const script = await get(store, ROUTES.siteScript);
+    expect(script.status).toBe(200);
+    expect(script.headers.get("content-type")).toContain("javascript");
+    expect((await script.text()).length).toBeGreaterThan(10_000);
+  }, 60_000);
 });

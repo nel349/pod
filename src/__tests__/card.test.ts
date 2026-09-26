@@ -37,15 +37,22 @@ describe("the card a shared job carries", () => {
     const svg = renderCard(tile());
     expect(svg.startsWith("<svg")).toBe(true);
     expect(svg).toContain("checks passed");
-    expect(svg).toContain("25.00 MON");
+    expect(svg).toContain("25 MON");
     expect(svg).toContain("2 seats");
     expect(svg).toContain("14 minutes");
+  });
+
+  test("a job still open never says anybody was paid", () => {
+    const svg = renderCard(tile({ verdict: "running", pod: [] }));
+    expect(svg).toContain("waiting for a pod");
+    expect(svg).toContain("Nobody is paid until");
+    expect(svg).not.toContain("was paid");
   });
 
   test("a failed job gets a card as readily as a passing one", () => {
     const svg = renderCard(tile({ verdict: "failed" }));
     expect(svg).toContain("checks failed");
-    expect(svg).toContain("#9a3412");
+    expect(svg).toContain("#ff2e88");
   });
 
   test("an idea with markup in it cannot draw anything", () => {

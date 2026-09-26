@@ -9,16 +9,20 @@ import type { MarketConfig } from "../../market.ts";
 import { ErrorBoundary } from "../post/components/index.ts";
 import { useMarket } from "../post/hooks/index.ts";
 import { walletConfig } from "../post/wallet/index.ts";
+import { SiteHeader, WalletStatus } from "../shared/index.ts";
 import { ClaimBill } from "./components/index.ts";
 import { ClaimPage } from "./ClaimPage.tsx";
 import { COPY, jobIdFrom } from "./state/index.ts";
 
 function Notice({ children }: { readonly children: string }): ReactElement {
   return (
-    <div className="poster">
-      <ClaimBill />
-      <main className="sheets"><section className="sheet notice"><p>{children}</p></section></main>
-    </div>
+    <>
+      <SiteHeader />
+      <div className="poster">
+        <ClaimBill />
+        <main className="sheets"><section className="sheet notice"><p>{children}</p></section></main>
+      </div>
+    </>
   );
 }
 
@@ -26,6 +30,7 @@ function OnTheChain({ market }: { readonly market: MarketConfig }): ReactElement
   const config = useMemo(() => walletConfig(market), [market]);
   return (
     <WagmiProvider config={config}>
+      <SiteHeader wallet={<WalletStatus market={market} />} />
       <ClaimPage jobId={jobIdFrom(window.location.pathname)} market={market} />
     </WagmiProvider>
   );

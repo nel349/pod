@@ -31,7 +31,8 @@ export function paymentWords(input: {
   const mode = payment ? payment.sealed.spec.mode : input.mode;
   const amount = `${formatEther(price)} ${input.coin}`;
 
-  let button: string = input.hasWallet ? COPY.pay.payAndPost(amount) : COPY.pay.connect;
+  // connecting is the header's: this button pays, and says so whether or not a wallet is there yet
+  let button: string = COPY.pay.payAndPost(amount);
   if (payment) button = COPY.pay.finish;
   if (input.status.kind === "posted") button = COPY.pay.posted;
 

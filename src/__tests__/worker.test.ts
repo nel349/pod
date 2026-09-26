@@ -152,7 +152,8 @@ async function aJob(jobId: string, work: string, approving: readonly Role[], sha
   const seal = await sealSpec(SPEC);
   const onChainId = await post(contractAs(POSTER), { seal, endsAt: now + 3600n, reviewers: 1, price: PRICE });
   const opened = await openJob(store, { jobId, seal, spec: SPEC, endsAt: new Date(Number(now + 3600n) * 1000), seats: [] });
-  await store.save({ ...opened, chain: { network: "monad-testnet", jobId: String(onChainId), jobs } }, {
+  // saved as the posting page leaves it: with the job on the chain, and who paid for it
+  await store.save({ ...opened, chain: { network: "monad-testnet", jobId: String(onChainId), jobs }, poster: POSTER_ADDRESS }, {
     "check-1.mjs": good(0).check, "check-2.mjs": good(1).check,
   });
   await store.saveSpec(jobId, SPEC);
@@ -254,6 +255,8 @@ describe.skipIf(!available)("the worker", () => {
     expect(passed.tile.verdict).toBe("passed");
     expect(passed.signed?.receipt.commit).toBe(passing.commit);
     expect(passed.chain?.settled).toMatch(/^0x[0-9a-f]{64}$/);
+    // grading rewrites the record, and who paid for it survives that
+    expect(passed.poster).toBe(POSTER_ADDRESS);
     // each approval with the time the contract recorded, found across more blocks than one reading covers
     expect(passed.approvals.map((approval) => approval.role).sort()).toEqual([...SEATS].sort());
     for (const approval of passed.approvals) expect(approval.at).toMatch(/^\d{4}-\d\d-\d\dT/);

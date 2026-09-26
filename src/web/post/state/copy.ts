@@ -32,6 +32,10 @@ export const COPY = {
   closed: "Posting is not open on this server: it has no contract to post to.",
   broken: (why: string) => `This page stopped working: ${why.replace(/\.$/, "")}. Nothing has been sent. Reload the page to start again.`,
   loading: "Opening the market…",
+  draftBack: {
+    says: "Your draft is back as you left it, with any checks already written for it.",
+    startAgain: "Start again",
+  },
 
   idea: {
     title: "What do you want built?",
@@ -115,7 +119,6 @@ export const COPY = {
     title: "Pay and post",
     plain: (price: string, window: string) =>
       `You pay ${price} into the contract, and the builders have ${window}. If every check passes, they are paid and you get a POD: title to the repository the work is in. If any check fails, the ${price} comes back to you. If nobody finishes in time, you can take it back from the contract once the time is up.`,
-    connect: "Connect a wallet",
     payAndPost: (price: string) => `Pay ${price} and post`,
     finish: "Sign and publish",
     posted: "Posted",

@@ -125,6 +125,8 @@ describe.skipIf(!available)("a stranger posts a job", () => {
     const record = await store.read("a-coat");
     expect(record?.tile.verdict).toBe("running");
     expect(record?.brief?.sealedChecks).toBe(1);
+    // who paid is kept with it, as the chain said, so a page can say "your job" without asking again
+    expect(record?.poster).toBe(privateKeyToAccount(POSTER).address);
     // the hidden check is held, not published, while the job is open
     expect(await store.checkFile("a-coat", "cold.mjs")).toBeUndefined();
     // and the spec it was sealed under is kept, which is what grading it later will need

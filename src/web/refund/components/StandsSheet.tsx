@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { explorerAddress } from "../../../market.ts";
 import { Sheet } from "../../shared/index.ts";
 import { COPY, type OnChainNow, type Refundable, type Standing } from "../state/index.ts";
 
@@ -12,10 +13,10 @@ export function StandsSheet({ job, onChain, standing, coin, explorer }: {
 }): ReactElement {
   return (
     <Sheet number={1} id="stands" title={COPY.stands.title}>
-      <p className="claim-idea">{job.idea}</p>
-      <dl className="claim-facts">
+      <p className="lede">{job.idea}</p>
+      <dl className="facts">
         <dt>{COPY.stands.amount(onChain.price, coin)}</dt>
-        <dd>{COPY.stands.posted} <a href={`${explorer}/address/${onChain.poster}`}><code>{onChain.poster}</code></a></dd>
+        <dd>{COPY.stands.posted} <a href={explorerAddress(explorer, onChain.poster)}><code>{onChain.poster}</code></a></dd>
       </dl>
       <p id="standing" className="refund-standing" data-standing={standing.kind}>{COPY.stands.said(standing)}</p>
     </Sheet>

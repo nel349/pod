@@ -113,7 +113,7 @@ describe.skipIf(!available)("the wall, driven the way a person drives it", () =>
     await browser.open(base + ROUTES.wall);
 
     // a point inside the tile but away from its heading: where a person actually aims
-    const spot = await browser.cornerOf("article.tile");
+    const spot = await browser.cornerOf("article.flyer");
     await browser.clickAt(spot.x, spot.y);
     await Bun.sleep(300);
     expect(await browser.where()).toContain(ROUTES.job);
@@ -141,9 +141,9 @@ describe.skipIf(!available)("the wall, driven the way a person drives it", () =>
   test("a job still open shows its brief and will not hand over its checks", async () => {
     await browser.open(base + jobPath("one-still-open"));
     const text = (await browser.text()).toLowerCase();
-    expect(text).toContain("what is being asked for");
-    expect(text).toContain("2 checks are sealed");
-    expect(text).toContain("security · open");
+    expect(text).toContain("what is asked");
+    expect(text).toContain("2 more checks are sealed");
+    expect(await browser.evaluate<string>(`[...document.querySelectorAll("#pod li.open .seat-role")].map((seat) => seat.textContent).join(",")`)).toContain("security");
 
     await browser.open(base + checksPath("one-still-open"));
     expect(await browser.text()).toContain("published when it has a verdict");
@@ -210,9 +210,8 @@ describe.skipIf(!available)("the wall, driven the way a person drives it", () =>
   test("a job whose runs disagreed says what that means for the money", async () => {
     await browser.open(base + jobPath("one-nobody-could-repeat"));
     const text = (await browser.text()).toLowerCase();
-    expect(text).toContain("the runs disagreed");
+    expect(text).toContain("did not give the same answer every time");
     expect(text).toContain("nothing was settled");
-    expect(text).toContain("window closes");
   }, 60_000);
 
   test("a job still open does not offer checks it is going to refuse", async () => {

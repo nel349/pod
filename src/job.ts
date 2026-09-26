@@ -118,6 +118,9 @@ export interface Spec {
 /** The shares each seat is paid, as percentages that must add up to one hundred. */
 export const SHARES: Record<Role, number> = { lead: 20, builder: 40, reviewer: 15, qa: 15, security: 10 };
 
+/** The seats whose approval the contract waits for. The builder's work is what they approve, so it approves nothing itself. */
+export const APPROVING_SEATS: readonly Role[] = ["lead", "reviewer", "qa", "security"];
+
 export function shareOf(price: bigint, role: Role): bigint {
   return (price * BigInt(SHARES[role])) / 100n;
 }

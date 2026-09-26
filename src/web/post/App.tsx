@@ -13,15 +13,19 @@ import { Bill, ErrorBoundary } from "./components/index.ts";
 import { useMarket } from "./hooks/index.ts";
 import { PostJobPage } from "./PostJobPage.tsx";
 import { COPY } from "./state/index.ts";
+import { SiteHeader, WalletStatus } from "../shared/index.ts";
 import { walletConfig } from "./wallet/index.ts";
 
 /** The poster, with one sheet saying why there is no form: still loading, or nowhere to post. */
 function Notice({ children }: { readonly children: string }): ReactElement {
   return (
-    <div className="poster">
-      <Bill />
-      <main className="sheets"><section className="sheet notice"><p>{children}</p></section></main>
-    </div>
+    <>
+      <SiteHeader current="post" />
+      <div className="poster">
+        <Bill />
+        <main className="sheets"><section className="sheet notice"><p>{children}</p></section></main>
+      </div>
+    </>
   );
 }
 
@@ -30,6 +34,7 @@ function OpenMarket({ market }: { readonly market: MarketConfig }): ReactElement
   const config = useMemo(() => walletConfig(market), [market]);
   return (
     <WagmiProvider config={config}>
+      <SiteHeader current="post" wallet={<WalletStatus market={market} />} />
       <PostJobPage market={market} />
     </WagmiProvider>
   );

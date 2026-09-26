@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { isAddressEqual, type Address } from "viem";
+import { explorerTransaction } from "../../../market.ts";
 import { Sheet } from "../../shared/index.ts";
 import { COPY, REFUND_STEPS, stepStates, type OnChainNow, type RefundStatus, type Standing } from "../state/index.ts";
 
@@ -30,7 +31,7 @@ export function TakeSheet({ onChain, standing, coin, explorer, hasWallet, connec
       <p id="said" className={status.kind === "sent" ? "said-status done" : "said-status"} role="status">
         {!hasWallet && COPY.noWallet}
         {status.kind === "stopped" && status.why}
-        {status.kind === "sent" && <>{COPY.take.done(onChain.price, coin)} <a href={`${explorer}/tx/${status.hash}`}>{COPY.take.transaction}</a>.</>}
+        {status.kind === "sent" && <>{COPY.take.done(onChain.price, coin)} <a href={explorerTransaction(explorer, status.hash)}>{COPY.take.transaction}</a>.</>}
       </p>
       {status.kind !== "idle" && (
         <ol id="progress" className="progress" aria-live="polite">

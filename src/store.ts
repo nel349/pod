@@ -75,6 +75,8 @@ export interface JobRecord {
   /** where this job is on the chain, once it has been settled there */
   readonly chain?: OnChain;
   readonly signed?: SignedReceipt;
+  /** who paid for it, as the chain said when it was posted. Older jobs are asked of the chain instead */
+  readonly poster?: Address;
   /** where the job's repository is published for anybody to fetch */
   readonly repository?: string;
   /** the published repository opens on the work that passed, which is where GitHub counts it */

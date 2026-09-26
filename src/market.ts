@@ -35,3 +35,9 @@ export const AnswerSchema = z.object({ url: z.string().optional(), why: z.string
 
 /** Whether a job by some name already exists, which the page asks before anybody pays for the name. */
 export const NameTakenSchema = z.object({ taken: z.boolean() });
+
+/** Where a block explorer shows an address and a transaction, after its own address. */
+export const EXPLORER_PATHS = { address: "/address/", transaction: "/tx/" } as const;
+
+export const explorerAddress = (explorer: string, address: string): string => `${explorer}${EXPLORER_PATHS.address}${address}`;
+export const explorerTransaction = (explorer: string, hash: string): string => `${explorer}${EXPLORER_PATHS.transaction}${hash}`;

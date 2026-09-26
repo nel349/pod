@@ -28,6 +28,8 @@ interface Run {
 
 export interface CheckWritingState {
   readonly start: (request: WriteRequest) => void;
+  /** forget the checks written so far, as when the poster starts again */
+  readonly reset: () => void;
   /** what is happening now, while it happens */
   readonly stage: Stage | undefined;
   readonly startedAt: number | undefined;
@@ -54,10 +56,11 @@ async function howItIsGoing(run: Run | undefined): Promise<Writing> {
   return readAnswer(response, WritingSchema);
 }
 
-export function useCheckWriting(): CheckWritingState {
+/** @param restored checks written before the poster left the page, kept in their draft */
+export function useCheckWriting(restored?: WrittenFor): CheckWritingState {
   const [run, setRun] = useState<Run>();
   const [startedAt, setStartedAt] = useState<number>();
-  const [written, setWritten] = useState<WrittenFor>();
+  const [written, setWritten] = useState<WrittenFor | undefined>(restored);
   const [lastSeen, setLastSeen] = useState<Writing>();
 
   const starting = useMutation({
@@ -94,6 +97,7 @@ export function useCheckWriting(): CheckWritingState {
 
   return {
     start: (request) => { setRun(undefined); setStartedAt(Date.now()); starting.mutate(request); },
+    reset: () => { setRun(undefined); setStartedAt(undefined); setWritten(undefined); starting.reset(); },
     stage: !isBusy ? undefined : isStillWriting(writing) ? writing.stage : "writing",
     startedAt: isBusy ? startedAt : undefined,
     written,

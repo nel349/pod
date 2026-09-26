@@ -1,5 +1,6 @@
 /** Everything the posting page does that is not drawing: talking to the server, the wallet and the clock. */
 export * from "./queryKeys.ts";
+export * from "./draftStore.ts";
 export * from "./keptPaymentStore.ts";
 export * from "./readAnswer.ts";
 export * from "./useCheckWriting.ts";
@@ -14,3 +15,4 @@ export * from "./usePostJob.ts";
 export * from "./useSealedJob.ts";
 export * from "./useWalletPresent.ts";
 export * from "./useWriteTheChecks.ts";
+export * from "./useKeptDraft.ts";

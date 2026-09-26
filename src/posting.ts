@@ -146,6 +146,7 @@ export async function acceptPosting(store: JobStore, chain: ChainReader, asked: 
   const record: JobRecord = {
     ...opened,
     chain: { network: "monad-testnet", jobId: posting.onChainId, jobs: chain.jobs },
+    poster: onChain.poster,
   };
   // the check files go in with the record, and the spec beside them: while the job is open the store
   // serves only the visible checks, and the spec is what says which those are

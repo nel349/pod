@@ -8,6 +8,7 @@
  * Every assertion is something that would embarrass us if it were false on the day.
  */
 import { cardPath, checksPath, jobPath, receiptPath, ROUTES } from "./routes.ts";
+import { SITE } from "./web/site/copy.ts";
 
 export interface Finding {
   readonly what: string;
@@ -57,13 +58,15 @@ export async function audit(base: string, get: typeof globalThis.fetch = globalT
     }
   }
 
-  const style = await look(ROUTES.style, "the stylesheet the pages ask for exists");
-  if (style?.ok && !(style.headers.get("content-type") ?? "").includes("text/css")) {
-    findings.push({ what: "the stylesheet is css", where: ROUTES.style, detail: "it was served as something else" });
+  for (const sheet of [ROUTES.brand, ROUTES.style]) {
+    const style = await look(sheet, "the stylesheet the pages ask for exists");
+    if (style?.ok && !(style.headers.get("content-type") ?? "").includes("text/css")) {
+      findings.push({ what: "the stylesheet is css", where: sheet, detail: "it was served as something else" });
+    }
   }
 
   const jobs = jobsOn(html);
-  if (jobs.length === 0 && !html.includes("Nothing has been built yet")) {
+  if (jobs.length === 0 && !html.includes(SITE.wall.emptyTitle)) {
     findings.push({ what: "the wall shows jobs, or says it has none", where: ROUTES.wall, detail: "neither a tile nor the empty message" });
   }
 

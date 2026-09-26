@@ -4,7 +4,7 @@ import { refusalOf } from "../checkwriting/request.ts";
 import { PostingSchema } from "../posting.ts";
 import type { TriedCheck, Written } from "../checkwriting/written.ts";
 import {
-  asSentence, canPress, COPY, cutTheSeal, formOfPaidJob, isFresh, keepPayment, keptPaymentKey, readKeptPayment, nextPosting, paymentWords, PostFormSchema, priceInWei, progressOf, requestKey, sealJob,
+  asSentence, canPress, COPY, cutTheSeal, draftKey, formOfPaidJob, isWorthKeeping, keepDraft, readDraft, isFresh, keepPayment, keptPaymentKey, readKeptPayment, nextPosting, paymentWords, PostFormSchema, priceInWei, progressOf, requestKey, sealJob,
   stepId, stepNumber, STEPS, toWriteRequest, trialsOf, verdictOn, whatIsMissing, windowInWords, writingLine,
   type PostForm, type WrittenFor,
 } from "../web/post/state/index.ts";
@@ -160,9 +160,10 @@ describe("the words the page uses", () => {
     expect(windowInWords("flash")).toBe("two hours");
   });
 
-  test("the pay button offers to connect with no wallet, to pay with one, and says so once posted", () => {
+  test("the pay button pays, with a wallet in the browser or not, and says so once posted", () => {
     const base = { price: 100_000_000_000_000_000n, coin: "MON", mode: "sprint" as const, payment: undefined };
-    expect(paymentWords({ ...base, status: { kind: "idle" }, hasWallet: false }).button).toBe(COPY.pay.connect);
+    // the button pays; connecting is the header's, so it never promises to connect and then checks the form instead
+    expect(paymentWords({ ...base, status: { kind: "idle" }, hasWallet: false }).button).toBe(COPY.pay.payAndPost("0.1 MON"));
     expect(paymentWords({ ...base, status: { kind: "idle" }, hasWallet: true }).button).toBe(COPY.pay.payAndPost("0.1 MON"));
     expect(paymentWords({ ...base, status: { kind: "posted", url: "/job/x" }, hasWallet: true }).button).toBe(COPY.pay.posted);
     expect(paymentWords({ ...base, status: { kind: "idle" }, hasWallet: true }).terms).toBe(COPY.pay.plain("0.1 MON", "a day"));
@@ -285,5 +286,43 @@ describe("which job the refund page is about", () => {
     expect(targetFrom("/refund/a-coat", "")).toEqual({ by: "name", jobId: "a-coat" });
     expect(targetFrom("/refund/", "?job=12")).toEqual({ by: "number", onChainId: "12" });
     expect(targetFrom("/refund/a-coat", "?job=not-a-number")).toEqual({ by: "name", jobId: "a-coat" });
+  });
+});
+
+describe("a draft kept in the browser until it is paid for or thrown away", () => {
+  const written: WrittenFor = {
+    key: "the request", writtenAt: 1_790_000_000_000,
+    checks: [triedCheck(WET, false, "check-1.mjs"), triedCheck(DRY, true, "check-2.mjs")],
+    howItIsAsked: { plainly: "it asks for the weather by a query", exactly: "?raining=yes" },
+  };
+
+  test("comes back as it was left, the checks written for it included", () => {
+    const form = { idea: COAT_IDEA, kind: "service" as const, brief: [{ says: WET }], exam: [{ says: DRY }], price: "0.2", mode: "flash" as const, name: "a-coat" };
+    expect(readDraft(keepDraft({ form, written }))).toEqual({ form, written });
+  });
+
+  test("a kind nobody has chosen yet, which the form keeps as nothing, comes back unchosen rather than refusing the draft", () => {
+    const kept = JSON.stringify({ version: 1, form: { idea: COAT_IDEA, kind: null, brief: [{ says: "" }] } });
+    expect(readDraft(kept)).toEqual({ form: { idea: COAT_IDEA, brief: [{ says: "" }] } });
+  });
+
+  test("whatever cannot be read is ignored, and the page starts blank", () => {
+    for (const text of [null, "", "not json", "{}", JSON.stringify({ version: 2, form: {} }), JSON.stringify({ version: 1, form: { kind: "a spaceship" } })]) {
+      expect(readDraft(text)).toBeUndefined();
+    }
+  });
+
+  test("a form with nothing said in it is not worth keeping; a word, a line or written checks are", () => {
+    expect(isWorthKeeping({ form: { idea: " ", brief: [{ says: "" }], exam: [{ says: "" }] } })).toBe(false);
+    expect(isWorthKeeping({ form: { idea: "a coat" } })).toBe(true);
+    expect(isWorthKeeping({ form: { exam: [{ says: DRY }] } })).toBe(true);
+    expect(isWorthKeeping({ form: {}, written })).toBe(true);
+  });
+
+  test("kept per chain and contract, whatever the address's case, and apart from a kept payment", () => {
+    const one = draftKey(10143, "0xBAD56C4b830c8B4Aa71A6880D870049270f2A2F2");
+    expect(one).toBe(draftKey(10143, "0xbad56c4b830c8b4aa71a6880d870049270f2a2f2"));
+    expect(one).not.toBe(draftKey(31337, "0xBAD56C4b830c8B4Aa71A6880D870049270f2A2F2"));
+    expect(one).not.toBe(keptPaymentKey(10143, "0xBAD56C4b830c8B4Aa71A6880D870049270f2A2F2"));
   });
 });

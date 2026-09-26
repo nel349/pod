@@ -42,13 +42,20 @@ export interface SealOptions {
   readonly outer: number;
 }
 
+/** One piece of the seal: the seat it stands for, whether it is taken, and its outline. */
+export interface SealPiece {
+  readonly role: (typeof SEATS)[number];
+  readonly isTaken: boolean;
+  /** the SVG path of the wedge, in a 100 by 100 box */
+  readonly d: string;
+}
+
 /**
- * The seal for one job.
+ * The seal for one job, as pieces for a page to draw.
  *
- * `held` is which seats are filled, in the ring's order. A seat nobody has taken is drawn as an
- * outline, so an open job looks unfinished because it is.
+ * A seat nobody has taken is drawn as an outline, so an open job looks unfinished because it is.
  */
-export function renderSeal(tile: Pick<Tile, "verdict" | "pod">, options: Partial<SealOptions> = {}): string {
+export function sealPieces(tile: { readonly verdict: Tile["verdict"]; readonly pod: readonly { readonly role: string }[] }, options: Partial<SealOptions> = {}): readonly SealPiece[] {
   const gap = options.gap ?? (tile.verdict === "failed" ? 0.16 : 0.055);
   const inner = options.inner ?? 26;
   const outer = options.outer ?? 44;
@@ -56,14 +63,10 @@ export function renderSeal(tile: Pick<Tile, "verdict" | "pod">, options: Partial
   const held = new Set(tile.pod.map((seat) => seat.role));
   const slice = TURN / SEATS.length;
 
-  const pieces = SEATS.map((role, index) => {
+  return SEATS.map((role, index) => {
     // start at the top, and run clockwise, so the lead's piece is where an eye lands first
     const from = index * slice - TURN / 4 + gap / 2;
     const to = from + slice - gap;
-    const taken = held.has(role);
-    return `<path class="piece ${taken ? "held" : "free"} piece-${index}" d="${wedge(from, to, inner, outer)}">`
-      + `<title>${role}${taken ? "" : ", open"}</title></path>`;
-  }).join("");
-
-  return `<svg class="seal ${tile.verdict}" viewBox="0 0 100 100" aria-hidden="true" focusable="false">${pieces}</svg>`;
+    return { role, isTaken: held.has(role), d: wedge(from, to, inner, outer) };
+  });
 }
