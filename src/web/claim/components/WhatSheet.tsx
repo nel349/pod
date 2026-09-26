@@ -1,0 +1,19 @@
+import type { ReactElement } from "react";
+import { COPY, shortRepository, type Claimable } from "../state/index.ts";
+import { Sheet } from "./Sheet.tsx";
+
+/** The title, the repository it is title to, and who holds it now. */
+export function WhatSheet({ claimable, explorer }: { readonly claimable: Claimable; readonly explorer: string }): ReactElement {
+  return (
+    <Sheet number={1} id="what" title={COPY.what.title}>
+      <p className="claim-idea">{claimable.idea}</p>
+      <dl className="claim-facts">
+        <dt>{COPY.what.pod(claimable.tokenId)}</dt>
+        <dd>{COPY.what.repository}: <a href={claimable.repository}>{shortRepository(claimable.repository)}</a></dd>
+        <dt>{COPY.what.holder}</dt>
+        <dd><a href={`${explorer}/address/${claimable.holder}`}><code>{claimable.holder}</code></a></dd>
+      </dl>
+      <p className="guide">{COPY.what.sold}</p>
+    </Sheet>
+  );
+}

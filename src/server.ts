@@ -18,6 +18,7 @@ import { NO_STORE } from "./headers.ts";
 import { CREDIT_FOLDER, JOBS_FOLDER_SETTING, PROVEN_FOLDER, REPOSITORIES_FOLDER } from "./folders.ts";
 import { Claims } from "./claims.ts";
 import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard } from "./door/index.ts";
+import claimPage from "./web/claim/index.html";
 import postPage from "./web/post/index.html";
 import { renderCard } from "./card.ts";
 import { renderJob } from "./jobpage.ts";
@@ -298,7 +299,7 @@ export function serve(store: JobStore, port: number, services: Services = {}): R
   return Bun.serve({
     port,
     development: process.env.NODE_ENV === "production" ? false : { hmr: true, console: true },
-    routes: { [ROUTES.post]: postPage },
+    routes: { [ROUTES.post]: postPage, [`${ROUTES.claim}*`]: claimPage },
     fetch: (request) => handle(request, store, services),
   });
 }

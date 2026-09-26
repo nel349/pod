@@ -9,7 +9,7 @@ import type { Brief, CheckSaid, OnChain } from "./store.ts";
 import { verdictWords as verdictWordsFor } from "./gallery.ts";
 import type { Tile } from "./gallery.ts";
 import type { Receipt } from "./receipt.ts";
-import { cardPath, ROUTES } from "./routes.ts";
+import { cardPath, claimPath, ROUTES } from "./routes.ts";
 import { renderSeal } from "./seal.ts";
 
 export interface Approval {
@@ -105,7 +105,8 @@ taken back. It returns to the person who posted the job when the job's window cl
     ? `<h2>Who owns it</h2>
 <p class="owns">POD #${escape(page.chain.tokenId)} is the title to this repository. Whoever holds it
 can claim the repository by signing for it with the wallet that owns the token. A sale carries both.
-${page.podHolder ? `It is held by <code>${escape(page.podHolder)}</code>.` : ""}</p>`
+${page.podHolder ? `It is held by <code>${escape(page.podHolder)}</code>.` : ""}</p>
+${page.repository ? `<p class="owns"><a href="${escape(claimPath(page.tile.jobId))}">Claim the repository</a>, if you hold the title.</p>` : ""}`
     : page.tile.verdict === "passed"
       ? `<h2>Who owns it</h2><p class="owns">No title was minted for this job, so nobody can claim the repository yet.</p>`
       : "";

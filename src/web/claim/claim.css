@@ -1,0 +1,9 @@
+/*
+ * The claim page: the posting page's poster and sheets (post.css), and the few things only a claim has.
+ */
+.claim-idea { margin: 0 0 18px; max-width: 40ch; font: 600 clamp(20px, 2vw, 24px)/1.35 var(--read); }
+.claim-facts { display: grid; grid-template-columns: max-content 1fr; gap: 10px 18px; margin: 0 0 18px; align-items: baseline; }
+.claim-facts dt { font: 900 22px/1 var(--shout); text-transform: uppercase; }
+.claim-facts dd { margin: 0; font: 400 15px/1.4 var(--type); }
+.claim-facts a { color: var(--ink); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.claim-facts code { font: 400 14px/1.4 var(--code); overflow-wrap: anywhere; }

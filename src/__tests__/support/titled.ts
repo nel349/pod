@@ -32,6 +32,8 @@ export const TITLED_SPEC: Spec = {
 
 export interface Titled {
   readonly store: JobStore;
+  /** the jobs contract the job was posted on */
+  readonly jobs: Address;
   readonly token: Address;
   readonly tokenId: bigint;
 }
@@ -62,5 +64,5 @@ export async function aTitledJob(anvil: Anvil, input: { readonly jobId: string; 
   const store = new JobStore(await mkdtemp(join(tmpdir(), "pod-titled-")));
   const opened = await openJob(store, { jobId: input.jobId, seal, spec: TITLED_SPEC, endsAt: new Date(Number(now + 3600n) * 1000), seats: [] });
   await store.save({ ...opened, repository: input.repository, chain: { network: "monad-testnet", jobId: String(onChainId), jobs, tokenId: tokenId.toString() } });
-  return { store, token, tokenId };
+  return { store, jobs, token, tokenId };
 }
