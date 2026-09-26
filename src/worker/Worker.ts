@@ -26,7 +26,7 @@ import { pause } from "../pause.ts";
 import { gradeCommit } from "../pipeline.ts";
 import { publish } from "../publish.ts";
 import { publishJob } from "../github.ts";
-import { BRANCH, bytes32ToCommit, commitToBytes32, has, onBranch, openRepository, putOnMain, shortCommit } from "../repo.ts";
+import { BRANCH, bytes32ToCommit, commitToBytes32, existingRepository, has, onBranch, openRepository, putOnMain, shortCommit } from "../repo.ts";
 import { moneyMove } from "../runner.ts";
 import { jobPath } from "../routes.ts";
 import { SEATS } from "../seal.ts";
@@ -305,7 +305,15 @@ export class Worker {
   private async titleAndMain(record: JobRecord, signed: SignedReceipt, onChainId: bigint): Promise<void> {
     const { token, jobs } = this.options;
     const commit = signed.receipt.commit;
-    await putOnMain(await openRepository(this.options.repositories, record.jobId), commit);
+    // a job graded before this server kept its repositories has its work somewhere else: it is said
+    // once and left alone, rather than tried again on every look against an empty repository
+    const repo = await existingRepository(this.options.repositories, record.jobId);
+    if (!repo || !(await has(repo, commit))) {
+      const why = `the work that passed, ${shortCommit(commit)}, is not in this server's copy of the job's repository, so it is neither put on main nor published from here`;
+      if (record.waitingBecause !== why) await this.options.store.save({ ...record, waitingBecause: why });
+      return;
+    }
+    await putOnMain(repo, commit);
     if (token && record.chain?.tokenId === undefined) {
       const minted = await this.onTheChain(async () => {
         if ((await tokenOfJob(token, onChainId)) !== 0n) return undefined;

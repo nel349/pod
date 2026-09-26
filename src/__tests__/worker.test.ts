@@ -10,6 +10,7 @@ import { approve, MOST_BLOCKS_A_LOG_READ_COVERS, post, readJob, takeSeat } from 
 import { openJob } from "../publish.ts";
 import { commitToBytes32, commitWork, head, openRepository } from "../repo.ts";
 import { record, registerAgent, requestValidation, verdictOnChain, type Registries } from "../registry.ts";
+import { signReceipt } from "../receipt.ts";
 import { receiptPath } from "../routes.ts";
 import { IMAGE } from "../sandbox.ts";
 import { SEATS } from "../seal.ts";
@@ -20,6 +21,7 @@ import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/an
 import { COAT_IDEA, DRY, good, serverSaying, WET, WORKING } from "./support/coat.ts";
 import { aPod, anAgent, type Agent } from "./support/podServer.ts";
 import { deployRegistries } from "./support/registries.ts";
+import { aTitledJob } from "./support/titled.ts";
 import { dockerAvailable } from "./support/tools.ts";
 
 /**
@@ -411,6 +413,37 @@ describe.skipIf(!available)("the worker", () => {
       else process.env.POD_GITHUB_TOKEN = was;
     }
   }, 240_000);
+
+  test("a job graded before this server kept its repositories is said once and left alone, not tried on every look", async () => {
+    // paid and titled on the chain, with the grader's signed receipt, and the work somewhere else
+    const commit = "d0".repeat(20);
+    const titled = await aTitledJob(anvil, { jobId: "a-coat-graded-elsewhere", commit, repository: "https://github.com/somebody/elsewhere" });
+    const opened = await titled.store.read("a-coat-graded-elsewhere");
+    if (!opened) throw new Error("the job was not kept");
+    const signed = await signReceipt({
+      version: "pod.receipt.v1", seal: opened.seal as Hex, commit, repository: "https://github.com/somebody/elsewhere",
+      tree: `0x${"00".repeat(32)}`, image: IMAGE, start: "node server.js", checks: [], runs: 2, verdict: "passed",
+      allowedHosts: [], undeclaredCalls: [], runner: privateKeyToAccount(VALIDATOR).address, finishedAt: new Date().toISOString(),
+    }, VALIDATOR);
+    await titled.store.save({ ...opened, signed, tile: { ...opened.tile, verdict: "passed" } });
+
+    const elsewhere = await mkdtemp(join(tmpdir(), "pod-worker-elsewhere-"));
+    const said: string[] = [];
+    const worker = new Worker({
+      store: titled.store, repositories: elsewhere, image: IMAGE, runnerKey: VALIDATOR, times: 2,
+      jobs: { address: titled.jobs, publicClient: anvil.publicClient, wallet: anvil.wallet(VALIDATOR) },
+      token: { address: titled.token, publicClient: anvil.publicClient, wallet: anvil.wallet(VALIDATOR) },
+      say: (what) => said.push(what),
+    });
+    for (let look = 0; look < 3; look++) {
+      await worker.tick();
+      await worker.whenIdle();
+    }
+    // nothing failed, no repository was made for it, and why it was left is on its record
+    expect(said.filter((line) => line.startsWith("[worker] a-coat-graded-elsewhere:"))).toEqual([]);
+    expect(await Bun.file(join(elsewhere, "a-coat-graded-elsewhere.git", "HEAD")).exists()).toBe(false);
+    expect((await titled.store.read("a-coat-graded-elsewhere"))?.waitingBecause).toContain("is not in this server's copy of the job's repository");
+  }, 120_000);
 
   test("a pod that has not met the policy is not graded", async () => {
     const early = await aJob("a-coat-not-yet-agreed", WORKING, ["lead", "builder", "reviewer", "qa"]);

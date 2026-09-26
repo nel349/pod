@@ -66,6 +66,12 @@ export async function openRepository(root: string, jobId: string): Promise<Repos
   return { path, jobId };
 }
 
+/** A job's repository if this server has one, without making one: for reading what is already there. */
+export async function existingRepository(root: string, jobId: string): Promise<Repository | undefined> {
+  const path = join(root, `${jobId}.git`);
+  return (await Bun.file(join(path, "HEAD")).exists()) ? { path, jobId } : undefined;
+}
+
 export interface Work {
   /** a directory holding what the agent left behind. Its contents become the commit */
   readonly workspace: string;
