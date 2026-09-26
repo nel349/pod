@@ -14,6 +14,7 @@ import type { MarketConfig } from "./market.ts";
 import { isAddress } from "viem";
 import { bodyWithin, tooLarge } from "./body.ts";
 import { NO_STORE } from "./headers.ts";
+import { firstLine } from "./errors.ts";
 import { CREDIT_FOLDER, JOBS_FOLDER_SETTING, PROVEN_FOLDER, REPOSITORIES_FOLDER } from "./folders.ts";
 import { Claims } from "./claims.ts";
 import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard } from "./door/index.ts";
@@ -159,7 +160,15 @@ export async function handle(request: Request, store: JobStore, { market, door, 
 
   if (pathname === ROUTES.style) return new Response(await Bun.file(style).text(), { headers: CSS });
   if (pathname === ROUTES.brand) return new Response(await Bun.file(brand).text(), { headers: CSS });
-  if (pathname === ROUTES.siteScript) return new Response(await siteScript(IS_PRODUCTION), { headers: JAVASCRIPT });
+  if (pathname === ROUTES.siteScript) {
+    try {
+      return new Response(await siteScript(IS_PRODUCTION), { headers: JAVASCRIPT });
+    } catch (error) {
+      // the pages still read without it, drawn by the server; whoever runs this is told why
+      console.error(`the site script could not be built: ${firstLine(error)}`);
+      return new Response(`the script for these pages could not be built: ${firstLine(error)}\n`, { status: 500, headers: TEXT });
+    }
+  }
 
   if (pathname === ROUTES.guide) {
     return new Response(await Bun.file(guide).text(), { headers: MARKDOWN });

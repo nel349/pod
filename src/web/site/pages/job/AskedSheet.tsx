@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { Sheet } from "../../../shared/index.ts";
 import { SITE } from "../../copy.ts";
-import type { JobView } from "../../views.ts";
+import type { JobView } from "../../views/index.ts";
 
 /** What was asked for, in the poster's words, and the fingerprint that fixed them before anybody started. */
 export function AskedSheet({ job }: { readonly job: JobView }): ReactElement {

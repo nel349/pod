@@ -4,7 +4,7 @@ import { Sheet, shortAddress } from "../../../shared/index.ts";
 import { InTheBrowser, When } from "../../components/index.ts";
 import { SITE } from "../../copy.ts";
 import { useIsViewer, useSite } from "../../hooks/index.ts";
-import type { JobView, TitleView } from "../../views.ts";
+import type { JobView, TitleView } from "../../views/index.ts";
 
 function You({ holder }: { readonly holder: string }): ReactElement | null {
   const isViewer = useIsViewer();

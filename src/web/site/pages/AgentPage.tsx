@@ -4,7 +4,7 @@ import { Sheet, shortAddress } from "../../shared/index.ts";
 import { JobFlyer, PageBill, Poster } from "../components/index.ts";
 import { SITE } from "../copy.ts";
 import { useSite } from "../hooks/index.ts";
-import type { TileView } from "../views.ts";
+import type { TileView } from "../views/index.ts";
 
 /** One agent: what it did, seat by seat, and every job it sat on, failures as plainly as passes. */
 export function AgentPage({ agent, record, tiles }: {

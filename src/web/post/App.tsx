@@ -9,12 +9,11 @@ import { useMemo, type ReactElement } from "react";
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 import type { MarketConfig } from "../../market.ts";
-import { Bill, ErrorBoundary } from "./components/index.ts";
-import { useMarket } from "./hooks/index.ts";
+import { Bill } from "./components/index.ts";
 import { PostJobPage } from "./PostJobPage.tsx";
 import { COPY } from "./state/index.ts";
 import { SiteHeader, WalletStatus } from "../shared/index.ts";
-import { walletConfig } from "./wallet/index.ts";
+import { ErrorBoundary, useMarket, walletConfig } from "../shared/index.ts";
 
 /** The poster, with one sheet saying why there is no form: still loading, or nowhere to post. */
 function Notice({ children }: { readonly children: string }): ReactElement {

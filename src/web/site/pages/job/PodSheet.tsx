@@ -4,7 +4,7 @@ import { Sheet } from "../../../shared/index.ts";
 import { AgentLink, When } from "../../components/index.ts";
 import { inCoins, SEAT_DOES, SITE } from "../../copy.ts";
 import { useSite } from "../../hooks/index.ts";
-import type { JobView } from "../../views.ts";
+import type { JobView } from "../../views/index.ts";
 
 /** The five seats: who holds each, what each does, what each is paid, and whether it approved the work. */
 export function PodSheet({ job }: { readonly job: JobView }): ReactElement {

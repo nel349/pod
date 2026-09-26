@@ -50,7 +50,8 @@ beforeAll(async () => {
   titled = await aTitledJob(anvil, { jobId: "a-coat-titled", commit: "c0ffee".padEnd(40, "0"), repository: "https://github.com/proof-of-development/pod-a-coat-titled" });
   store = titled.store;
   // the titled job is graded and passed, as the worker leaves it
-  const record = (await store.read("a-coat-titled"))!;
+  const record = await store.read("a-coat-titled");
+  if (!record) throw new Error("the titled job was not kept");
   await store.save({ ...record, tile: { ...record.tile, verdict: "passed" } });
   await anvil.fund(STRANGER_ADDRESS);
   await aRunningJob("a-coat-still-open", POSTER);
@@ -82,7 +83,8 @@ describe.skipIf(!available)("a wallet's own page", () => {
     const open = (await yoursData(store, owners, POSTER_ADDRESS, later)).posted.find((entry) => entry.tile.jobId === "a-coat-still-open");
     // the record alone could not say, so the contract was asked, and its window is the one on the chain
     expect(open?.money).toEqual({ kind: "held", endsAt: windowEnds.toISOString(), takeBack: refundPath("a-coat-still-open") });
-    expect(moneyAt(open!.money!, later)).toEqual({ kind: "returnable", takeBack: refundPath("a-coat-still-open") });
+    if (!open?.money) throw new Error("the open job has no money on the page");
+    expect(moneyAt(open.money, later)).toEqual({ kind: "returnable", takeBack: refundPath("a-coat-still-open") });
   });
 
   test("a title sold is the buyer's, on the buyer's page and off the seller's, while the job stays the poster's", async () => {

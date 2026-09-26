@@ -34,8 +34,7 @@ export class PostingStopped extends Error {
   }
 }
 
-/** There is no wallet in this browser, so there was nothing to connect to and nothing was sent. */
-export class NoWallet extends Error {}
+export { NoWallet } from "../../shared/wallet/index.ts";
 
 /** Where the posting is: not started (perhaps with a reason it cannot be), under way, done, or stopped. */
 export type PayStatus =

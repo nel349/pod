@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { jobApiPath } from "../../../routes.ts";
-import { readAnswer } from "../../post/hooks/index.ts";
-import { JobViewSchema, type JobView } from "../views.ts";
+import { readAnswer } from "../../shared/index.ts";
+import { JobViewSchema, type JobView } from "../views/index.ts";
 import { SITE_QUERY_KEYS } from "./queryKeys.ts";
 import { useSite } from "./SiteContext.ts";
 

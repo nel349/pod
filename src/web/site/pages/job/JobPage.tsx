@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { Poster } from "../../components/index.ts";
 import { useFollowedJob } from "../../hooks/index.ts";
-import type { JobView } from "../../views.ts";
+import type { JobView } from "../../views/index.ts";
 import { AskedSheet } from "./AskedSheet.tsx";
 import { ChecksSheet } from "./ChecksSheet.tsx";
 import { JobBill } from "./JobBill.tsx";

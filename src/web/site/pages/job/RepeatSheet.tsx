@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { Sheet } from "../../../shared/index.ts";
 import { SITE } from "../../copy.ts";
-import type { JobView } from "../../views.ts";
+import type { JobView } from "../../views/index.ts";
 
 /** The run we did, written out so anybody can do it again, and the receipt that records it. */
 export function RepeatSheet({ receipt }: { readonly receipt: NonNullable<JobView["receipt"]> }): ReactElement {

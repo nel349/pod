@@ -116,7 +116,8 @@ describe.skipIf(!available)("the pages the server draws, in a browser", () => {
     expect(await text(page, "#pod")).not.toContain("0x0000…00a1");
     await page.evaluate(`window.__sameDocument = true`);
 
-    const record = (await store.read("a-coat"))!;
+    const record = await store.read("a-coat");
+    if (!record) throw new Error("the job this test posted is not kept");
     await store.save({ ...record, tile: { ...record.tile, pod: [{ role: "lead", agent: LEAD, owner: LEAD }] } });
     await page.until(`document.querySelector("#pod").textContent.includes("0x0000…00a1")`, "the seat to appear", 30);
     expect(await text(page, "#stands")).toContain(SITE.job.next.building(1));

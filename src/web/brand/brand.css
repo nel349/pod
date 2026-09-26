@@ -10,6 +10,9 @@
  * painted explicitly and holds on any ground.
  */
 
+/* the three faces, loaded here so every page that takes the look takes its type with it */
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&family=Big+Shoulders+Display:wght@800;900&family=Special+Elite&display=swap");
+
 :root {
   --yellow: #ffe500;
   --pink: #ff2e88;

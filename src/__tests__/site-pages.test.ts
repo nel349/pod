@@ -59,10 +59,12 @@ const record = (over: Partial<JobRecord> = {}): JobRecord => {
   };
 };
 
+const ON_CHAIN = { network: "monad-testnet", jobId: "9", jobs: "0x00000000000000000000000000000000000000c1" } as const;
+
 const running = (over: Partial<JobRecord> = {}): JobRecord => record({
   tile: tile({ verdict: "running", receiptURI: undefined, finishedAt: undefined }),
   brief: { asked: "a site that rates my excuses", endsAt: "2026-10-02T12:00:00.000Z", sealedChecks: 1, seats: [] },
-  chain: { network: "monad-testnet", jobId: "9", jobs: "0x00000000000000000000000000000000000000c1" },
+  chain: ON_CHAIN,
   ...over,
 });
 
@@ -258,15 +260,16 @@ describe("where the money is", () => {
   test("held until the window closes, then the poster's to take back", () => {
     const view = jobView(running(), [], {});
     expect(view.money).toEqual({ kind: "held", endsAt: "2026-10-02T12:00:00.000Z", takeBack: refundPath("excuses") });
-    expect(moneyAt(view.money!, new Date("2026-10-02T12:00:01.000Z"))).toEqual({ kind: "returnable", takeBack: refundPath("excuses") });
+    if (!view.money) throw new Error("a running job on the chain has money on its page");
+    expect(moneyAt(view.money, new Date("2026-10-02T12:00:01.000Z"))).toEqual({ kind: "returnable", takeBack: refundPath("excuses") });
     expect(job(running())).toContain("held by the contract until");
   });
 
   test("a job past its window, or the runs disagreed on, is asked of the chain; one the record settles is not", () => {
     expect(needsTheChainForMoney(running(), NOW)).toBe(false);
     expect(needsTheChainForMoney(running(), new Date("2026-10-03T00:00:00.000Z"))).toBe(true);
-    expect(needsTheChainForMoney(record({ tile: tile({ verdict: "not-reproducible" }), chain: running().chain }), NOW)).toBe(true);
-    expect(needsTheChainForMoney(record({ chain: { ...running().chain!, settled: "0x01" } }), NOW)).toBe(false);
+    expect(needsTheChainForMoney(record({ tile: tile({ verdict: "not-reproducible" }), chain: ON_CHAIN }), NOW)).toBe(true);
+    expect(needsTheChainForMoney(record({ chain: { ...ON_CHAIN, settled: "0x01" } }), NOW)).toBe(false);
   });
 
   test("money the poster already took back is said to be back, whatever the record says", () => {
@@ -275,7 +278,7 @@ describe("where the money is", () => {
   });
 
   test("paid when the checks passed; back with the poster when they failed", () => {
-    const chain = running().chain;
+    const chain = ON_CHAIN;
     expect(jobView(record({ chain }), [], {}).money).toEqual({ kind: "paid" });
     expect(jobView(record({ chain, tile: tile({ verdict: "failed" }) }), [], {}).money).toEqual({ kind: "refunded" });
   });

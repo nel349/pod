@@ -15,8 +15,9 @@ import type { MarketConfig } from "../../market.ts";
 import { Bill, ChecksStep, DraftBack, IdeaStep, LinesStep, PayStep, ProgressStrip, TermsStep } from "./components/index.ts";
 import {
   draftStore, keptPaymentStore, useCheckWriting, useChecksView, useKeptDraft, usePayAndPost, usePointerDrift, usePostJob,
-  useSealedJob, useWalletPresent, useWriteTheChecks,
+  useSealedJob, useWriteTheChecks,
 } from "./hooks/index.ts";
+import { useWalletPresent } from "../shared/index.ts";
 import {
   BLANK_FORM, formOfPaidJob, freshSalt, isFresh, PostFormSchema, priceInWei, progressOf, toWriteRequest,
   type DraftForm, type PostForm, type StepName,
@@ -35,14 +36,16 @@ export function PostJobPage({ market }: { readonly market: MarketConfig }): Reac
   usePointerDrift();
 
   const [salt] = useState(freshSalt);
-  const writing = useCheckWriting(draftBack?.written);
+  const writing = useCheckWriting(draftBack ?? {});
   const writeTheChecks = useWriteTheChecks(writing, request);
   const checksView = useChecksView({ writing, request, refusal: writeTheChecks.refusal, onWrite: writeTheChecks.write });
   const { sealed, error: sealError } = useSealedJob(draft, writing.written, salt);
   const hasWallet = useWalletPresent();
   const { post, steps, payment, published } = usePostJob(market, kept);
   const { status, payAndPost } = usePayAndPost({ form, request, written: writing.written, sealed, sealError, payment, post, published });
-  useKeptDraft(market, draft, writing.written, kept !== undefined || payment !== undefined || status.kind === "posted");
+  useKeptDraft(market, {
+    form: draft, ...(writing.written ? { written: writing.written } : {}), ...(writing.underWay ? { underWay: writing.underWay } : {}),
+  }, kept !== undefined || payment !== undefined || status.kind === "posted");
   const startAgain = (): void => {
     draftStore.forget(market);
     writing.reset();

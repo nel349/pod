@@ -30,7 +30,6 @@ export const COPY = {
   stamp: "Sealed",
   sealLabel: (placed: number, of: number) => `The seal: ${placed} of ${of} pieces in place`,
   closed: "Posting is not open on this server: it has no contract to post to.",
-  broken: (why: string) => `This page stopped working: ${why.replace(/\.$/, "")}. Nothing has been sent. Reload the page to start again.`,
   loading: "Opening the market…",
   draftBack: {
     says: "Your draft is back as you left it, with any checks already written for it.",

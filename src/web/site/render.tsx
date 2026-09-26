@@ -6,7 +6,7 @@ import { renderToString } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { siteDocument, type Head } from "./document.ts";
 import { SiteApp } from "./SiteApp.tsx";
-import type { SiteData } from "./views.ts";
+import type { SiteData } from "./views/index.ts";
 
 export function renderSite(head: Head, data: SiteData): string {
   // a client per page drawn, so nothing one visitor's page asked for is ever in another's

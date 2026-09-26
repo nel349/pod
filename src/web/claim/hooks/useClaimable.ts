@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { claimApiPath } from "../../../routes.ts";
-import { readAnswer } from "../../post/hooks/index.ts";
+import { readAnswer } from "../../shared/index.ts";
 import { ClaimableSchema, WhySchema, type Claimable } from "../state/index.ts";
 import { CLAIM_QUERY_KEYS } from "./queryKeys.ts";
 

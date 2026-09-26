@@ -7,6 +7,7 @@ export const CHROME = {
   home: "POD, back to the wall",
   nav: { wall: "The wall", post: "Post a job", yours: "Yours" },
   navLabel: "Where to go",
+  broken: (why: string) => `This page stopped working: ${why.replace(/\.$/, "")}. Nothing has been sent. Reload the page to start again.`,
   wallet: {
     none: "No wallet in this browser",
     connect: "Connect wallet",

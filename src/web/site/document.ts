@@ -3,13 +3,11 @@
  * does it. Plain strings, not React: the head is the server's alone and is never taken over.
  */
 import { ROUTES } from "../../routes.ts";
-import type { SiteData } from "./views.ts";
+import type { SiteData } from "./views/index.ts";
 
 /** Where the page's data sits for the browser to read, by the id both sides use. */
 export const SITE_DATA_ID = "pod-data";
 export const SITE_ROOT_ID = "root";
-
-const FONTS = "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&family=Big+Shoulders+Display:wght@800;900&family=Special+Elite&display=swap";
 
 const escape = (text: string): string =>
   text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
@@ -39,7 +37,6 @@ export function siteDocument(head: Head, body: string, data: SiteData): string {
 ${meta}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="${FONTS}">
 <link rel="stylesheet" href="${ROUTES.brand}">
 <link rel="stylesheet" href="${ROUTES.style}">
 </head>

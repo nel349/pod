@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { yoursApiPath } from "../../../routes.ts";
-import { readAnswer } from "../../post/hooks/index.ts";
-import { YoursViewSchema, type YoursView } from "../views.ts";
+import { readAnswer } from "../../shared/index.ts";
+import { YoursViewSchema, type YoursView } from "../views/index.ts";
 import { SITE_QUERY_KEYS } from "./queryKeys.ts";
 
 export type YoursState =

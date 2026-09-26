@@ -149,14 +149,16 @@ export class JobStore {
    * that had already ended, which is exactly backwards: the running ones are the reason to look.
    */
   async tiles(): Promise<readonly Tile[]> {
-    const records = await this.all();
-    return [...records]
-      .sort((a, b) => {
-        const running = Number(b.tile.verdict === "running") - Number(a.tile.verdict === "running");
-        if (running !== 0) return running;
-        return (b.tile.finishedAt ?? "").localeCompare(a.tile.finishedAt ?? "");
-      })
-      .map((r) => r.tile);
+    return (await this.inWallOrder()).map((record) => record.tile);
+  }
+
+  /** Every record, in the order `tiles` gives: what is happening now, then what happened, newest first. */
+  async inWallOrder(): Promise<readonly JobRecord[]> {
+    return [...(await this.all())].sort((a, b) => {
+      const running = Number(b.tile.verdict === "running") - Number(a.tile.verdict === "running");
+      if (running !== 0) return running;
+      return (b.tile.finishedAt ?? "").localeCompare(a.tile.finishedAt ?? "");
+    });
   }
 
   async all(): Promise<readonly JobRecord[]> {
@@ -308,13 +310,6 @@ export class JobStore {
     }
     // written only by addNote, after the door checked every field; read through the same shape all the same
     return text.split("\n").filter(Boolean).map((line) => NoteSchema.parse(JSON.parse(line)));
-  }
-
-  /** Every job an agent sat on, whichever seat it held. */
-  async sat(agent: Address): Promise<readonly Tile[]> {
-    const wanted = agent.toLowerCase();
-    return (await this.tiles()).filter((tile) =>
-      tile.pod.some((seat) => seat.agent.toLowerCase() === wanted));
   }
 
   /**

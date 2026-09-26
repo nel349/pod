@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { jobPath } from "../../../routes.ts";
 import { inCoins, lengthOf, SITE, stampOf } from "../copy.ts";
-import type { TileView } from "../views.ts";
+import type { TileView } from "../views/index.ts";
 import { AgentLink } from "./AgentLink.tsx";
 import { Seal } from "./Seal.tsx";
 

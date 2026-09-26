@@ -21,7 +21,8 @@ afterAll(async () => {
 });
 
 const { cleanup, render, screen } = await import("@testing-library/react");
-const { ErrorBoundary, PayStep, ShardSeal, WrittenCheck } = await import("../web/post/components/index.ts");
+const { PayStep, ShardSeal, WrittenCheck } = await import("../web/post/components/index.ts");
+const { CHROME, ErrorBoundary } = await import("../web/shared/index.ts");
 const { COPY, progressOf, SHARDS } = await import("../web/post/state/index.ts");
 
 afterEach(() => cleanup());
@@ -186,6 +187,6 @@ describe("a page that breaks", () => {
     } finally {
       console.error = quiet;
     }
-    expect(screen.getByRole("alert").textContent).toBe(COPY.broken("the checks came back in a shape nobody expected"));
+    expect(screen.getByRole("alert").textContent).toBe(CHROME.broken("the checks came back in a shape nobody expected"));
   });
 });

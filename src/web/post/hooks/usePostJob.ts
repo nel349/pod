@@ -21,8 +21,7 @@ import {
   NoWallet, nextPosting, PostingStopped, type Kept, type Payment, type PostingStep, type SealedJob, type StepState,
 } from "../state/index.ts";
 import { keptPaymentStore } from "./keptPaymentStore.ts";
-import { hasWalletInTheBrowser, injectedConnector } from "../wallet/index.ts";
-import { readAnswer } from "./readAnswer.ts";
+import { hasWalletInTheBrowser, injectedConnector, readAnswer } from "../../shared/index.ts";
 
 export interface PostJobInput {
   readonly sealed: SealedJob;

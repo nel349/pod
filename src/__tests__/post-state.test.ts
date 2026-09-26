@@ -301,6 +301,16 @@ describe("a draft kept in the browser until it is paid for or thrown away", () =
     expect(readDraft(keepDraft({ form, written }))).toEqual({ form, written });
   });
 
+  test("checks still being written when the poster left come back as an address to ask at, and only this server's", () => {
+    const underWay = { url: "/api/checks/0b6f3c8e-2f5d-4a8e-9c1d-7e2b5a4f6c3d", key: "the request", startedAt: 1_790_000_000_000 };
+    const form = { idea: COAT_IDEA };
+    expect(readDraft(keepDraft({ form, underWay }))).toEqual({ form, underWay });
+    expect(isWorthKeeping({ form: {}, underWay })).toBe(true);
+    for (const url of ["https://elsewhere.example/api/checks/0b6f3c8e-2f5d-4a8e-9c1d-7e2b5a4f6c3d", "/api/checks/../jobs", "//elsewhere.example/x"]) {
+      expect(readDraft(keepDraft({ form, underWay: { ...underWay, url } }))).toBeUndefined();
+    }
+  });
+
   test("a kind nobody has chosen yet, which the form keeps as nothing, comes back unchosen rather than refusing the draft", () => {
     const kept = JSON.stringify({ version: 1, form: { idea: COAT_IDEA, kind: null, brief: [{ says: "" }] } });
     expect(readDraft(kept)).toEqual({ form: { idea: COAT_IDEA, brief: [{ says: "" }] } });

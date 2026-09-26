@@ -15,7 +15,7 @@ export function Sheet({ number, id, title, stamp, children }: {
   readonly stamp?: string | false;
   readonly children: ReactNode;
 }): ReactElement {
-  const lean: CSSProperties = { "--lean": `${LEANS[number % 2]}deg`, "--order": number } as CSSProperties;
+  const lean: CSSProperties = { "--lean": `${LEANS[number % 2]}deg`, "--order": number };
   const mark = stamp === undefined ? String(number).padStart(2, "0") : stamp;
   return (
     <section className="sheet" id={id} aria-labelledby={`${id}-title`} style={lean}>

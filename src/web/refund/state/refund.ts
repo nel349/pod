@@ -10,6 +10,7 @@ import { formatEther, type Address } from "viem";
 import { z } from "zod";
 import type { JobState } from "../../../jobs.ts";
 import { ROUTES } from "../../../routes.ts";
+import { shortAddress } from "../../shared/copy.ts";
 
 /** The job, as the server keeps it: enough to find it on the chain */
 export const RefundableSchema = z.object({ jobId: z.string(), idea: z.string(), onChainId: z.string().regex(/^[0-9]+$/) });
@@ -72,7 +73,6 @@ export function stepStates(status: RefundStatus): Record<RefundStep, StepState> 
   return { wallet: stateAt(0), send: stateAt(1), confirm: stateAt(2) };
 }
 
-const shortAddress = (address: string): string => `${address.slice(0, 6)}…${address.slice(-4)}`;
 const when = (seconds: bigint): string => new Date(Number(seconds) * 1000).toISOString().replace("T", " ").slice(0, 16) + " UTC";
 
 export const COPY = {

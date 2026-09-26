@@ -14,7 +14,7 @@ import { readerFor } from "../posting.ts";
 import { readJob } from "../jobs.ts";
 import { CheckWriting, ProvenChecks } from "../checkwriting/index.ts";
 import { checkFilePath, checksPath, jobApiPath, jobPath, ROUTES } from "../routes.ts";
-import { COPY } from "../web/post/state/index.ts";
+import { COPY, draftKey } from "../web/post/state/index.ts";
 import { dockerAvailable } from "./support/tools.ts";
 
 /**
@@ -395,6 +395,25 @@ describe.skipIf(!available)("a stranger posts a job from a browser", () => {
     await page.open(base + ROUTES.post);
     await page.until(`document.querySelector("#idea")`, "the form to appear");
     expect(await page.evaluate<boolean>(`document.querySelector(".draft-back") === null && document.querySelector("#idea").value === ""`)).toBe(true);
+  }, 300_000);
+
+  test("leaving while the checks are being written loses nothing: on return the page asks after the same writing", async () => {
+    const page = await openThePage(false);
+    await describeTheJob(page, "a-coat-left-mid-writing");
+    await page.click("#write");
+    await page.until(`(document.querySelector("#writing")?.textContent ?? "").trim() !== ""`, "the writing to start");
+
+    // they leave while it is still being written, which is what the draft holds at that moment, and come back
+    const draft = `localStorage.getItem(${JSON.stringify(draftKey(31337, jobs))}) ?? ""`;
+    await page.until(`(${draft}).includes('"underWay"')`, "the draft to hold where to ask after the writing");
+    expect(await page.evaluate<string>(draft)).not.toContain(`"written"`);
+    await page.open(base + ROUTES.wall);
+    await page.open(base + ROUTES.post);
+    await page.until(`document.querySelector(".draft-back")`, "the draft to be back");
+    await page.until(
+      `document.querySelector("#written-verdict")?.dataset.state === "ready"`, "the same writing to finish and its checks to show", 240,
+      `(document.querySelector("#writing")?.textContent ?? "") + " | " + (document.querySelector("#written")?.textContent ?? "")`,
+    );
   }, 300_000);
 
   test("on a phone the page does not scroll sideways", async () => {

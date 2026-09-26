@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { Sheet } from "../../../shared/index.ts";
 import { SITE } from "../../copy.ts";
-import type { JobView } from "../../views.ts";
+import type { JobView } from "../../views/index.ts";
 
 type Outcome = keyof typeof SITE.job.outcome;
 

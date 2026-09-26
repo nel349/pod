@@ -2,7 +2,6 @@
 export * from "./Bill.tsx";
 export * from "./ChecksStep.tsx";
 export * from "./DraftBack.tsx";
-export * from "./ErrorBoundary.tsx";
 export * from "./IdeaStep.tsx";
 export * from "./LinesStep.tsx";
 export * from "./PayStep.tsx";

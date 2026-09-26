@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 import { ClientOnly, SiteHeader, WalletStatus, type Place } from "../shared/index.ts";
 import { SiteContext } from "./hooks/index.ts";
 import { AgentPage, JobPage, MissingPage, ReceiptPage, WallPage, YoursPage } from "./pages/index.ts";
-import type { SiteData, SitePage } from "./views.ts";
+import type { SiteData, SitePage } from "./views/index.ts";
 
 function Page({ data }: { readonly data: SitePage }): ReactElement {
   switch (data.page) {

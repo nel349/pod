@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 import { Sheet } from "../../shared/index.ts";
 import { PageBill, Poster, When } from "../components/index.ts";
 import { SITE, STAMP } from "../copy.ts";
-import type { ReceiptView } from "../views.ts";
+import type { ReceiptView } from "../views/index.ts";
 
 const FACTS = SITE.receipt.facts;
 
@@ -11,8 +11,8 @@ export function ReceiptPage({ receipt }: { readonly receipt: ReceiptView }): Rea
   const listed = (items: readonly string[]): string => (items.length === 0 ? SITE.receipt.nothing : items.join(", "));
   const bill = (
     <PageBill words={{ eyebrow: SITE.receipt.eyebrow, shout: SITE.receipt.shout, strap: SITE.receipt.strap, stand: SITE.receipt.stand }}>
-      <p className="lede"><a href={receipt.job}>{receipt.idea}</a></p>
-      <p><a className="primary" href={receipt.job}>{SITE.receipt.back}</a></p>
+      <p className="lede"><a href={receipt.jobPage}>{receipt.idea}</a></p>
+      <p><a className="primary" href={receipt.jobPage}>{SITE.receipt.back}</a></p>
     </PageBill>
   );
   return (

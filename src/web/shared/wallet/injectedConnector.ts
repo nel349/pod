@@ -1,5 +1,5 @@
 import type { Config, Connector } from "wagmi";
-import { NoWallet } from "../state/index.ts";
+import { NoWallet } from "./NoWallet.ts";
 
 /** The browser's own wallet: the one connector `walletConfig` gives this page. */
 export function injectedConnector(config: Config): Connector {

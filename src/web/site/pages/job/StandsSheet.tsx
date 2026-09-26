@@ -1,20 +1,9 @@
 import type { ReactElement } from "react";
 import { Sheet } from "../../../shared/index.ts";
 import { InTheBrowser, When } from "../../components/index.ts";
-import { SITE, timeLeft } from "../../copy.ts";
+import { SITE, timeLeft, whatHappensNext } from "../../copy.ts";
 import { useIsViewer, useNow } from "../../hooks/index.ts";
-import { moneyAt, type JobView, type MoneyView } from "../../views.ts";
-
-/** What happens next, for this job as it stands. */
-function nextWords(job: JobView): string {
-  const taken = job.seats.filter((seat) => seat.agent).length;
-  switch (job.verdict) {
-    case "running": return taken === 0 ? SITE.job.next.waiting : SITE.job.next.building(taken);
-    case "passed": return SITE.job.next.passed;
-    case "failed": return SITE.job.next.failed;
-    case "not-reproducible": return SITE.job.next.unsure;
-  }
-}
+import { moneyAt, type JobView, type MoneyView } from "../../views/index.ts";
 
 /** A line only the poster reads: that money held is theirs to take back if the window closes first. */
 function IfYours({ poster }: { readonly poster: string | undefined }): ReactElement | null {
@@ -50,7 +39,7 @@ export function StandsSheet({ job, lostTouch }: { readonly job: JobView; readonl
   const isRunning = job.verdict === "running";
   return (
     <Sheet number={2} id="stands" title={SITE.job.standsTitle} stamp={false}>
-      <p className="lede">{nextWords(job)}</p>
+      <p className="lede">{whatHappensNext(job.verdict, job.seats.filter((seat) => seat.agent).length)}</p>
       {job.waitingBecause && <p className="note">{SITE.job.waitingBecause(job.waitingBecause)}</p>}
       {job.money && <Money money={job.money} poster={job.poster} />}
       {isRunning && <p className="note live" role="status">{lostTouch ? SITE.job.lostTouch : SITE.job.follows}</p>}

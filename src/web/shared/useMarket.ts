@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { MarketConfigSchema, type MarketConfig } from "../../../market.ts";
-import { ROUTES } from "../../../routes.ts";
-import { QUERY_KEYS } from "./queryKeys.ts";
+import { MarketConfigSchema, type MarketConfig } from "../../market.ts";
+import { ROUTES } from "../../routes.ts";
+import { SHARED_QUERY_KEYS } from "./queryKeys.ts";
 import { readAnswer } from "./readAnswer.ts";
 
 /**
@@ -24,7 +24,7 @@ async function fetchMarket(): Promise<Answer> {
 }
 
 export function useMarket(): MarketState {
-  const answer = useQuery({ queryKey: QUERY_KEYS.market(), queryFn: fetchMarket, staleTime: Infinity });
+  const answer = useQuery({ queryKey: SHARED_QUERY_KEYS.market(), queryFn: fetchMarket, staleTime: Infinity });
   if (answer.isPending) return { kind: "loading" };
   if (answer.isError) return { kind: "failed", why: answer.error.message };
   return answer.data.isOpen ? { kind: "open", market: answer.data.market } : { kind: "closed" };

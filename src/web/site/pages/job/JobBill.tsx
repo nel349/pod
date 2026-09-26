@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 import { InTheBrowser, PageBill, Seal } from "../../components/index.ts";
 import { inCoins, SITE, stampOf } from "../../copy.ts";
 import { useIsViewer, useSite } from "../../hooks/index.ts";
-import type { JobView } from "../../views.ts";
+import type { JobView } from "../../views/index.ts";
 
 /** What this job is to the reader, when their wallet posted it or holds its title. */
 function YoursToo({ job }: { readonly job: JobView }): ReactElement | null {

@@ -4,7 +4,7 @@ import { getBlock, readContract } from "wagmi/actions";
 import { podJobsAbi, stateOf } from "../../../jobs.ts";
 import type { MarketConfig } from "../../../market.ts";
 import { refundApiPath } from "../../../routes.ts";
-import { readAnswer } from "../../post/hooks/index.ts";
+import { readAnswer } from "../../shared/index.ts";
 import { COPY, type OnChainNow, type Refundable, RefundableSchema, type RefundTarget, WhySchema } from "../state/index.ts";
 import { REFUND_QUERY_KEYS } from "./queryKeys.ts";
 

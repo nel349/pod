@@ -5,7 +5,7 @@
 import { formatEther } from "viem";
 import type { Role } from "../../job.ts";
 import { shortAddress } from "../shared/copy.ts";
-import type { Verdict } from "./views.ts";
+import type { Verdict } from "./views/index.ts";
 
 /** Money in wei, as a person reads it: the coin's amount, and its name. */
 export function inCoins(wei: string, coin: string): string {
@@ -62,6 +62,16 @@ export const STAMP: Record<Verdict | "waiting", string> = {
 /** The one word stamped on a job: a job nobody has taken is open, not being built. */
 export function stampOf(tile: { readonly verdict: Verdict; readonly pod: readonly unknown[] }): string {
   return tile.verdict === "running" && tile.pod.length === 0 ? STAMP.waiting : STAMP[tile.verdict];
+}
+
+/** What happens next to a job, from where it stands and how many of its seats are taken. */
+export function whatHappensNext(verdict: Verdict, seatsTaken: number): string {
+  switch (verdict) {
+    case "running": return seatsTaken === 0 ? SITE.job.next.waiting : SITE.job.next.building(seatsTaken);
+    case "passed": return SITE.job.next.passed;
+    case "failed": return SITE.job.next.failed;
+    case "not-reproducible": return SITE.job.next.unsure;
+  }
 }
 
 /** What each seat does, in a line, for somebody who has never seen a pod. */

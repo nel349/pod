@@ -2,9 +2,7 @@ import type { ReactElement } from "react";
 import { Sheet } from "../../../shared/index.ts";
 import { AgentLink, When } from "../../components/index.ts";
 import { SITE } from "../../copy.ts";
-import type { JobView } from "../../views.ts";
-
-const MS_IN_A_SECOND = 1000;
+import { MS_IN_A_SECOND, type JobView } from "../../views/index.ts";
 
 /** What the pod said to each other, in the order it was said: the story of the job, refusals included. */
 export function NotesSheet({ job }: { readonly job: JobView }): ReactElement | null {

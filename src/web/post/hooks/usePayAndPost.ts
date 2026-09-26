@@ -8,7 +8,7 @@ import {
   asSentence, canPress, COPY, NoWallet, PostingStopped, whatIsMissing,
   type DraftRequest, type PayStatus, type Payment, type PostForm, type SealedJob, type WrittenFor,
 } from "../state/index.ts";
-import { readAnswer } from "./readAnswer.ts";
+import { readAnswer } from "../../shared/index.ts";
 import type { PostJobState } from "./usePostJob.ts";
 
 interface PayAndPost {

@@ -12,19 +12,15 @@ import { ROUTES } from "../../../routes.ts";
 import { AnswerSchema } from "../../../market.ts";
 import type { WriteRequest } from "../../../checkwriting/request.ts";
 import { isStillWriting, WritingSchema, type Stage, type Writing } from "../../../checkwriting/written.ts";
-import { COPY, requestKey, type WrittenFor } from "../state/index.ts";
+import { COPY, requestKey, type WritingUnderWay, type WrittenFor } from "../state/index.ts";
 import { QUERY_KEYS } from "./queryKeys.ts";
-import { readAnswer } from "./readAnswer.ts";
+import { readAnswer } from "../../shared/index.ts";
 
 /** How often the page asks how the writing is going, and how long it waits in all. */
 const ASK_EVERY_MS = 1500;
 const GIVE_UP_AFTER_MS = 12 * 60_000;
 
-interface Run {
-  readonly url: string;
-  readonly key: string;
-  readonly startedAt: number;
-}
+type Run = WritingUnderWay;
 
 export interface CheckWritingState {
   readonly start: (request: WriteRequest) => void;
@@ -35,6 +31,8 @@ export interface CheckWritingState {
   readonly startedAt: number | undefined;
   /** the last checks that came back, and the request they were written for */
   readonly written: WrittenFor | undefined;
+  /** the writing still under way, which a draft keeps so a page that comes back can ask after it */
+  readonly underWay: WritingUnderWay | undefined;
   readonly error: string | undefined;
 }
 
@@ -56,11 +54,11 @@ async function howItIsGoing(run: Run | undefined): Promise<Writing> {
   return readAnswer(response, WritingSchema);
 }
 
-/** @param restored checks written before the poster left the page, kept in their draft */
-export function useCheckWriting(restored?: WrittenFor): CheckWritingState {
-  const [run, setRun] = useState<Run>();
-  const [startedAt, setStartedAt] = useState<number>();
-  const [written, setWritten] = useState<WrittenFor | undefined>(restored);
+/** @param restored what a draft kept: checks written before the poster left, and any still being written */
+export function useCheckWriting(restored: { readonly written?: WrittenFor; readonly underWay?: WritingUnderWay } = {}): CheckWritingState {
+  const [run, setRun] = useState<Run | undefined>(restored.underWay);
+  const [startedAt, setStartedAt] = useState<number | undefined>(restored.underWay?.startedAt);
+  const [written, setWritten] = useState<WrittenFor | undefined>(restored.written);
   const [lastSeen, setLastSeen] = useState<Writing>();
 
   const starting = useMutation({
@@ -101,6 +99,7 @@ export function useCheckWriting(restored?: WrittenFor): CheckWritingState {
     stage: !isBusy ? undefined : isStillWriting(writing) ? writing.stage : "writing",
     startedAt: isBusy ? startedAt : undefined,
     written,
+    underWay: isBusy ? run : undefined,
     error: isBusy ? undefined : error,
   };
 }

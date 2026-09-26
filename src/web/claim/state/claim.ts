@@ -5,6 +5,7 @@
 import { isAddress, type Address } from "viem";
 import { z } from "zod";
 import { ROUTES } from "../../../routes.ts";
+import { shortAddress } from "../../shared/copy.ts";
 
 const AddressSchema = z.string().refine((value): value is Address => isAddress(value), "an address");
 
@@ -63,8 +64,6 @@ function stateAt(index: number, at: number, now: StepState): StepState {
 
 /** A repository's short name as GitHub shows it: owner/name */
 export const shortRepository = (url: string): string => new URL(url).pathname.replace(/^\//, "");
-
-export const shortAddress = (address: string): string => `${address.slice(0, 6)}…${address.slice(-4)}`;
 
 export const COPY = {
   masthead: {

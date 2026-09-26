@@ -4,7 +4,7 @@ import { Sheet } from "../../shared/index.ts";
 import { JobFlyer, PageBill, Poster } from "../components/index.ts";
 import { SITE } from "../copy.ts";
 import { useSite } from "../hooks/index.ts";
-import type { TileView, Verdict } from "../views.ts";
+import type { TileView, Verdict } from "../views/index.ts";
 
 const TALLIED: readonly { readonly verdict: Verdict; readonly word: string; readonly shownWhenNone: boolean }[] = [
   { verdict: "running", word: SITE.wall.tally.open, shownWhenNone: false },

@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 import { useConnect, useConnection, useConnectors, useSwitchChain } from "wagmi";
 import { firstLine } from "../../errors.ts";
 import type { MarketConfig } from "../../market.ts";
-import { useWalletPresent } from "../post/hooks/index.ts";
+import { useWalletPresent } from "./useWalletPresent.ts";
 import { CHROME, shortAddress } from "./copy.ts";
 
 /**

@@ -5,7 +5,7 @@ import { signMessage } from "wagmi/actions";
 import { firstLine } from "../../../errors.ts";
 import { claimToSign } from "../../../messages.ts";
 import { claimApiPath } from "../../../routes.ts";
-import { readAnswer } from "../../post/hooks/index.ts";
+import { readAnswer } from "../../shared/index.ts";
 import { connected } from "../../shared/index.ts";
 import { ClaimedSchema, WhySchema, type Claimable, type ClaimStatus, type ClaimStep } from "../state/index.ts";
 import { CLAIM_QUERY_KEYS } from "./queryKeys.ts";

@@ -4,7 +4,7 @@
  */
 import type { ReactElement } from "react";
 import type { MarketConfig } from "../../market.ts";
-import { useWalletPresent } from "../post/hooks/index.ts";
+import { useWalletPresent } from "../shared/index.ts";
 import { useConnectedAccount } from "../shared/index.ts";
 import { RefundBill, StandsSheet, TakeSheet } from "./components/index.ts";
 import { useRefund, useRefundable } from "./hooks/index.ts";
