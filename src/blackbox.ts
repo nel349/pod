@@ -11,7 +11,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { PORT } from "./job.ts";
-import { readBounded } from "./readBounded.ts";
+import { runDocker } from "./runDocker.ts";
 
 /**
  * What Docker keeps of a box's log on disk. Without a cap, a job that prints without end fills the
@@ -59,11 +59,27 @@ export interface GradeOutcome {
   readonly seconds: number;
 }
 
-/** Everything read from a box is read bounded: its code is not ours, and can print without end. */
-async function docker(args: readonly string[]): Promise<{ code: number; out: string }> {
-  const child = Bun.spawn(["docker", ...args], { stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr] = await Promise.all([readBounded(child.stdout), readBounded(child.stderr)]);
-  return { code: await child.exited, out: `${stdout}${stderr}`.trim() };
+/**
+ * How long Docker has to answer a command that runs none of the job's work: making a network, starting
+ * a box in the background, looking at one, reading its log, taking it down. A check has this on top of
+ * its own time.
+ */
+const DOCKER_ANSWER_SECONDS = 60;
+/** How long one look at whether the artefact answers may take, inside the box and from outside it */
+const PROBE_SECONDS = 10;
+
+/**
+ * A Docker command the grading cannot go on without. Docker not answering in time is our failure,
+ * never the pod's: it is thrown, so the grading is tried again and nothing is decided by it.
+ */
+async function docker(
+  args: readonly string[],
+  seconds: number = DOCKER_ANSWER_SECONDS,
+  container?: string,
+): Promise<{ code: number; out: string }> {
+  const answer = await runDocker(args, seconds, container);
+  if (answer.timedOut) throw new Error(`Docker did not answer "docker ${args[0]}" within ${seconds}s`);
+  return answer;
 }
 
 /**
@@ -78,8 +94,9 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
   const artefactName = `pod-art-${id}`;
   const started = Date.now();
 
-  await docker(["network", "create", "--internal", network]);
   try {
+    // inside, so a network Docker made after it stopped answering is still taken down
+    await docker(["network", "create", "--internal", network]);
     const launched = await docker([
       "run", "-d",
       "--name", artefactName,
@@ -96,11 +113,15 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
 
     await waitUntilAnswering(artefactName, request.startSeconds ?? 90);
 
+    const checkSeconds = request.checkSeconds ?? 60;
     const outcomes: CheckOutcome[] = [];
-    for (const check of request.toRun) {
+    for (const [index, check] of request.toRun.entries()) {
       const at = Date.now();
+      // named, so a box left behind by a Docker that stopped answering can be taken down
+      const checkName = `pod-chk-${id}-${index}`;
       const result = await docker([
         "run", "--rm",
+        "--name", checkName,
         "--network", network,
         ...BOUNDED_LOGS,
         "--memory", "512m", "--cpus", "1", "--pids-limit", "128",
@@ -109,8 +130,8 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
         "-v", `${request.checks}:/checks:ro`,
         "-e", `TARGET=http://${artefactName}:${PORT}`,
         request.image,
-        "sh", "-c", `cd /checks && timeout ${request.checkSeconds ?? 60} ${check.command}`,
-      ]);
+        "sh", "-c", `cd /checks && timeout ${checkSeconds} ${check.command}`,
+      ], checkSeconds + DOCKER_ANSWER_SECONDS, checkName);
       outcomes.push({
         says: check.says,
         command: check.command,
@@ -129,8 +150,9 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
       seconds: (Date.now() - started) / 1000,
     };
   } finally {
-    await docker(["rm", "-f", artefactName]);
-    await docker(["network", "rm", network]);
+    // taking down is kept to its limit too, and never hides why the grading ended
+    await runDocker(["rm", "-f", artefactName], DOCKER_ANSWER_SECONDS);
+    await runDocker(["network", "rm", network], DOCKER_ANSWER_SECONDS);
   }
 }
 
@@ -156,11 +178,13 @@ async function waitUntilAnswering(target: string, seconds: number): Promise<void
       const code = state.out.split(" ")[1] ?? "?";
       throw new Error(`the artefact stopped before it answered, exit ${code}. Its log said: ${log.out.slice(0, 500) || "(nothing)"}`);
     }
-    const probe = await docker([
+    // work that takes the connection and never replies is not answering yet, which is the work's
+    // doing: a probe that runs out of time is looked at again, never taken for Docker failing us
+    const probe = await runDocker([
       "exec", target, "node", "-e",
-      `fetch('http://127.0.0.1:${PORT}/').then(()=>process.exit(0)).catch(()=>process.exit(1))`,
-    ]);
-    if (probe.code === 0) return;
+      `fetch('http://127.0.0.1:${PORT}/',{signal:AbortSignal.timeout(${PROBE_SECONDS * 1000})}).then(()=>process.exit(0)).catch(()=>process.exit(1))`,
+    ], PROBE_SECONDS * 2);
+    if (!probe.timedOut && probe.code === 0) return;
     await Bun.sleep(500);
   }
   const log = await docker(["logs", target]);

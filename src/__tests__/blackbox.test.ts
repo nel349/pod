@@ -116,6 +116,18 @@ describe.skipIf(!withDocker)("grading from outside the box", () => {
     }
   }, 240_000);
 
+  test("work that takes the connection and never replies is waited for as not answering, never taken for Docker failing", async () => {
+    const silent = await checkout("pod-silent-", {
+      "server.js": `require("http").createServer(() => {}).listen(3000, () => console.log("listening, and saying nothing"));\n`,
+    });
+
+    const failure = await grade({ artefact: silent, start: "node server.js", checks: CHECKS, toRun, image: IMAGE, startSeconds: 30 })
+      .then(() => null, (error: Error) => error);
+
+    expect(failure?.message).toContain("never answered within 30s");
+    expect(failure?.message).toContain("listening, and saying nothing");
+  }, 240_000);
+
   test("nothing is left running afterwards", async () => {
     await grade({ artefact: ARTEFACT, start: "node server.js", checks: CHECKS, toRun, image: IMAGE });
     const running = await new Response(
@@ -126,5 +138,9 @@ describe.skipIf(!withDocker)("grading from outside the box", () => {
       Bun.spawn(["docker", "network", "ls", "--filter", "name=pod-net-", "--format", "{{.Name}}"], { stdout: "pipe" }).stdout,
     ).text();
     expect(networks.trim()).toBe("");
+    const checks = await new Response(
+      Bun.spawn(["docker", "ps", "-a", "--filter", "name=pod-chk-", "--format", "{{.Names}}"], { stdout: "pipe" }).stdout,
+    ).text();
+    expect(checks.trim()).toBe("");
   }, 240_000);
 });
