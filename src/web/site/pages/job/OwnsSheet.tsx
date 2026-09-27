@@ -38,7 +38,7 @@ export function OwnsSheet({ job }: { readonly job: JobView }): ReactElement | nu
   const transaction = (hash: string, words: string): ReactElement =>
     market ? <a href={explorerTransaction(market.explorer, hash)}>{words}</a> : <span title={hash}>{words}</span>;
   return (
-    <Sheet number={7} id="owns" title={SITE.job.ownsTitle} stamp={false}>
+    <Sheet number={7} id="owns" title={job.repository || job.title || job.verdict === "passed" ? SITE.job.ownsTitle : SITE.job.onChainTitle} stamp={false}>
       {job.repository && (
         <p className="lede"><a href={job.repository}>{job.repository.replace(/^https:\/\/github\.com\//, "")}</a> {SITE.job.work}</p>
       )}

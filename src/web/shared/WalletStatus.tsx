@@ -3,7 +3,18 @@ import { useConnect, useConnection, useConnectors, useSwitchChain } from "wagmi"
 import { firstLine } from "../../errors.ts";
 import type { MarketConfig } from "../../market.ts";
 import { useWalletPresent } from "./useWalletPresent.ts";
+import { ChooseAccount } from "./ChooseAccount.tsx";
 import { CHROME, shortAddress } from "./copy.ts";
+
+/** Who is connected, and the way to pick another of the person's accounts. */
+function ConnectedAs({ address }: { readonly address: string }): ReactElement {
+  return (
+    <>
+      <span className="who" title={address}>{CHROME.wallet.connectedAs(shortAddress(address))}</span>
+      <ChooseAccount label={CHROME.wallet.change} className="change" />
+    </>
+  );
+}
 
 /**
  * The wallet, in the header: whether this browser has one, whether it is connected, as whom, and on
@@ -25,7 +36,7 @@ export function WalletStatus({ market }: { readonly market: MarketConfig }): Rea
         </button>
       );
     }
-    return <span className="who" title={connection.address}>{CHROME.wallet.connectedAs(shortAddress(connection.address))}</span>;
+    return <ConnectedAs address={connection.address} />;
   }
   if (!hasWallet) return <span className="none">{CHROME.wallet.none}</span>;
   const connector = connectors[0];

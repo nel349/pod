@@ -4,6 +4,7 @@ import { InTheBrowser, When } from "../../components/index.ts";
 import { SITE, timeLeft, whatHappensNext } from "../../copy.ts";
 import { useIsViewer, useNow } from "../../hooks/index.ts";
 import { moneyAt, type JobView, type MoneyView } from "../../views/index.ts";
+import { WhoseMoney } from "./WhoseMoney.tsx";
 
 /** A line only the poster reads: that money held is theirs to take back if the window closes first. */
 function IfYours({ poster }: { readonly poster: string | undefined }): ReactElement | null {
@@ -20,6 +21,7 @@ function Money({ money, poster }: { readonly money: MoneyView; readonly poster: 
         <p className="money">
           {SITE.job.money.heldUntil} <When iso={standing.endsAt} />, {timeLeft(standing.endsAt, now)}. {SITE.job.money.onlyTheVerdict}
           <InTheBrowser><IfYours poster={poster} /></InTheBrowser>
+          {" "}<a href={standing.takeBack}>{SITE.job.money.whereToTakeBack}</a>.
         </p>
       );
     case "returnable":
@@ -42,6 +44,7 @@ export function StandsSheet({ job, lostTouch }: { readonly job: JobView; readonl
       <p className="lede">{whatHappensNext(job.verdict, job.seats.filter((seat) => seat.agent).length)}</p>
       {job.waitingBecause && <p className="note">{SITE.job.waitingBecause(job.waitingBecause)}</p>}
       {job.money && <Money money={job.money} poster={job.poster} />}
+      {job.poster && (job.money?.kind === "held" || job.money?.kind === "returnable") && <WhoseMoney poster={job.poster} />}
       {isRunning && <p className="note live" role="status">{lostTouch ? SITE.job.lostTouch : SITE.job.follows}</p>}
     </Sheet>
   );

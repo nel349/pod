@@ -184,6 +184,12 @@ export async function readTerms(at: Omit<Contract, "wallet">, jobId: bigint): Pr
   return Object.fromEntries(terms) as Record<Role, { readonly pay: bigint; readonly deposit: bigint }>;
 }
 
+/** How many jobs have ever been posted on the contract. They are numbered from 1, in the order they were paid for. */
+export async function readJobCount(at: Omit<Contract, "wallet">): Promise<bigint> {
+  const next = await at.publicClient.readContract({ address: at.address, abi: podJobsAbi, functionName: "nextJobId" });
+  return next - 1n;
+}
+
 export async function readJob(at: Omit<Contract, "wallet">, jobId: bigint): Promise<OnChainJob> {
   const [poster, price, seal, endsAt, state, commit, reviewers] = await at.publicClient.readContract({
     address: at.address, abi: podJobsAbi, functionName: "jobs", args: [jobId],

@@ -14,7 +14,11 @@ export const CHROME = {
     connecting: "Connecting…",
     wrongChain: (chain: string) => `Switch to ${chain}`,
     connectedAs: (short: string) => `Connected as ${short}`,
+    change: "Change",
+    chooseAnother: "Choose another account",
+    changeLabel: "Choose another account in your wallet",
     failed: "The wallet said no",
+    cannotChoose: "Your wallet would not offer a choice: switch accounts in the wallet itself",
   },
 } as const;
 

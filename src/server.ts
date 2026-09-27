@@ -346,7 +346,7 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
   if (!configured) return {};
   if (!isAddress(configured)) throw new Error(`POD_JOBS_ADDRESS is not an address: ${configured}`);
   const jobs = configured;
-  const { readJob, readSeats, readTerms } = await import("./jobs.ts");
+  const { readJob, readJobCount, readSeats, readTerms } = await import("./jobs.ts");
   const { monadClient } = await import("./live.ts");
   const { MONAD_REGISTRIES, MONAD_TESTNET } = await import("./registry.ts");
   const rpc = process.env.MONAD_TESTNET_RPC ?? MONAD_TESTNET.rpc;
@@ -395,7 +395,9 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
   };
   const { holderOf } = await import("./handover.ts");
   const owners = ownersFrom({
+    jobs,
     job: market.chain.job,
+    count: () => readJobCount(contract),
     ...(token ? { holder: (tokenId: bigint) => holderOf(token, tokenId) } : {}),
   });
   return { market, door, notes, jobList, credit, owners, ...(claims ? { claims } : {}) };

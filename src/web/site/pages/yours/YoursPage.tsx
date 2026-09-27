@@ -3,17 +3,18 @@ import type { MarketConfig } from "../../../../market.ts";
 import { Sheet, useConnectedAccount } from "../../../shared/index.ts";
 import { InTheBrowser, PageBill, Poster } from "../../components/index.ts";
 import { SITE } from "../../copy.ts";
-import { useSite } from "../../hooks/index.ts";
+import { useKeptPayment, useSite } from "../../hooks/index.ts";
 import { ConnectSheet } from "./ConnectSheet.tsx";
 import { KeptSheet } from "./KeptSheet.tsx";
 import { WalletsOwn } from "./WalletsOwn.tsx";
 
 function ForTheWallet({ market }: { readonly market: MarketConfig }): ReactElement {
   const account = useConnectedAccount();
+  const kept = useKeptPayment(market);
   return (
     <>
-      <KeptSheet market={market} />
-      {account ? <WalletsOwn address={account} /> : <ConnectSheet />}
+      {kept && <KeptSheet kept={kept} />}
+      {account ? <WalletsOwn address={account} keptOnChainId={kept?.payment.onChainId} /> : <ConnectSheet />}
     </>
   );
 }

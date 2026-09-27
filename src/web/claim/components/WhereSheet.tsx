@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactElement } from "react";
 import type { Address } from "viem";
 import { isAddressEqual } from "viem";
 import { CLAIM_STEPS, COPY, stepStates, type Claimable, type ClaimStatus } from "../state/index.ts";
-import { Sheet } from "../../shared/index.ts";
+import { ChooseAccount, CHROME, Sheet } from "../../shared/index.ts";
 
 interface WhereSheetProps {
   readonly claimable: Claimable;
@@ -32,7 +32,7 @@ export function WhereSheet({ claimable, hasWallet, connected, status, onClaim }:
             value={account} onChange={(event) => setAccount(event.target.value)} disabled={isWorking} />
         </label>
         {connected && !isAddressEqual(connected, claimable.holder) && (
-          <p id="not-holder" className="said-status">{COPY.where.notHolder(connected, claimable.holder)}</p>
+          <p id="not-holder" className="said-status">{COPY.where.notHolder(connected, claimable.holder)} <ChooseAccount label={CHROME.wallet.chooseAnother} /></p>
         )}
         <button type="submit" id="claim" className="primary" disabled={!hasWallet || isWorking || !account.trim()} data-busy={isWorking || undefined}>
           {isWorking ? COPY.where.busy : COPY.where.button}

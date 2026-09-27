@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import type { Tile } from "../gallery.ts";
 import type { JobRecord } from "../store.ts";
 import { recordByRole } from "../agentpage.ts";
-import { claimPath, receiptFilePath, receiptPath, refundPath } from "../routes.ts";
+import { claimPath, receiptFilePath, receiptPath, refundByNumberPath, refundPath } from "../routes.ts";
 import {
-  jobView, moneyAt, needsTheChainForMoney, receiptView, renderSite, tileView, type SiteData, type SitePage,
+  jobView, moneyAt, needsTheChainForMoney, receiptView, renderSite, tileView, unpublishedView, type SiteData, type SitePage,
 } from "../web/site/index.ts";
 import { lengthOf, timeLeft, whenInUTC } from "../web/site/copy.ts";
 import type { SignedReceipt } from "../receipt.ts";
@@ -291,6 +291,22 @@ describe("where the money is", () => {
   test("how long is left is said in words", () => {
     expect(timeLeft("2026-10-01T15:00:00.000Z", NOW)).toBe("3 hours left");
     expect(timeLeft("2026-10-01T11:00:00.000Z", NOW)).toBe("closed");
+  });
+});
+
+describe("a job paid for and never published", () => {
+  const paid = (state: "open" | "settled" | "refunded") => ({
+    onChainId: 7n,
+    job: { poster: POSTER, price: 10n ** 18n, seal: `0x${"ab".repeat(32)}`, endsAt: 1_790_000_000n, state, commit: `0x${"00".repeat(32)}`, reviewers: 1 },
+  } as const);
+
+  test("its money is held until the window closes, then taken back by its number, or said to be back", () => {
+    expect(unpublishedView(paid("open"))).toEqual({
+      onChainId: "7", price: "1000000000000000000",
+      money: { kind: "held", endsAt: new Date(1_790_000_000_000).toISOString(), takeBack: refundByNumberPath("7") },
+    });
+    expect(unpublishedView(paid("refunded")).money).toEqual({ kind: "refunded" });
+    expect(unpublishedView(paid("settled")).money).toEqual({ kind: "paid" });
   });
 });
 

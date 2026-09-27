@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { isAddressEqual, type Address } from "viem";
 import { explorerTransaction } from "../../../market.ts";
-import { Sheet } from "../../shared/index.ts";
+import { ChooseAccount, CHROME, Sheet } from "../../shared/index.ts";
 import { COPY, REFUND_STEPS, stepStates, type OnChainNow, type RefundStatus, type Standing } from "../state/index.ts";
 
 interface TakeSheetProps {
@@ -22,7 +22,7 @@ export function TakeSheet({ onChain, standing, coin, explorer, hasWallet, connec
   return (
     <Sheet number={2} id="take" title={COPY.take.title}>
       {connected && !isAddressEqual(connected, onChain.poster) && (
-        <p id="not-poster" className="said-status">{COPY.take.notPoster(connected, onChain.poster)}</p>
+        <p id="not-poster" className="said-status">{COPY.take.notPoster(connected, onChain.poster)} <ChooseAccount label={CHROME.wallet.chooseAnother} /></p>
       )}
       <button type="button" id="refund" className="primary" onClick={onRefund}
         disabled={!hasWallet || isWorking || status.kind === "sent" || standing.kind !== "ready"} data-busy={isWorking || undefined}>

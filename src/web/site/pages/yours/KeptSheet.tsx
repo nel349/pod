@@ -1,14 +1,11 @@
 import type { ReactElement } from "react";
-import type { MarketConfig } from "../../../../market.ts";
 import { refundByNumberPath, ROUTES } from "../../../../routes.ts";
 import { Sheet } from "../../../shared/index.ts";
+import type { Kept } from "../../../post/index.ts";
 import { SITE } from "../../copy.ts";
-import { useKeptPayment } from "../../hooks/index.ts";
 
 /** A payment this browser sent and never published: finish it, or take the money back. */
-export function KeptSheet({ market }: { readonly market: MarketConfig }): ReactElement | null {
-  const kept = useKeptPayment(market);
-  if (!kept) return null;
+export function KeptSheet({ kept }: { readonly kept: Kept }): ReactElement {
   return (
     <Sheet number={1} id="kept" title={SITE.yours.keptTitle} stamp={false}>
       <p className="lede">{SITE.yours.kept(kept.name)}</p>

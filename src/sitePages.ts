@@ -4,14 +4,14 @@
  * A chain that cannot be read right now does not take a page down: the page is drawn without what the
  * chain would have added, says so where it matters, and the reason is logged for whoever runs this.
  */
-import type { Address } from "viem";
+import { isAddressEqual, type Address } from "viem";
 import { recordByRole } from "./agentpage.ts";
 import { firstLine } from "./errors.ts";
 import type { Owners } from "./owners.ts";
 import { jobPath } from "./routes.ts";
 import type { JobRecord, JobStore } from "./store.ts";
 import {
-  jobView, needsTheChainForMoney, receiptView, tileView, yoursEntry,
+  jobView, needsTheChainForMoney, receiptView, tileView, unpublishedView, yoursEntry,
   type ChainSays, type JobView, type ReceiptView, type SitePage, type TileView, type YoursEntry, type YoursView,
 } from "./web/site/index.ts";
 
@@ -83,9 +83,14 @@ export async function yoursData(store: JobStore, owners: Owners, address: Addres
     .filter(({ who }) => who.poster?.toLowerCase() === wanted)
     .map(async ({ record, who }) => yoursEntry(record, { ...who, ...(await moneyOnTheChain(record, owners, now)) })));
   const runningFirst = (a: YoursEntry, b: YoursEntry): number => Number(b.tile.verdict === "running") - Number(a.tile.verdict === "running");
+  // what it paid for that never reached the wall: on this contract, by a number no record here has
+  const paid = await quietly(`what ${address} paid for`, () => owners.paidBy(address));
+  const published = new Set(onTheChain.filter((record) => record.chain && isAddressEqual(record.chain.jobs, owners.jobs)).map((record) => record.chain?.jobId));
+  const unpublished = paid?.filter((one) => !published.has(one.onChainId.toString())).map(unpublishedView);
   return {
     address,
     posted: posted.sort(runningFirst),
+    ...(unpublished ? { unpublished } : {}),
     holds: read.filter(({ who }) => who.holder?.toLowerCase() === wanted).map(({ record, who }) => yoursEntry(record, who)),
   };
 }

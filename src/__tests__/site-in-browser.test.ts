@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { privateKeyToAccount } from "viem/accounts";
 import { sealSpec } from "../job.ts";
-import { post, readJob } from "../jobs.ts";
+import { post, readJob, readJobCount } from "../jobs.ts";
 import { ownersFrom } from "../owners.ts";
 import { readerFor } from "../posting.ts";
 import { openJob } from "../publish.ts";
@@ -28,6 +28,7 @@ import { TITLED_SPEC } from "./support/titled.ts";
 
 const available = (await anvilAvailable()) && (await browserAvailable());
 const POSTER = privateKeyToAccount(ANVIL_KEYS[1]).address;
+const STRANGER = privateKeyToAccount(ANVIL_KEYS[2]).address;
 const LEAD = "0x00000000000000000000000000000000000000a1";
 
 let anvil: Anvil;
@@ -36,6 +37,7 @@ let base = "";
 let server: { stop: () => void } | undefined;
 let browser: Browser | undefined;
 let market: Market | undefined;
+let neverPublished = 0n;
 
 /** Anything React or the page said went wrong, kept where a test can read it. */
 const CATCH_ERRORS = `(() => {
@@ -65,10 +67,15 @@ beforeAll(async () => {
   const onChainId = await post({ address: jobs, publicClient: anvil.publicClient, wallet: anvil.wallet(ANVIL_KEYS[1]) }, {
     seal, endsAt: now + 3600n, reviewers: 1, price: TITLED_SPEC.price,
   });
+  // and one the same poster paid for and never published, which only the chain knows about
+  neverPublished = await post({ address: jobs, publicClient: anvil.publicClient, wallet: anvil.wallet(ANVIL_KEYS[1]) }, {
+    seal: await sealSpec({ ...TITLED_SPEC, salt: "never-published" }), endsAt: now + 3600n, reviewers: 1, price: TITLED_SPEC.price,
+  });
   const opened = await openJob(store, { jobId: "a-coat", seal, spec: TITLED_SPEC, endsAt: new Date(Number(now + 3600n) * 1000), seats: [] });
   await store.save({ ...opened, chain: { network: "monad-testnet", jobId: String(onChainId), jobs }, poster: POSTER });
 
-  const serving = serve(store, 0, { market, owners: ownersFrom({ job: reader.job }) });
+  const owners = ownersFrom({ jobs, job: reader.job, count: () => readJobCount({ address: jobs, publicClient: anvil.publicClient }) });
+  const serving = serve(store, 0, { market, owners });
   server = serving;
   if (serving.port === undefined) throw new Error("the server did not say which port it took");
   base = `http://127.0.0.1:${serving.port}`;
@@ -88,10 +95,11 @@ afterAll(async () => {
 /** the header's wallet, in whichever state: drawn only once the page is the browser's */
 const TAKEN_OVER = ".wallet button, .wallet .who, .wallet .none";
 
-async function openAt(path: string, withWallet: boolean): Promise<Browser> {
+/** @param wallet whose wallet is in the page, if any */
+async function openAt(path: string, wallet: string | false): Promise<Browser> {
   browser = await Browser.start();
   await browser.beforeEveryPage(CATCH_ERRORS);
-  if (withWallet) await browser.beforeEveryPage(walletInThePage({ rpc: anvil.rpc, address: POSTER, chainId: 31337 }));
+  if (wallet) await browser.beforeEveryPage(walletInThePage({ rpc: anvil.rpc, address: wallet, chainId: 31337 }));
   await browser.open(base + path);
   await browser.until(`document.querySelector(${JSON.stringify(TAKEN_OVER)})`, "the page to be taken over, wallet and all");
   return browser;
@@ -130,7 +138,7 @@ describe.skipIf(!available)("the pages the server draws, in a browser", () => {
   }, 120_000);
 
   test("with the poster's wallet connected, their job says it is theirs, and their own page lists it", async () => {
-    const page = await openAt(jobPath("a-coat"), true);
+    const page = await openAt(jobPath("a-coat"), POSTER);
     await page.click(".wallet button");
     await page.until(`document.querySelector(".wallet .who")`, "the wallet to connect");
     await page.until(`document.querySelector(".yours-marks")?.textContent.includes(${JSON.stringify(SITE.job.yourJob)})`, "the job to say it is theirs");
@@ -139,6 +147,19 @@ describe.skipIf(!available)("the pages the server draws, in a browser", () => {
     await page.open(base + ROUTES.yours);
     await page.until(`document.querySelector("#posted")?.textContent.includes(${JSON.stringify(TITLED_SPEC.idea)})`, "their job on their own page", 30);
     expect(await text(page, "#posted")).toContain(SITE.job.money.heldUntil);
+    // paid for from wherever, never published: found on the chain, not in this browser
+    expect(await text(page, "#unpublished")).toContain(`Job ${neverPublished} on the contract`);
+    expect(await errors(page)).toEqual([]);
+  }, 120_000);
+
+  test("with somebody else's wallet connected, the job says who paid, and that only that wallet can take the money back", async () => {
+    const page = await openAt(jobPath("a-coat"), STRANGER);
+    await page.click(".wallet button");
+    await page.until(`document.querySelector(".wallet .who")`, "the wallet to connect");
+    expect(await text(page, "#stands")).toContain(`${SITE.job.money.paidFor} 0x7099…79C8`);
+    await page.until(`document.querySelector(".not-their-wallet")`, "the page to say this is not the wallet that paid");
+    expect(await text(page, ".not-their-wallet")).toContain(SITE.job.money.notTheirWallet("0x3C44…93BC", "0x7099…79C8"));
+    expect(await page.evaluate<boolean>(`!!document.querySelector(".not-their-wallet button")`)).toBe(true);
     expect(await errors(page)).toEqual([]);
   }, 120_000);
 

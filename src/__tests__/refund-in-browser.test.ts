@@ -125,7 +125,9 @@ describe.skipIf(!available)("taking the money back from a browser", () => {
     await page.until(`document.querySelector("#said").textContent.length > 0`, "the refusal to be said", 60, SAYS);
     expect(await text(page, "#said")).toBe(COPY.take.refused.NotPoster);
     await page.until(`document.querySelector("#not-poster")`, "the warning to appear");
-    expect(await text(page, "#not-poster")).toBe(COPY.take.notPoster(STRANGER, POSTED_BY));
+    expect(await text(page, "#not-poster")).toContain(COPY.take.notPoster(STRANGER, POSTED_BY));
+    // with the way to pick the poster's account, rather than only being told to
+    expect(await page.evaluate<boolean>(`!!document.querySelector("#not-poster button")`)).toBe(true);
     // and the money has not moved: the job is still as nobody left it
     expect((await readJob({ address: jobs, publicClient: anvil.publicClient }, onChainIds.get(CLOSED) ?? 0n)).state).toBe("open");
     await photograph(page, "not-the-poster");

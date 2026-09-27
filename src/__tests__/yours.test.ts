@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { privateKeyToAccount } from "viem/accounts";
 import { sealSpec } from "../job.ts";
-import { post, readJob } from "../jobs.ts";
+import { post, readJob, readJobCount } from "../jobs.ts";
 import { holderOf } from "../handover.ts";
 import { ownersFrom, type Owners } from "../owners.ts";
 import { readerFor } from "../posting.ts";
 import { openJob } from "../publish.ts";
-import { claimPath, refundPath, yoursApiPath } from "../routes.ts";
+import { claimPath, refundByNumberPath, refundPath, yoursApiPath } from "../routes.ts";
 import { handle } from "../server.ts";
 import { yoursData } from "../sitePages.ts";
 import type { JobStore } from "../store.ts";
@@ -57,7 +57,8 @@ beforeAll(async () => {
   await aRunningJob("a-coat-still-open", POSTER);
   await aRunningJob("somebody-elses-coat", STRANGER);
   const reader = readerFor({ jobs: titled.jobs, read: (id) => readJob({ address: titled.jobs, publicClient: anvil.publicClient }, id) });
-  owners = ownersFrom({ job: reader.job, holder: (tokenId) => holderOf({ address: titled.token, publicClient: anvil.publicClient }, tokenId) });
+  owners = ownersFrom({
+    jobs: titled.jobs, job: reader.job, count: () => readJobCount({ address: titled.jobs, publicClient: anvil.publicClient }), holder: (tokenId) => holderOf({ address: titled.token, publicClient: anvil.publicClient }, tokenId) });
 }, 120_000);
 
 afterAll(() => anvil?.stop());
@@ -99,6 +100,47 @@ describe.skipIf(!available)("a wallet's own page", () => {
     const buyer = await yoursData(store, owners, STRANGER_ADDRESS, new Date());
     expect(buyer.holds.map((entry) => entry.tile.jobId)).toEqual(["a-coat-titled"]);
     expect(buyer.posted.map((entry) => entry.tile.jobId)).toEqual(["somebody-elses-coat"]);
+  });
+
+  test("a job paid for and never published is found from any browser, by its number on the contract, and only by its payer", async () => {
+    const now = (await anvil.publicClient.getBlock()).timestamp;
+    const neverPublished = await post(
+      { address: titled.jobs, publicClient: anvil.publicClient, wallet: anvil.wallet(POSTER) },
+      { seal: await sealSpec({ ...TITLED_SPEC, salt: "never-published" }), endsAt: now + 3600n, reviewers: 1, price: TITLED_SPEC.price },
+    );
+    const yours = await yoursData(store, owners, POSTER_ADDRESS, new Date());
+    expect(yours.unpublished).toEqual([{
+      onChainId: neverPublished.toString(), price: TITLED_SPEC.price.toString(),
+      money: { kind: "held", endsAt: new Date(Number(now + 3600n) * 1000).toISOString(), takeBack: refundByNumberPath(neverPublished.toString()) },
+    }]);
+    // somebody else never sees it
+    expect((await yoursData(store, owners, STRANGER_ADDRESS, new Date())).unpublished).toEqual([]);
+  });
+
+  test("who paid for each job is asked once and remembered; a later visit asks again only about the wallet's own", async () => {
+    const reading = { address: titled.jobs, publicClient: anvil.publicClient };
+    const asked: bigint[] = [];
+    const counting = ownersFrom({
+      jobs: titled.jobs, count: () => readJobCount(reading),
+      job: async (id) => { asked.push(id); return await readJob(reading, id); },
+    });
+    const count = await readJobCount(reading);
+    const theirs = (await counting.paidBy(POSTER_ADDRESS)).map((paid) => paid.onChainId).sort();
+    expect(asked.length).toBe(Number(count));
+    asked.length = 0;
+    await counting.paidBy(POSTER_ADDRESS);
+    expect([...asked].sort()).toEqual(theirs);
+  });
+
+  test("a job from an earlier contract is never asked of this one by its number, which here is somebody else's", async () => {
+    const opened = await openJob(store, { jobId: "from-an-earlier-contract", seal: `0x${"12".repeat(32)}`, spec: TITLED_SPEC, endsAt: windowEnds, seats: [] });
+    // number 1 on another contract; on this one, job 1 is the poster's titled job
+    await store.save({ ...opened, chain: { network: "monad-testnet", jobId: "1", jobs: "0x00000000000000000000000000000000000000e1", tokenId: titled.tokenId.toString() } });
+    const record = await store.read("from-an-earlier-contract");
+    if (!record) throw new Error("the record was not kept");
+    expect(await owners.posterOf(record)).toBeUndefined();
+    expect(await owners.holderOf(record)).toBeUndefined();
+    expect((await yoursData(store, owners, POSTER_ADDRESS, new Date())).posted.map((entry) => entry.tile.jobId)).not.toContain("from-an-earlier-contract");
   });
 
   test("the server answers the same at the wallet's own address, and refuses what is not an address", async () => {

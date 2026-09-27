@@ -256,3 +256,9 @@ a.primary.small { font-size: 18px; padding: 10px 16px 8px; box-shadow: 4px 4px 0
 @media (prefers-reduced-motion: reduce) {
   .seal, .seal .piece { animation: none !important; transition: none !important; }
 }
+
+/* the wallet here is not the one that paid: said in the pink of a refusal, with the way to pick another */
+.not-their-wallet { margin: 0 0 16px; padding: 12px 14px; border: 3px solid var(--pink); max-width: 62ch; }
+.not-their-wallet p { margin: 0; font: 500 15px/1.45 var(--read); }
+.not-their-wallet p + p { margin-top: 6px; }
+.not-their-wallet button.quiet { padding-left: 0; color: var(--ink); }

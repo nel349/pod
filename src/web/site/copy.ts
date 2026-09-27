@@ -131,8 +131,12 @@ export const SITE = {
     waitingBecause: (why: string) => `Held back from grading: ${why}.`,
     money: {
       heldUntil: "The money is held by the contract until",
-      onlyTheVerdict: "Only the verdict can move it before then.",
-      heldYours: "If the work is not finished by then, it is yours to take back.",
+      onlyTheVerdict: "Only the verdict can move it before then. If the work is not finished by then, whoever posted the job can take it back: the contract allows nothing sooner.",
+      heldYours: "You posted this job, so that will be you.",
+      whereToTakeBack: "Where to take it back",
+      paidFor: "Paid for by",
+      notTheirWallet: (connected: string, poster: string) =>
+        `The wallet connected here is ${connected}. This job was paid for by ${poster}, and only that wallet can take the money back.`,
       returnable: "The window has closed and nothing was settled, so whoever posted it can take the money back.",
       takeBack: "Take the money back",
       paid: "The pod was paid from the money held for it.",
@@ -158,6 +162,7 @@ export const SITE = {
     readReceipt: "Read the receipt",
     signedFile: "the signed file",
     ownsTitle: "Who owns it",
+    onChainTitle: "On the chain",
     work: "holds every attempt, including the ones that failed, at the commit that was graded.",
     title: (tokenId: string) => `POD #${tokenId} is the title to this repository. Whoever holds it can claim the repository by signing with the wallet that holds it. A sale carries both.`,
     heldBy: "Held by",
@@ -215,7 +220,9 @@ export const SITE = {
     holdsTitle: "What you hold",
     nothingPosted: "Nothing posted from this wallet yet.",
     nothingHeld: "No titles held by this wallet.",
-    onlyThisBrowser: "A job you paid for and never published is found from the browser you paid in. From another browser, find it by its number on the refund page.",
+    unpublishedTitle: "Paid, never published",
+    unpublished: (onChainId: string, price: string) => `Job ${onChainId} on the contract: ${price} paid, and never put on the wall.`,
+    unpublishedUnread: "Whether anything you paid for never reached the wall could not be read from the chain just now. Reload to ask again.",
   },
   missing: {
     title: "Not here · POD",

@@ -114,7 +114,9 @@ describe.skipIf(!available)("claiming a POD's repository from a browser", () => 
     expect(await stepStates(page)).toEqual(["done", "done", "failed"]);
     // once connected, the page says so beside the button, before anybody signs again
     await page.until(`document.querySelector("#not-holder")`, "the warning to appear");
-    expect(await page.evaluate<string>(`document.querySelector("#not-holder").textContent`)).toBe(COPY.where.notHolder(STRANGER, HOLDER));
+    expect(await page.evaluate<string>(`document.querySelector("#not-holder").textContent`)).toContain(COPY.where.notHolder(STRANGER, HOLDER));
+    // with the way to pick the holder's account, rather than only being told to
+    expect(await page.evaluate<boolean>(`!!document.querySelector("#not-holder button")`)).toBe(true);
     expect(await said(page)).not.toContain("GitHub");
   }, 120_000);
 });
