@@ -262,3 +262,8 @@ a.primary.small { font-size: 18px; padding: 10px 16px 8px; box-shadow: 4px 4px 0
 .not-their-wallet p { margin: 0; font: 500 15px/1.45 var(--read); }
 .not-their-wallet p + p { margin-top: 6px; }
 .not-their-wallet button.quiet { padding-left: 0; color: var(--ink); }
+
+/* withdrawn: the poster took the money back before any verdict, so the job is closed, in grey */
+.seal.withdrawn .piece.held { fill: var(--grey); }
+.flyer.withdrawn .flyer-stamp { color: var(--grey); }
+.tally .withdrawn b { color: var(--grey); }

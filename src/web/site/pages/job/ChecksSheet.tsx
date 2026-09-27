@@ -11,8 +11,11 @@ const outcomeOf = (exitCode: number | undefined): Outcome =>
 /** The checks anybody may read now, what each said, and how many are still sealed. */
 export function ChecksSheet({ job }: { readonly job: JobView }): ReactElement {
   const isRunning = job.verdict === "running";
+  const title = isRunning ? SITE.job.checks.running : job.verdict === "withdrawn" ? SITE.job.checks.withdrawn : SITE.job.checks.done;
+  // the checks can be fetched once the server publishes them, which is when none is sealed any more
+  const canFetch = !isRunning && job.sealedChecks === 0;
   return (
-    <Sheet number={4} id="checks" title={isRunning ? SITE.job.checks.running : SITE.job.checks.done} stamp={false}>
+    <Sheet number={4} id="checks" title={title} stamp={false}>
       <ul className="checks">
         {job.checks.map((check) => {
           const outcome = outcomeOf(check.exitCode);
@@ -26,7 +29,7 @@ export function ChecksSheet({ job }: { readonly job: JobView }): ReactElement {
         })}
       </ul>
       {job.sealedChecks > 0 && <p className="note">{SITE.job.sealedCount(job.sealedChecks)}</p>}
-      {!isRunning && <p className="note fetch"><a href={job.checksPath}>{SITE.job.fetchChecks}</a>{SITE.job.fetchChecksRest}</p>}
+      {canFetch && <p className="note fetch"><a href={job.checksPath}>{SITE.job.fetchChecks}</a>{SITE.job.fetchChecksRest}</p>}
     </Sheet>
   );
 }

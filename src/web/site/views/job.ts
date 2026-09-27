@@ -2,7 +2,7 @@ import { z } from "zod";
 import { shareOf, type Role } from "../../../job.ts";
 import { NoteSchema, type Note } from "../../../note.ts";
 import { repeatCommand } from "../../../jobpage.ts";
-import { standingWords } from "../../../gallery.ts";
+import { standingWords, type Tile } from "../../../gallery.ts";
 import type { OnChainJob } from "../../../posting.ts";
 import { checksPath, claimPath, receiptFilePath, receiptPath } from "../../../routes.ts";
 import { SEATS } from "../../../seal.ts";
@@ -73,8 +73,12 @@ export interface ChainSays {
 }
 
 export function jobView(record: JobRecord, notes: readonly Note[], chainSays: ChainSays): JobView {
-  const { tile } = record;
+  // money taken back before any verdict closes the job, whether or not the worker has written it down yet
+  const isWithdrawn = record.tile.verdict === "running" && chainSays.onChain?.state === "refunded";
+  const tile: Tile = isWithdrawn ? { ...record.tile, verdict: "withdrawn" } : record.tile;
   const isRunning = tile.verdict === "running";
+  // what is sealed follows the record, which is what the server serves the checks and notes by
+  const isSealed = record.tile.verdict === "running";
   const money = moneyOf(record, chainSays.onChain);
   const tokenId = record.chain?.tokenId;
   return {
@@ -82,11 +86,11 @@ export function jobView(record: JobRecord, notes: readonly Note[], chainSays: Ch
     price: tile.price.toString(), seal: record.seal,
     ...(tile.commit ? { commit: tile.commit } : {}),
     ...(record.brief?.howItIsAsked ? { howItIsAsked: record.brief.howItIsAsked } : {}),
-    sealedChecks: isRunning ? record.brief?.sealedChecks ?? record.checksSaid.filter((check) => check.hidden).length : 0,
-    checks: isRunning ? record.checksSaid.filter((check) => !check.hidden) : [...record.checksSaid],
+    sealedChecks: isSealed ? record.brief?.sealedChecks ?? record.checksSaid.filter((check) => check.hidden).length : 0,
+    checks: isSealed ? record.checksSaid.filter((check) => !check.hidden) : [...record.checksSaid],
     checksPath: checksPath(tile.jobId),
     seats: seatsOf(record),
-    notes: isRunning ? [] : [...notes],
+    notes: isSealed ? [] : [...notes],
     ...(record.signed ? { receipt: receiptParts(record.jobId, record.signed, record.repository) } : {}),
     ...(record.chain ? { chain: {
       jobId: record.chain.jobId, jobs: record.chain.jobs,

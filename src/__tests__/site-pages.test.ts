@@ -256,6 +256,29 @@ describe("one job, opened", () => {
   });
 });
 
+describe("a job whose poster took the money back before any verdict", () => {
+  test("its page says it is closed as soon as the chain says so, and keeps what was sealed sealed until the record does", () => {
+    const view = jobView(running(), [], { onChain: { state: "refunded", endsAt: 1_790_000_000n } });
+    expect(view.verdict).toBe("withdrawn");
+    expect(view.money).toEqual({ kind: "refunded" });
+    expect(view.checks.map((check) => check.says)).toEqual(["the page answers"]);
+    expect(view.sealedChecks).toBe(1);
+    const html = draw({ page: "job", job: view });
+    expect(html).toContain("took the money back before there was any verdict");
+    expect(html).toContain("What was to be checked");
+    expect(html).not.toContain("Fetch the checks");
+  });
+
+  test("once written down, it is closed on the wall too, counted apart, and its checks are published", () => {
+    const closed = record({ tile: tile({ verdict: "withdrawn", receiptURI: undefined }), chain: ON_CHAIN });
+    expect(wall([closed.tile])).toContain("<b>1</b> withdrawn");
+    const view = jobView(closed, [], {});
+    expect(view.standing).toBe("withdrawn, the money taken back");
+    expect(view.checks).toHaveLength(2);
+    expect(draw({ page: "job", job: view })).toContain("Fetch the checks");
+  });
+});
+
 describe("where the money is", () => {
   test("held until the window closes, then the poster's to take back", () => {
     const view = jobView(running(), [], {});

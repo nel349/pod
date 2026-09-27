@@ -119,7 +119,7 @@ function encode(record: JobRecord): string {
   return JSON.stringify({ ...record, tile: { ...record.tile, price: record.tile.price.toString() } }, null, 2);
 }
 
-const VERDICTS: readonly Tile["verdict"][] = ["passed", "failed", "not-reproducible", "running"];
+const VERDICTS: readonly Tile["verdict"][] = ["passed", "failed", "not-reproducible", "running", "withdrawn"];
 
 /**
  * A record is checked on the way in, not trusted.

@@ -7,7 +7,8 @@ import { MS_IN_A_SECOND, type JobView } from "../../views/index.ts";
 /** What the pod said to each other, in the order it was said: the story of the job, refusals included. */
 export function NotesSheet({ job }: { readonly job: JobView }): ReactElement | null {
   const isRunning = job.verdict === "running";
-  if (isRunning && job.seats.every((seat) => !seat.agent)) return null;
+  // nobody sat, so nobody said anything: nothing to show, now or later
+  if ((isRunning || job.verdict === "withdrawn") && job.seats.every((seat) => !seat.agent)) return null;
   return (
     <Sheet number={5} id="notes" title={SITE.job.notesTitle} stamp={false}>
       {isRunning && <p className="note">{SITE.job.notesLater}</p>}

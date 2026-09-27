@@ -146,6 +146,13 @@ export class Worker {
     const onChainId = BigInt(record.chain.jobId);
     const onChain = await readJob(jobs, onChainId);
 
+    // its poster took the money back before there was any verdict: the job is closed, written down once
+    if (onChain.state === "refunded" && record.tile.verdict === "running") {
+      await store.save({ ...record, tile: { ...record.tile, verdict: "withdrawn", finishedAt: new Date().toISOString() } });
+      this.say(`${jobId}: its poster took the money back before any verdict, so it is closed`);
+      return;
+    }
+
     const signed = record.signed;
     if (signed && record.tile.verdict !== "running") {
       const graded = signed.receipt;
@@ -214,6 +221,7 @@ export class Worker {
    * passed, its title is minted. Such a job is not read from the chain again.
    */
   private isFinished(record: JobRecord): boolean {
+    if (record.tile.verdict === "withdrawn") return true;
     if (!record.chain?.settled || !record.signed) return false;
     if (record.signed.receipt.verdict !== "passed") return true;
     const titled = !this.options.token || record.chain.tokenId !== undefined;

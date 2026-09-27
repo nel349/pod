@@ -562,6 +562,8 @@ describe.skipIf(!available)("the worker", () => {
   // last, because it moves the chain's clock past every job's window
   test("a verdict that comes after the window is said and not sent, and records nothing in ERC-8004", async () => {
     const late = await aJob("a-coat-graded-too-late", WORKING, SEATS);
+    // and one the pod never approved anything on, which only ever ends by its poster taking the money back
+    const leftAlone = await aJob("a-coat-nobody-finished", WORKING, []);
     const said: string[] = [];
     const worker = aWorker(said);
     await worker.tick();
@@ -590,5 +592,19 @@ describe.skipIf(!available)("the worker", () => {
     await worker.tick();
     expect((await answerTo(asked)).responseHash).toBe(NOTHING);
     expect(said.some((line) => line.includes("never settled"))).toBe(true);
+
+    // money taken back before any verdict closes the job: written down once, and not read again
+    const { request: takeBack } = await anvil.publicClient.simulateContract({
+      address: jobs, abi: [{ type: "function", name: "reclaim", inputs: [{ name: "jobId", type: "uint256" }], outputs: [], stateMutability: "nonpayable" }],
+      functionName: "reclaim", args: [leftAlone.onChainId], account: poster.wallet.account!,
+    });
+    await anvil.publicClient.waitForTransactionReceipt({ hash: await poster.wallet.writeContract(takeBack) });
+    expect((await store.read(leftAlone.jobId))?.tile.verdict).toBe("running");
+    await worker.tick();
+    const closed = await store.read(leftAlone.jobId);
+    expect(closed?.tile.verdict).toBe("withdrawn");
+    expect(closed?.tile.finishedAt).toMatch(/^\d{4}-/);
+    await worker.tick();
+    expect(said.filter((line) => line.includes(`${leftAlone.jobId}: its poster took the money back`))).toHaveLength(1);
   }, 300_000);
 });

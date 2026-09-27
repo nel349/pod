@@ -11,6 +11,7 @@ const TALLIED: readonly { readonly verdict: Verdict; readonly word: string; read
   { verdict: "passed", word: SITE.wall.tally.paid, shownWhenNone: true },
   { verdict: "failed", word: SITE.wall.tally.refused, shownWhenNone: true },
   { verdict: "not-reproducible", word: SITE.wall.tally.unsure, shownWhenNone: false },
+  { verdict: "withdrawn", word: SITE.wall.tally.withdrawn, shownWhenNone: false },
 ];
 
 /** How many of each, failures counted as plainly as passes. */

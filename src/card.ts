@@ -24,6 +24,7 @@ const INKS: Record<Tile["verdict"], string> = {
   passed: "#117a43",
   failed: "#ff2e88",
   "not-reproducible": "#9a6a00",
+  withdrawn: "#5b5b55",
   running: "#2448d6",
 };
 

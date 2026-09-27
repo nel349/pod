@@ -39,7 +39,7 @@ export function moneyOf(record: JobRecord, onChain: ChainSays["onChain"]): Money
   if (onChain?.state === "refunded") return { kind: "refunded" };
   if (onChain?.state === "settled") return record.tile.verdict === "failed" ? { kind: "refunded" } : { kind: "paid" };
   if (record.tile.verdict === "passed") return { kind: "paid" };
-  if (record.tile.verdict === "failed") return { kind: "refunded" };
+  if (record.tile.verdict === "failed" || record.tile.verdict === "withdrawn") return { kind: "refunded" };
   const endsAt = onChain ? new Date(Number(onChain.endsAt) * MS_IN_A_SECOND).toISOString() : record.brief?.endsAt;
   return endsAt ? { kind: "held", endsAt, takeBack } : { kind: "returnable", takeBack };
 }

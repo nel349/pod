@@ -5,7 +5,7 @@
 import { z } from "zod";
 import type { Tile } from "../../../gallery.ts";
 
-export const VERDICTS = ["passed", "failed", "not-reproducible", "running"] as const satisfies readonly Tile["verdict"][];
+export const VERDICTS = ["passed", "failed", "not-reproducible", "running", "withdrawn"] as const satisfies readonly Tile["verdict"][];
 export const MODES = ["flash", "sprint", "project"] as const satisfies readonly Tile["mode"][];
 export const WEI = z.string().regex(/^[0-9]+$/, "an amount in wei");
 export const WHEN = z.iso.datetime({ offset: true });

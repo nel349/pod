@@ -25,6 +25,8 @@ export function recordByRole(agent: string, tiles: readonly Tile[]): readonly Ro
   const rows = new Map<string, { passed: number; failed: number; unreproducible: number; running: number }>();
 
   for (const tile of tiles) {
+    // taken back before any verdict: nobody's work was judged, so it is in no seat's record
+    if (tile.verdict === "withdrawn") continue;
     for (const seat of tile.pod) {
       if (seat.agent.toLowerCase() !== wanted) continue;
       const row = rows.get(seat.role) ?? { passed: 0, failed: 0, unreproducible: 0, running: 0 };

@@ -11,7 +11,8 @@ export interface Tile {
   /** the idea, in the words it was posted in */
   readonly idea: string;
   readonly mode: "flash" | "sprint" | "project";
-  readonly verdict: "passed" | "failed" | "not-reproducible" | "running";
+  /** "withdrawn" is a job whose poster took the money back before there was any verdict: it is closed */
+  readonly verdict: "passed" | "failed" | "not-reproducible" | "running" | "withdrawn";
   /** where the thing lives, while it lives. Absent once an unclaimed job is archived */
   readonly open?: string;
   readonly commit?: string;
@@ -32,6 +33,7 @@ export function verdictWords(verdict: Tile["verdict"]): string {
     case "failed": return "checks failed";
     case "not-reproducible": return "could not be reproduced";
     case "running": return "being built";
+    case "withdrawn": return "withdrawn, the money taken back";
   }
 }
 

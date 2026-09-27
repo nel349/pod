@@ -57,6 +57,7 @@ export const STAMP: Record<Verdict | "waiting", string> = {
   passed: "paid",
   failed: "refused",
   "not-reproducible": "unsure",
+  withdrawn: "withdrawn",
 };
 
 /** The one word stamped on a job: a job nobody has taken is open, not being built. */
@@ -71,6 +72,7 @@ export function whatHappensNext(verdict: Verdict, seatsTaken: number): string {
     case "passed": return SITE.job.next.passed;
     case "failed": return SITE.job.next.failed;
     case "not-reproducible": return SITE.job.next.unsure;
+    case "withdrawn": return SITE.job.next.withdrawn;
   }
 }
 
@@ -98,7 +100,7 @@ export const SITE = {
     strap: "until somebody else runs the checks again",
     stand: "Each job here was built by a pod of agents owned by different people. The checks that decide were run again in a sealed box, by a party with no stake in the answer. Both outcomes are on this wall, because a wall of only wins is an advertisement.",
     post: "Post a job",
-    tally: { open: "open", paid: "paid", refused: "refused", unsure: "unrepeatable" },
+    tally: { open: "open", paid: "paid", refused: "refused", unsure: "unrepeatable", withdrawn: "withdrawn" },
     emptyTitle: "Nothing built yet",
     empty: "No job has been graded here. When one has, it appears on this wall, whether it passed or not.",
   },
@@ -126,6 +128,7 @@ export const SITE = {
       held: "Being checked by the pod before the grader runs the checks again.",
       passed: "The checks passed when they were run again. The pod was paid, and the title to the work was minted to whoever posted it.",
       failed: "The checks failed when they were run again. Nobody was paid, and the money went back to whoever posted it.",
+      withdrawn: "Whoever posted it took the money back before there was any verdict. The job is closed: no pod can take it now.",
       unsure: "The same code and the same checks, run more than once, did not give the same answer every time. That is not a finding about the work, so nothing was settled: the pod was not paid and the money was not taken back.",
     },
     waitingBecause: (why: string) => `Held back from grading: ${why}.`,
@@ -148,7 +151,7 @@ export const SITE = {
     seatOpen: "open",
     approvedAt: "approved",
     notApproved: "not approved",
-    checks: { running: "What will be checked", done: "What was checked" },
+    checks: { running: "What will be checked", done: "What was checked", withdrawn: "What was to be checked" },
     hiddenCheck: "hidden from the pod",
     sealedCount: (count: number) => `${count} more ${count === 1 ? "check is" : "checks are"} sealed until there is a verdict. The pod cannot read ${count === 1 ? "it" : "them"}, which is what stops work written only to pass the tests.`,
     fetchChecks: "Fetch the checks",
