@@ -61,6 +61,8 @@ export const JobViewSchema = z.object({
   poster: z.string().optional(),
   /** why the worker is holding back a job whose pod says it is done */
   waitingBecause: z.string().optional(),
+  /** why it was taken off the wall, when it was */
+  retired: z.string().optional(),
 });
 export type JobView = z.infer<typeof JobViewSchema>;
 
@@ -107,6 +109,7 @@ export function jobView(record: JobRecord, notes: readonly Note[], chainSays: Ch
     ...(record.repository ? { repository: record.repository } : {}),
     ...(chainSays.poster ? { poster: chainSays.poster } : {}),
     ...(record.waitingBecause && isRunning ? { waitingBecause: record.waitingBecause } : {}),
+    ...(record.retired ? { retired: record.retired.why } : {}),
   };
 }
 

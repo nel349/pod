@@ -43,6 +43,7 @@ export function StandsSheet({ job, lostTouch }: { readonly job: JobView; readonl
     <Sheet number={2} id="stands" title={SITE.job.standsTitle} stamp={false}>
       <p className="lede">{whatHappensNext(job.verdict, job.seats.filter((seat) => seat.agent).length)}</p>
       {job.waitingBecause && <p className="note">{SITE.job.waitingBecause(job.waitingBecause)}</p>}
+      {job.retired && <p className="note">{SITE.job.retired(job.retired)}</p>}
       {job.money && <Money money={job.money} poster={job.poster} />}
       {job.poster && (job.money?.kind === "held" || job.money?.kind === "returnable") && <WhoseMoney poster={job.poster} />}
       {isRunning && <p className="note live" role="status">{lostTouch ? SITE.job.lostTouch : SITE.job.follows}</p>}

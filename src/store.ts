@@ -88,6 +88,11 @@ export interface JobRecord {
   readonly waitingBecause?: string;
   /** the verdicts recorded in ERC-8004 for this job's seats: one per seat, and which request it answered */
   readonly recorded?: readonly RecordedVerdict[];
+  /**
+   * Taken off the wall by whoever runs this server, with when and why, such as a dry run. Nothing is
+   * deleted: its page, receipt and checks answer at their addresses as before, and say it is retired.
+   */
+  readonly retired?: { readonly at: string; readonly why: string };
 }
 
 /** A seat's verdict in ERC-8004: whose seat, which identity asked, and which of its requests was answered. */
@@ -286,6 +291,16 @@ export class JobStore {
     if (!isSafeName(jobId)) return undefined;
     const file = Bun.file(join(this.root, jobId, HISTORY));
     return (await file.exists()) ? file : undefined;
+  }
+
+  /** Take a job off the wall, saying why, or put it back with nothing. Its files are left as they are. */
+  async retire(jobId: string, why: string | undefined, at: Date = new Date()): Promise<JobRecord> {
+    const record = await this.read(jobId);
+    if (!record) throw new Error(`there is no job called ${jobId} to retire`);
+    const { retired: _was, ...rest } = record;
+    const changed: JobRecord = why === undefined ? rest : { ...rest, retired: { at: at.toISOString(), why } };
+    await this.save(changed);
+    return changed;
   }
 
   /** Add a note to a job that exists. The doors decide who may; this only keeps it. */

@@ -315,3 +315,23 @@ describe("pages for people, files for programs", () => {
     expect((await script.text()).length).toBeGreaterThan(10_000);
   }, 60_000);
 });
+
+describe("a job taken off the wall", () => {
+  test("is left off the wall and its agents' pages, keeps its own page and receipt, and can be put back", async () => {
+    const store = await storeWith(record({ tile: tile({ jobId: "a-dry-run" }) }), record({ tile: tile({ jobId: "kept" }) }));
+    await store.retire("a-dry-run", "it was a dry run");
+
+    const wall = await (await get(store, ROUTES.wall)).text();
+    expect(wall).not.toContain(jobPath("a-dry-run"));
+    expect(wall).toContain(jobPath("kept"));
+    expect(await (await get(store, `${ROUTES.agent}${LEAD}`)).text()).not.toContain(jobPath("a-dry-run"));
+
+    const page = await get(store, jobPath("a-dry-run"));
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Taken off the wall: it was a dry run");
+
+    await store.retire("a-dry-run", undefined);
+    expect(await (await get(store, ROUTES.wall)).text()).toContain(jobPath("a-dry-run"));
+    expect((await store.read("a-dry-run"))?.retired).toBeUndefined();
+  });
+});

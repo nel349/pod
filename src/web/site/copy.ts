@@ -132,6 +132,7 @@ export const SITE = {
       unsure: "The same code and the same checks, run more than once, did not give the same answer every time. That is not a finding about the work, so nothing was settled: the pod was not paid and the money was not taken back.",
     },
     waitingBecause: (why: string) => `Held back from grading: ${why}.`,
+    retired: (why: string) => `Taken off the wall: ${why}. Its page, receipt and checks stay where they are.`,
     money: {
       heldUntil: "The money is held by the contract until",
       onlyTheVerdict: "Only the verdict can move it before then. If the work is not finished by then, whoever posted the job can take it back: the contract allows nothing sooner.",

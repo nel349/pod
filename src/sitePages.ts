@@ -51,8 +51,11 @@ async function chainSaysOf(record: JobRecord, owners: Owners | undefined, now: D
 /** A record as a tile, linking its receipt only when a signed one is kept. */
 const tileOf = (record: JobRecord): TileView => tileView(record.tile, record.signed !== undefined);
 
+/** Whether a job is shown among others, on the wall, an agent's page or your own: a retired one is not. */
+const isShown = (record: JobRecord): boolean => record.retired === undefined;
+
 export async function wallPage(store: JobStore): Promise<SitePage> {
-  return { page: "wall", tiles: (await store.inWallOrder()).map(tileOf) };
+  return { page: "wall", tiles: (await store.inWallOrder()).filter(isShown).map(tileOf) };
 }
 
 export async function jobData(store: JobStore, owners: Owners | undefined, jobId: string, now: Date): Promise<JobView | undefined> {
@@ -64,7 +67,7 @@ export async function jobData(store: JobStore, owners: Owners | undefined, jobId
 export async function agentPage(store: JobStore, agent: Address, agents: AgentFactsReader | undefined): Promise<SitePage> {
   const wanted = agent.toLowerCase();
   const records = await store.inWallOrder();
-  const sat = records.filter((record) => record.tile.pod.some((seat) => seat.agent.toLowerCase() === wanted));
+  const sat = records.filter(isShown).filter((record) => record.tile.pod.some((seat) => seat.agent.toLowerCase() === wanted));
   // with no chain to answer to, nothing is known beyond this wall, and that is not a failure to read
   const facts = agents ? await quietly(`what is known of ${agent}`, () => agents.of(agent, records)) : {};
   return {
@@ -85,7 +88,7 @@ export async function receiptData(store: JobStore, jobId: string): Promise<Recei
 export async function yoursData(store: JobStore, owners: Owners, address: Address, now: Date): Promise<YoursView> {
   const wanted = address.toLowerCase();
   const onTheChain = (await store.all()).filter((record) => record.chain);
-  const read = await Promise.all(onTheChain.map(async (record) => ({ record, who: await ownersOf(record, owners) })));
+  const read = await Promise.all(onTheChain.filter(isShown).map(async (record) => ({ record, who: await ownersOf(record, owners) })));
   const posted = await Promise.all(read
     .filter(({ who }) => who.poster?.toLowerCase() === wanted)
     .map(async ({ record, who }) => yoursEntry(record, { ...who, ...(await moneyOnTheChain(record, owners, now)) })));
