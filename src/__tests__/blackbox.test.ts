@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { grade, type CheckToRun } from "../blackbox.ts";
+import { BOUNDED_LOGS, grade, type CheckToRun } from "../blackbox.ts";
+import { MOST_KEPT_BYTES } from "../readBounded.ts";
 import { checkout } from "./support/checkout.ts";
 import { dockerAvailable } from "./support/tools.ts";
 
 const IMAGE = "node@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944";
 const ARTEFACT = new URL("../../fixtures/app-honest", import.meta.url).pathname;
 const CHECKS = new URL("../../fixtures/checks", import.meta.url).pathname;
+
+/** stdout and stderr are each read bounded, with a line saying what was let go */
+const MOST_READ = 2 * MOST_KEPT_BYTES + 200;
 
 const toRun: CheckToRun[] = [
   { says: "the page answers", command: "node loads.mjs", hidden: false },
@@ -60,6 +64,56 @@ describe.skipIf(!withDocker)("grading from outside the box", () => {
     expect(failure?.message).toContain("exit 3");
     expect(failure?.message).toContain("cannot start: the port is a lie");
     expect((Date.now() - at) / 1000).toBeLessThan(60);
+  }, 240_000);
+
+  test("an artefact that floods its own log is still graded, and only so much of the log is read", async () => {
+    const honest = await Bun.file(`${ARTEFACT}/server.js`).text();
+    const flooding = await checkout("pod-flood-", {
+      "server.js": `${honest}\nconst line = "x".repeat(1023) + "\\n";\nsetInterval(() => { for (let i = 0; i < 256; i++) process.stdout.write(line); }, 10);\n`,
+    });
+
+    const outcome = await grade({ artefact: flooding, start: "node server.js", checks: CHECKS, toRun, image: IMAGE });
+    expect(outcome.passed).toBe(true);
+    expect(outcome.artefactLog).toContain("bytes not kept");
+    expect(outcome.artefactLog.length).toBeLessThan(MOST_READ);
+  }, 240_000);
+
+  test("a check that floods its output is still graded, and keeps the end of what it said", async () => {
+    const checks = await checkout("pod-flood-checks-", {
+      "loads.mjs": await Bun.file(`${CHECKS}/loads.mjs`).text(),
+      "flood.mjs": `const line = "y".repeat(1023) + "\\n";\nfor (let i = 0; i < 50 * 1024; i++) process.stdout.write(line);\nconsole.log("the check is done");\n`,
+    });
+    const flooding: CheckToRun[] = [
+      { says: "the page answers", command: "node loads.mjs", hidden: false },
+      { says: "a check with a great deal to say", command: "node flood.mjs", hidden: true },
+    ];
+
+    const outcome = await grade({ artefact: ARTEFACT, start: "node server.js", checks, toRun: flooding, image: IMAGE });
+    const loud = outcome.checks.find((c) => c.hidden);
+    expect(outcome.passed).toBe(true);
+    expect(loud?.exitCode).toBe(0);
+    expect(loud?.output.endsWith("the check is done")).toBe(true);
+    expect(loud?.output.length).toBeLessThan(MOST_READ);
+  }, 240_000);
+
+  test("a box's log is capped on disk by Docker itself, not only when we read it", async () => {
+    const name = `pod-logcap-${crypto.randomUUID().slice(0, 8)}`;
+    try {
+      const started = Bun.spawn([
+        "docker", "run", "-d", "--name", name, ...BOUNDED_LOGS, IMAGE,
+        "sh", "-c", "yes xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx | head -c 20000000",
+      ], { stdout: "ignore", stderr: "pipe" });
+      expect(await started.exited).toBe(0);
+      expect(await Bun.spawn(["docker", "wait", name], { stdout: "ignore" }).exited).toBe(0);
+
+      // counted by wc, so the test itself never holds what the box printed
+      const counted = Bun.spawn(["sh", "-c", `docker logs ${name} 2>&1 | wc -c`], { stdout: "pipe" });
+      const bytes = Number((await new Response(counted.stdout).text()).trim());
+      expect(bytes).toBeGreaterThan(0);
+      expect(bytes).toBeLessThan(1024 * 1024);
+    } finally {
+      await Bun.spawn(["docker", "rm", "-f", name], { stdout: "ignore", stderr: "ignore" }).exited;
+    }
   }, 240_000);
 
   test("nothing is left running afterwards", async () => {

@@ -11,6 +11,14 @@
  */
 import { randomUUID } from "node:crypto";
 import { PORT } from "./job.ts";
+import { readBounded } from "./readBounded.ts";
+
+/**
+ * What Docker keeps of a box's log on disk. Without a cap, a job that prints without end fills the
+ * machine's disk, and `docker logs` hands the whole of it back. One file, trimmed as it grows.
+ */
+const LOG_KEPT_ON_DISK = "1m";
+export const BOUNDED_LOGS = ["--log-driver", "json-file", "--log-opt", `max-size=${LOG_KEPT_ON_DISK}`, "--log-opt", "max-file=1"] as const;
 
 export interface CheckToRun {
   readonly says: string;
@@ -51,12 +59,10 @@ export interface GradeOutcome {
   readonly seconds: number;
 }
 
+/** Everything read from a box is read bounded: its code is not ours, and can print without end. */
 async function docker(args: readonly string[]): Promise<{ code: number; out: string }> {
   const child = Bun.spawn(["docker", ...args], { stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
+  const [stdout, stderr] = await Promise.all([readBounded(child.stdout), readBounded(child.stderr)]);
   return { code: await child.exited, out: `${stdout}${stderr}`.trim() };
 }
 
@@ -78,6 +84,7 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
       "run", "-d",
       "--name", artefactName,
       "--network", network,
+      ...BOUNDED_LOGS,
       "--memory", "512m", "--cpus", "1", "--pids-limit", "128",
       "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
       "--read-only", "--tmpfs", "/tmp:rw,size=64m", "--tmpfs", "/work:rw,exec,size=256m",
@@ -95,6 +102,7 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
       const result = await docker([
         "run", "--rm",
         "--network", network,
+        ...BOUNDED_LOGS,
         "--memory", "512m", "--cpus", "1", "--pids-limit", "128",
         "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
         "--read-only", "--tmpfs", "/tmp:rw,size=64m",
