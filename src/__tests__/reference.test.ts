@@ -38,6 +38,12 @@ import { dockerAvailable } from "./support/tools.ts";
 const available = (await anvilAvailable()) && (await dockerAvailable());
 
 const JOB = "a-coat-given-the-rain";
+
+/** Everything the agents and the worker said, and the boxes still up, for a run that did not end as it should. */
+async function tellWhatWasGoingOn(said: readonly string[], why: string): Promise<void> {
+  const boxes = await new Response(Bun.spawn(["docker", "ps", "-a", "--format", "{{.Names}} {{.Status}} {{.Command}}"], { stdout: "pipe" }).stdout).text();
+  console.error(`${why}. What was said:\n${said.join("\n")}\nBoxes still up:\n${boxes}`);
+}
 /** Never says take a coat: what the builder's model writes the first time */
 const NEVER_A_COAT = serverSaying("false", "false");
 
@@ -123,6 +129,8 @@ describe.skipIf(!available)("a pod of reference agents", () => {
       }
       return true;
     };
+    // if it ever hangs, say what everybody said and which boxes were still up, before the runner kills it
+    const watchdog = setTimeout(() => { void tellWhatWasGoingOn(said, "the test was about to run out of time"); }, 420_000);
     let finished: Finished[] = [];
     try {
       finished = await Promise.all(agents);
@@ -132,7 +140,12 @@ describe.skipIf(!available)("a pod of reference agents", () => {
       expect(getEventListeners(stopWorker.signal, "abort").length).toBeLessThanOrEqual(1);
     } finally {
       stopWorker.abort();
-      await working;
+      const stopped = await Promise.race([working.then(() => true), Bun.sleep(60_000).then(() => false)]);
+      clearTimeout(watchdog);
+      if (!stopped) {
+        await tellWhatWasGoingOn(said, "the worker did not stop within a minute of being told to");
+        throw new Error("the worker did not stop within a minute of being told to: what was said is printed above");
+      }
     }
     if (!(await everyRecord())) throw new Error(`not every agent's verdict was recorded. What was said:\n${said.join("\n")}`);
     for (const done of finished) expect(done.why).toBe("the job is settled");
