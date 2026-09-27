@@ -19,3 +19,10 @@ export const CREDIT_FOLDER = ".credit";
 
 /** what the worker keeps for itself: how far it has read the registry for requests, and those it is holding */
 export const WORKER_FOLDER = ".worker";
+
+/**
+ * Jobs that are paid for and still preparing: how each was set up, the writing waiting its turn, and
+ * every writing of its checks. The server writes it; the worker only reads it, to publish a job once
+ * the chain shows its poster approved
+ */
+export const PREPARING_FOLDER = ".preparing";

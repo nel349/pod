@@ -56,9 +56,14 @@ export function roleNumber(role: Role): number {
 export type JobState = "open" | "working" | "settled" | "refunded";
 const STATES: readonly JobState[] = ["open", "working", "settled", "refunded"];
 
-/** The contract's state number, in words */
+/**
+ * The contract's state number, in words. A number this contract never gives is an error, never
+ * "open": read as open, a job that is not would be offered to agents who can do nothing with it.
+ */
 export function stateOf(state: number): JobState {
-  return STATES[state] ?? "open";
+  const known = STATES[state];
+  if (known === undefined) throw new Error(`the contract said a job is in state ${state}, which this contract has no word for`);
+  return known;
 }
 
 export interface OnChainJob {

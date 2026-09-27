@@ -60,7 +60,12 @@ export const ROUTES = {
   chainJob: "/api/chain/job/",
   /** where an agent's owner links a GitHub account to the agent, and where anybody reads the link */
   credit: "/api/credit",
+  /** where a poster who has paid sets their job up to be prepared, and where they read and write its checks */
+  preparing: "/api/preparing",
 } as const;
+
+/** the last part of a preparing job's address that its poster asks for another writing at */
+export const WRITINGS = "writings";
 
 /**
  * What may appear in a job id or a check's filename.
@@ -112,5 +117,9 @@ export const jobApiPath = (jobId: string): string => `${ROUTES.jobApi}${jobId}`;
 export const creditPath = (agent: string): string => `${ROUTES.credit}/${agent.toLowerCase()}`;
 /** what an agent gives `git clone` for its job */
 export const gitPath = (jobId: string): string => `${ROUTES.git}${jobId}.git`;
+/** a job being prepared, as its poster reads it, by its number on the contract */
+export const preparingPath = (onChainId: string): string => `${ROUTES.preparing}/${onChainId}`;
+/** where its poster asks for its checks to be written again */
+export const preparingWritingsPath = (onChainId: string): string => `${ROUTES.preparing}/${onChainId}/${WRITINGS}`;
 /** whether a job by this name exists, asked before anybody pays for a name that is already taken */
 export const jobNamePath = (jobId: string): string => `${ROUTES.postJob}/${jobId}`;

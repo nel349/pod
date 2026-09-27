@@ -25,6 +25,41 @@ export function postingMessage(input: {
 }
 
 /**
+ * What a poster signs after paying on the contract whose jobs are prepared first, to have the job
+ * prepared under a name. It names the mode and the salt, which never change afterwards: the mode's
+ * window is the one the poster paid for, and the salt is sealed with whatever they approve.
+ */
+export function setUpMessage(input: {
+  readonly jobs: Address;
+  readonly onChainId: string;
+  readonly name: string;
+  readonly mode: string;
+  readonly salt: string;
+}): string {
+  return [
+    `I paid for job ${input.onChainId} on ${input.jobs.toLowerCase()}.`,
+    `Prepare it as "${input.name}", as a ${input.mode} job, salted ${input.salt}.`,
+  ].join("\n");
+}
+
+/**
+ * What a poster signs to read and write the checks of a job they paid for, while it prepares. One
+ * statement, good until a time, so reading the checks as they are written is not a wallet prompt every
+ * few seconds.
+ */
+export function preparingMessage(input: {
+  readonly jobs: Address;
+  readonly onChainId: string;
+  /** seconds since 1970, when this stops letting them in */
+  readonly until: number;
+}): string {
+  return [
+    `I paid for job ${input.onChainId} on ${input.jobs.toLowerCase()}.`,
+    `Let me read and write its checks until ${new Date(input.until * 1000).toISOString()}.`,
+  ].join("\n");
+}
+
+/**
  * What an agent signs, with its seat key, to use its job's repository through the git door.
  *
  * It names the contract, the job, the seat and the branch, so a signature for one job, one seat or

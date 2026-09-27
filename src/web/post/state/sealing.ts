@@ -4,8 +4,9 @@
  * Pure: the same form and the same checks always make the same job, with the same seal, which is what
  * lets the server rebuild it and refuse anything that does not match.
  */
-import { checkCommand, digestOf, sealSpec, type Check, type HowItIsAsked, type Spec } from "../../../job.ts";
-import { isProven, readyToSeal, type Written } from "../../../checkwriting/written.ts";
+import type { HowItIsAsked, Spec } from "../../../job.ts";
+import { readyToSeal, type Written } from "../../../checkwriting/written.ts";
+import { sealWritten } from "../../../checkwriting/sealWritten.ts";
 import { COPY } from "./copy.ts";
 import { priceInWei, requestKey, type DraftRequest, type PostForm } from "./form.ts";
 
@@ -50,21 +51,7 @@ export function whatIsMissing(written: WrittenFor | undefined, request: DraftReq
 export async function sealJob(form: PostForm, checks: readonly Written[], salt: string, howItIsAsked?: HowItIsAsked): Promise<SealedJob> {
   const price = priceInWei(form.price);
   if (price === undefined) throw new Error(COPY.problems.price);
-
-  const files: Record<string, string> = {};
-  const sealed: Check[] = [];
-  for (const check of checks.filter(isProven)) {
-    files[check.file] = check.source;
-    sealed.push({
-      says: check.says, run: checkCommand(check.file), hidden: check.secret,
-      file: check.file, digest: await digestOf(check.source),
-    });
-  }
-  const spec: Spec = {
-    idea: form.idea.trim(), kind: form.kind, mode: form.mode, price, checks: sealed, allowed: [],
-    ...(howItIsAsked ? { howItIsAsked } : {}), salt,
-  };
-  return { spec, files, seal: await sealSpec(spec) };
+  return sealWritten({ idea: form.idea, kind: form.kind, mode: form.mode, price, checks, ...(howItIsAsked ? { howItIsAsked } : {}), salt });
 }
 
 /** A salt nobody can guess, so a short idea cannot be found by guessing its hash. One per page. */

@@ -24,8 +24,9 @@ import postPage from "./web/post/index.html";
 import refundPage from "./web/refund/index.html";
 import { renderCard } from "./card.ts";
 import { isPublished, JobStore, publicRecord } from "./store.ts";
-import { cardPath, checkFilePath, isSafeName, isWallName, jobPath, RECEIPT_FILE, ROUTES, writingPath } from "./routes.ts";
+import { cardPath, checkFilePath, isSafeName, isWallName, jobPath, preparingPath, RECEIPT_FILE, ROUTES, WRITINGS, writingPath } from "./routes.ts";
 import { ownersFrom, type Owners } from "./owners.ts";
+import type { Preparing, PreparingView } from "./preparing/index.ts";
 import { agentFactsFrom, type AgentFactsReader } from "./agentFacts.ts";
 import { MONAD_TESTNET } from "./registry.ts";
 import { agentPage, jobData, receiptData, wallPage, yoursData } from "./sitePages.ts";
@@ -80,6 +81,8 @@ export interface Services {
   readonly owners?: Owners;
   /** what is known of an agent beyond this wall: its ERC-8004 identity and record, and its credit */
   readonly agents?: AgentFactsReader;
+  /** jobs paid for on the contract that prepares them, their checks written before a pod can start */
+  readonly preparing?: Preparing;
 }
 const BUNDLE = { "content-type": "application/x-git-bundle" } as const;
 
@@ -89,7 +92,7 @@ const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const guide = new URL("../public/llms.txt", import.meta.url);
 const MARKDOWN = { "content-type": "text/markdown; charset=utf-8" } as const;
 
-export async function handle(request: Request, store: JobStore, { market, door, notes, jobList, credit, claims, owners, agents }: Services = {}): Promise<Response> {
+export async function handle(request: Request, store: JobStore, { market, door, notes, jobList, credit, claims, owners, agents, preparing }: Services = {}): Promise<Response> {
   const { pathname } = new URL(request.url);
   const page = (head: Head, drawn: SitePage, status = 200): Response =>
     new Response(renderSite(head, { ...drawn, ...(market ? { market: market.page } : {}), coin: market?.page.coin ?? MONAD_TESTNET.coin, drawnAt: new Date().toISOString() }), { status, headers: HTML });
@@ -108,6 +111,11 @@ export async function handle(request: Request, store: JobStore, { market, door, 
   }
   if (pathname === ROUTES.credit || pathname.startsWith(`${ROUTES.credit}/`)) {
     return credit ? await credit.handle(request) : Response.json({ why: "GitHub credit is not open on this server" }, { status: 404 });
+  }
+
+  // a job paid for and being prepared: only its poster sets it up, reads it and asks for its checks
+  if (pathname === ROUTES.preparing || pathname.startsWith(`${ROUTES.preparing}/`)) {
+    return preparing ? await answerPreparing(request, pathname, preparing) : Response.json({ why: "no job is prepared on this server: it answers to no contract that prepares them" }, { status: 404 });
   }
 
   // the one thing a stranger can change: posting a job they have already paid for
@@ -129,7 +137,8 @@ export async function handle(request: Request, store: JobStore, { market, door, 
   if (pathname.startsWith(`${ROUTES.postJob}/`)) {
     const jobId = pathname.slice(ROUTES.postJob.length + 1);
     if (!isSafeName(jobId)) return Response.json({ why: `${jobId} is not a name a job can have` }, { status: 400 });
-    return Response.json({ taken: (await store.read(jobId)) !== undefined }, { headers: NO_STORE });
+    const isTaken = (await store.read(jobId)) !== undefined || (await preparing?.isNameTaken(jobId)) === true;
+    return Response.json({ taken: isTaken }, { headers: NO_STORE });
   }
 
   // what the refund page needs to find a job on the chain; the chain itself says where the money is
@@ -332,6 +341,49 @@ async function startWriting(request: Request, market?: Market): Promise<Response
   const started = market.writing.start(asked);
   if (!started.ok) return Response.json({ why: started.why }, { status: started.status });
   return Response.json({ id: started.id, url: writingPath(started.id) }, { status: 202 });
+}
+
+/**
+ * A preparing job's three doors: setting it up after paying, reading it, and asking for its checks to
+ * be written again. Everything that decides is in Preparing; this reads the body, within a limit.
+ */
+async function answerPreparing(request: Request, pathname: string, preparing: Preparing): Promise<Response> {
+  const [onChainId = "", rest, ...more] = pathname.slice(ROUTES.preparing.length + 1).split("/");
+  const isSetUp = pathname === ROUTES.preparing && request.method === "POST";
+  const isRead = onChainId !== "" && rest === undefined && request.method === "GET";
+  const isWrite = onChainId !== "" && rest === WRITINGS && more.length === 0 && request.method === "POST";
+  if (!isSetUp && !isRead && !isWrite) return Response.json({ why: `nothing answers ${request.method} at ${pathname}` }, { status: 404 });
+
+  if (isRead) {
+    const read = await preparing.read(onChainId, request.headers.get("authorization"));
+    return read.ok ? Response.json(preparingToTheWire(read.value), { headers: NO_STORE }) : Response.json({ why: read.why }, { status: read.status });
+  }
+
+  const body = await bodyWithin(request, MOST_A_REQUEST_TO_WRITE_MAY_WEIGH);
+  if (body === undefined) return tooLarge("that is longer than a job and a few sentences should be");
+  let asked: unknown;
+  try {
+    asked = JSON.parse(body);
+  } catch {
+    return Response.json({ why: "that is not JSON" }, { status: 400 });
+  }
+  if (isSetUp) {
+    const setUp = await preparing.setUp(asked);
+    return setUp.ok
+      ? Response.json({ ...setUp.value, url: preparingPath(setUp.value.onChainId) }, { status: 201 })
+      : Response.json({ why: setUp.why }, { status: setUp.status });
+  }
+  const written = await preparing.write(onChainId, request.headers.get("authorization"), asked);
+  return written.ok ? Response.json(written.value, { status: 202 }) : Response.json({ why: written.why }, { status: written.status });
+}
+
+/** A preparing job as it travels: its money in wei, as strings, since JSON has no bigint. */
+function preparingToTheWire(view: PreparingView): unknown {
+  const { money, ...rest } = view;
+  return {
+    ...rest,
+    money: { balance: `${money.balance}`, reserved: `${money.reserved}`, kept: money.kept, writingPrice: `${money.writingPrice}` },
+  };
 }
 
 /** For the files programs fetch, checks and cards and histories: a line of text they can print. */
