@@ -10,7 +10,7 @@ import { firstLine } from "./errors.ts";
 import type { AgentFactsReader } from "./agentFacts.ts";
 import type { Owners } from "./owners.ts";
 import { jobPath } from "./routes.ts";
-import type { JobRecord, JobStore } from "./store.ts";
+import { isPublished, publicRecord, type JobRecord, type JobStore } from "./store.ts";
 import {
   agentFactsView, jobView, needsTheChainForMoney, receiptView, tileView, unpublishedView, yoursEntry,
   type ChainSays, type JobView, type ReceiptView, type SitePage, type TileView, type YoursEntry, type YoursView,
@@ -49,7 +49,10 @@ async function chainSaysOf(record: JobRecord, owners: Owners | undefined, now: D
 }
 
 /** A record as a tile, linking its receipt only when a signed one is kept. */
-const tileOf = (record: JobRecord): TileView => tileView(record.tile, record.signed !== undefined);
+const tileOf = (record: JobRecord): TileView => {
+  const shown = publicRecord(record);
+  return tileView(shown.tile, shown.signed !== undefined);
+};
 
 /** Whether a job is shown among others, on the wall, an agent's page or your own: a retired one is not. */
 const isShown = (record: JobRecord): boolean => record.retired === undefined;
@@ -61,7 +64,7 @@ export async function wallPage(store: JobStore): Promise<SitePage> {
 export async function jobData(store: JobStore, owners: Owners | undefined, jobId: string, now: Date): Promise<JobView | undefined> {
   const record = await store.read(jobId);
   if (!record) return undefined;
-  return jobView(record, await store.notes(jobId), await chainSaysOf(record, owners, now));
+  return jobView(publicRecord(record, now), await store.notes(jobId), await chainSaysOf(record, owners, now));
 }
 
 export async function agentPage(store: JobStore, agent: Address, agents: AgentFactsReader | undefined): Promise<SitePage> {
@@ -71,14 +74,14 @@ export async function agentPage(store: JobStore, agent: Address, agents: AgentFa
   // with no chain to answer to, nothing is known beyond this wall, and that is not a failure to read
   const facts = agents ? await quietly(`what is known of ${agent}`, () => agents.of(agent, records)) : {};
   return {
-    page: "agent", agent, record: [...recordByRole(agent, sat.map((record) => record.tile))],
+    page: "agent", agent, record: [...recordByRole(agent, sat.map((record) => publicRecord(record).tile))],
     facts: agentFactsView(facts), tiles: sat.map(tileOf),
   };
 }
 
 export async function receiptData(store: JobStore, jobId: string): Promise<ReceiptView | undefined> {
   const record = await store.read(jobId);
-  return record?.signed ? receiptView(record, record.signed, jobPath(jobId)) : undefined;
+  return record?.signed && isPublished(record) ? receiptView(record, record.signed, jobPath(jobId)) : undefined;
 }
 
 /**
@@ -91,7 +94,7 @@ export async function yoursData(store: JobStore, owners: Owners, address: Addres
   const read = await Promise.all(onTheChain.filter(isShown).map(async (record) => ({ record, who: await ownersOf(record, owners) })));
   const posted = await Promise.all(read
     .filter(({ who }) => who.poster?.toLowerCase() === wanted)
-    .map(async ({ record, who }) => yoursEntry(record, { ...who, ...(await moneyOnTheChain(record, owners, now)) })));
+    .map(async ({ record, who }) => yoursEntry(publicRecord(record, now), { ...who, ...(await moneyOnTheChain(record, owners, now)) })));
   const runningFirst = (a: YoursEntry, b: YoursEntry): number => Number(b.tile.verdict === "running") - Number(a.tile.verdict === "running");
   // what it paid for that never reached the wall: on this contract, by a number no record here has
   const paid = await quietly(`what ${address} paid for`, () => owners.paidBy(address));
@@ -101,6 +104,6 @@ export async function yoursData(store: JobStore, owners: Owners, address: Addres
     address,
     posted: posted.sort(runningFirst),
     ...(unpublished ? { unpublished } : {}),
-    holds: read.filter(({ who }) => who.holder?.toLowerCase() === wanted).map(({ record, who }) => yoursEntry(record, who)),
+    holds: read.filter(({ who }) => who.holder?.toLowerCase() === wanted).map(({ record, who }) => yoursEntry(publicRecord(record, now), who)),
   };
 }

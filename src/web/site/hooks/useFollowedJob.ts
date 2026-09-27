@@ -32,7 +32,8 @@ export function useFollowedJob(drawn: JobView): FollowedJob {
     initialData: drawn,
     initialDataUpdatedAt: new Date(drawnAt).getTime(),
     staleTime: FOLLOW_EVERY_MS,
-    refetchInterval: (query) => (query.state.data?.verdict === "running" ? FOLLOW_EVERY_MS : false),
+    // followed while it can still change: being built, or graded with its verdict not yet public
+    refetchInterval: (query) => (query.state.data?.verdict === "running" || query.state.data?.verdict === "graded" ? FOLLOW_EVERY_MS : false),
   });
   return { job: answer.data, lostTouch: answer.isError };
 }

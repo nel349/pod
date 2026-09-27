@@ -3,7 +3,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { handle } from "../server.ts";
-import { JobStore, type JobRecord } from "../store.ts";
+import { isPublished, JobStore, type JobRecord } from "../store.ts";
 import { ROUTES, cardPath, checkFilePath, checksPath, jobApiPath, jobPath, receiptFilePath, receiptPath, yoursApiPath } from "../routes.ts";
 import type { SignedReceipt } from "../receipt.ts";
 import { JobViewSchema } from "../web/site/index.ts";
@@ -205,7 +205,7 @@ describe("the checks a stranger fetches", () => {
     const store = await storeWith(record({ tile: tile({ verdict: "running" }) }));
     const response = await get(store, checksPath("a-weather-page"));
     expect(response.status).toBe(409);
-    expect(await response.text()).toContain("published when it has a verdict");
+    expect(await response.text()).toContain("published once it has a verdict and its money has moved");
     expect((await get(store, checkFilePath("a-weather-page", "cold.mjs"))).status).toBe(404);
   });
 
@@ -333,5 +333,55 @@ describe("a job taken off the wall", () => {
     await store.retire("a-dry-run", undefined);
     expect(await (await get(store, ROUTES.wall)).text()).toContain(jobPath("a-dry-run"));
     expect((await store.read("a-dry-run"))?.retired).toBeUndefined();
+  });
+});
+
+describe("nothing hidden is public before a verdict and the money has moved (finding 10.1)", () => {
+  const ON_THE_CHAIN = { network: "monad-testnet", jobId: "11", jobs: "0x00000000000000000000000000000000000000c1" } as const;
+  const HIDDEN = "a cold day says take a coat";
+  const graded = (over: Partial<JobRecord> = {}): JobRecord => record({
+    tile: tile({ verdict: "failed", receiptURI: receiptPath("a-weather-page") }),
+    chain: ON_THE_CHAIN,
+    brief: { asked: "a coat", endsAt: "2099-01-01T00:00:00.000Z", sealedChecks: 1, seats: [] },
+    ...over,
+  });
+
+  test("the rule: a verdict, and the money moved or the window closed; nothing for a job with no verdict; old jobs as before", () => {
+    const now = new Date("2026-09-27T00:00:00.000Z");
+    expect(isPublished(graded(), now)).toBe(false);
+    expect(isPublished(graded({ chain: { ...ON_THE_CHAIN, settled: "0xabc" } }), now)).toBe(true);
+    expect(isPublished(graded({ chain: { ...ON_THE_CHAIN, moneyMovedAt: "2026-09-26T00:00:00.000Z" } }), now)).toBe(true);
+    expect(isPublished(graded(), new Date("2099-01-02T00:00:00.000Z"))).toBe(true);
+    expect(isPublished(graded({ tile: tile({ verdict: "withdrawn" }) }), new Date("2099-01-02T00:00:00.000Z"))).toBe(false);
+    expect(isPublished(graded({ tile: tile({ verdict: "running" }) }), now)).toBe(false);
+    // from before the chain was wired: public with its verdict, as it always was
+    expect(isPublished(record(), now)).toBe(true);
+  });
+
+  test("before the money moves, no route shows the verdict, an outcome, a hidden check or the receipt", async () => {
+    const store = await storeWith(graded({ signed }));
+    const page = await (await open(store, jobPath("a-weather-page"))).text();
+    expect(page).not.toContain(HIDDEN);
+    expect(page).not.toContain("checks failed");
+    expect(page).toContain("graded, the verdict being settled");
+    expect(page).not.toContain(">failed<");
+    const data = await (await get(store, jobApiPath("a-weather-page"))).text();
+    expect(data).not.toContain(HIDDEN);
+    expect(data).not.toContain("exitCode");
+    expect((await get(store, receiptPath("a-weather-page"))).status).toBe(404);
+    expect((await get(store, receiptFilePath("a-weather-page"))).status).toBe(404);
+    expect((await get(store, checkFilePath("a-weather-page", "cold.mjs"))).status).toBe(404);
+    const wall = await (await open(store, ROUTES.wall)).text();
+    expect(wall).not.toContain("checks failed");
+    expect(await (await get(store, cardPath("a-weather-page"))).text()).not.toContain("checks failed");
+  });
+
+  test("once the money has moved, all of it is public", async () => {
+    const store = await storeWith(graded({ signed, chain: { ...ON_THE_CHAIN, settled: "0xabc" } }));
+    const page = await (await open(store, jobPath("a-weather-page"))).text();
+    expect(page).toContain(HIDDEN);
+    expect(page).toContain("checks failed");
+    expect((await get(store, receiptFilePath("a-weather-page"))).status).toBe(200);
+    expect((await get(store, checkFilePath("a-weather-page", "cold.mjs"))).status).toBe(200);
   });
 });

@@ -490,13 +490,17 @@ describe.skipIf(!available)("notes, signed by the seat that wrote them", () => {
     expect(await why(outsider)).toContain("holds no seat");
   }, 60_000);
 
-  test("once the job has a verdict, anybody reads them", async () => {
+  test("once the job has a verdict and its money has moved, anybody reads them", async () => {
     const note = await aNote(elsewhere, "builder", SECOND, { says: "Done, and it answers in one sentence." });
     expect((await writeNote(SECOND, note)).status).toBe(201);
     expect((await fetch(`${base}${notesPath(SECOND.jobId)}`)).status).toBe(401);
 
     const record = (await store.read(SECOND.jobId))!;
+    // a verdict alone is not enough: until the money moves, the pod could still change its work
     await store.save({ ...record, tile: { ...record.tile, verdict: "passed" } });
+    expect((await fetch(`${base}${notesPath(SECOND.jobId)}`)).status).toBe(401);
+    const graded = (await store.read(SECOND.jobId))!;
+    await store.save({ ...graded, ...(graded.chain ? { chain: { ...graded.chain, settled: `0x${"5e".repeat(32)}` } } : {}) });
     const published = await fetch(`${base}${notesPath(SECOND.jobId)}`);
     expect(published.status).toBe(200);
     expect(((await published.json()) as { notes: unknown[] }).notes).toContainEqual(note);

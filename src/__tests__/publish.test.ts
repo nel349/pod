@@ -148,7 +148,7 @@ describe("a job that is open, before anybody has built anything", () => {
 
     const response = await handle(new Request("http://pod.test/checks/coat-from-a-postcode"), store);
     expect(response.status).toBe(409);
-    expect(await response.text()).toContain("published when it has a verdict");
+    expect(await response.text()).toContain("published once it has a verdict and its money has moved");
   });
 
   test("an open job with one seat taken is being built, and its page says nothing of the platform holding a seat", async () => {

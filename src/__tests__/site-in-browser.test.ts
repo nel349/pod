@@ -10,7 +10,7 @@ import { readerFor } from "../posting.ts";
 import { openJob } from "../publish.ts";
 import { jobPath, ROUTES } from "../routes.ts";
 import { serve, type Market } from "../server.ts";
-import { JobStore } from "../store.ts";
+import { JobStore, type JobRecord } from "../store.ts";
 import { CheckWriting, ProvenChecks } from "../checkwriting/index.ts";
 import { SITE } from "../web/site/copy.ts";
 import { Browser, browserAvailable } from "./support/browser.ts";
@@ -130,8 +130,14 @@ describe.skipIf(!available)("the pages the server draws, in a browser", () => {
     await page.until(`document.querySelector("#pod").textContent.includes("0x0000…00a1")`, "the seat to appear", 30);
     expect(await text(page, "#stands")).toContain(SITE.job.next.building(1));
 
-    await store.save({ ...record, tile: { ...record.tile, verdict: "failed", pod: [{ role: "lead", agent: LEAD, owner: LEAD }] } });
-    await page.until(`document.querySelector("#stands").textContent.includes(${JSON.stringify(SITE.job.next.failed)})`, "the verdict to appear", 30);
+    // graded: the page follows it, and says so without saying the verdict, until the money has moved
+    const graded: JobRecord = { ...record, tile: { ...record.tile, verdict: "failed", pod: [{ role: "lead", agent: LEAD, owner: LEAD }] } };
+    await store.save(graded);
+    await page.until(`document.querySelector("#stands").textContent.includes(${JSON.stringify(SITE.job.next.graded)})`, "the grading to appear", 30);
+    expect(await text(page, "#stands")).not.toContain(SITE.job.next.failed);
+
+    await store.save({ ...graded, ...(graded.chain ? { chain: { ...graded.chain, settled: `0x${"5e".repeat(32)}` } } : {}) });
+    await page.until(`document.querySelector("#stands").textContent.includes(${JSON.stringify(SITE.job.next.failed)})`, "the verdict to appear once the money moved", 30);
     // the same page all along, not a reload
     expect(await page.evaluate<boolean>("window.__sameDocument === true")).toBe(true);
     await store.save(record);

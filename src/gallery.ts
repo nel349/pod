@@ -12,7 +12,11 @@ export interface Tile {
   readonly idea: string;
   readonly mode: "flash" | "sprint" | "project";
   /** "withdrawn" is a job whose poster took the money back before there was any verdict: it is closed */
-  readonly verdict: "passed" | "failed" | "not-reproducible" | "running" | "withdrawn";
+  /**
+   * "withdrawn" is a job whose poster took the money back before there was any verdict: it is closed.
+   * "graded" is never kept: it is what a job that passed or failed shows until its money has moved.
+   */
+  readonly verdict: "passed" | "failed" | "not-reproducible" | "running" | "withdrawn" | "graded";
   /** where the thing lives, while it lives. Absent once an unclaimed job is archived */
   readonly open?: string;
   readonly commit?: string;
@@ -34,6 +38,7 @@ export function verdictWords(verdict: Tile["verdict"]): string {
     case "not-reproducible": return "could not be reproduced";
     case "running": return "being built";
     case "withdrawn": return "withdrawn, the money taken back";
+    case "graded": return "graded, the verdict being settled";
   }
 }
 

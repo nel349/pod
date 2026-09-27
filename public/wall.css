@@ -267,3 +267,7 @@ a.primary.small { font-size: 18px; padding: 10px 16px 8px; box-shadow: 4px 4px 0
 .seal.withdrawn .piece.held { fill: var(--grey); }
 .flyer.withdrawn .flyer-stamp { color: var(--grey); }
 .tally .withdrawn b { color: var(--grey); }
+
+/* graded, the verdict not yet public: grey, like a job with no verdict to show */
+.seal.graded .piece.held { fill: var(--grey); }
+.flyer.graded .flyer-stamp { color: var(--grey); }

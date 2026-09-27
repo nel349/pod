@@ -25,6 +25,7 @@ const INKS: Record<Tile["verdict"], string> = {
   failed: "#ff2e88",
   "not-reproducible": "#9a6a00",
   withdrawn: "#5b5b55",
+  graded: "#5b5b55",
   running: "#2448d6",
 };
 
@@ -71,6 +72,6 @@ export function renderCard(tile: Tile): string {
   <text x="1000" y="492" text-anchor="middle" font-family="${POSTER.shout}" font-size="60" font-weight="900" fill="${ink}">${escape(stampOf(tile).toUpperCase())}</text></g>
   <text x="64" y="500" font-family="${POSTER.type}" font-size="30" font-weight="700" fill="${POSTER.ink}">${escape(standing)}</text>
   <text x="64" y="546" font-family="${POSTER.type}" font-size="24" fill="${POSTER.ink}">${escape(facts)}</text>
-  <text x="64" y="590" font-family="${POSTER.type}" font-size="22" fill="${POSTER.ink}">${escape(tile.verdict === "running" ? SITE.share.running : SITE.share.decided)}</text>
+  <text x="64" y="590" font-family="${POSTER.type}" font-size="22" fill="${POSTER.ink}">${escape(tile.verdict === "running" || tile.verdict === "graded" ? SITE.share.running : SITE.share.decided)}</text>
 </svg>`;
 }

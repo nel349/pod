@@ -23,7 +23,7 @@ import claimPage from "./web/claim/index.html";
 import postPage from "./web/post/index.html";
 import refundPage from "./web/refund/index.html";
 import { renderCard } from "./card.ts";
-import { checksArePublished, JobStore } from "./store.ts";
+import { isPublished, JobStore, publicRecord } from "./store.ts";
 import { cardPath, checkFilePath, isSafeName, isWallName, jobPath, RECEIPT_FILE, ROUTES, writingPath } from "./routes.ts";
 import { ownersFrom, type Owners } from "./owners.ts";
 import { agentFactsFrom, type AgentFactsReader } from "./agentFacts.ts";
@@ -197,7 +197,7 @@ export async function handle(request: Request, store: JobStore, { market, door, 
     if (!job) return missing(`No job called ${jobId}`);
     return page({
       title: job.idea,
-      description: `${job.standing}. ${job.verdict === "running" ? SITE.share.running : SITE.share.decided}`,
+      description: `${job.standing}. ${job.verdict === "running" || job.verdict === "graded" ? SITE.share.running : SITE.share.decided}`,
       image: cardPath(jobId),
     }, { page: "job", job });
   }
@@ -214,7 +214,7 @@ export async function handle(request: Request, store: JobStore, { market, door, 
     const jobId = pathname.slice(ROUTES.card.length).replace(/\.svg$/, "");
     const record = await store.read(jobId);
     if (!record) return missing(`no job called ${jobId}`);
-    return new Response(renderCard(record.tile), { headers: SVG });
+    return new Response(renderCard(publicRecord(record).tile), { headers: SVG });
   }
 
   /**
@@ -241,6 +241,8 @@ export async function handle(request: Request, store: JobStore, { market, door, 
     const record = await store.read(id);
     if (!record) return missing(`No job called ${id}`);
     if (!record.signed) return missing(`Job ${id} has no signed receipt yet`);
+    // the receipt names every check and what came back, the hidden ones too: public only with the rest
+    if (!isPublished(record)) return missing(`Job ${id}'s receipt is made public once its money has moved`);
     if (!isTheFile && wantsAPage(request)) {
       const receipt = await receiptData(store, id);
       if (receipt) return page({ title: SITE.receipt.title(record.tile.idea) }, { page: "receipt", receipt });
@@ -273,9 +275,9 @@ async function checkIndex(store: JobStore, jobId: string): Promise<Response> {
   if (!record) return notFound(`no job called ${jobId}`);
   // while it runs, only the checks its pod may see: the sealed ones wait for the verdict
   const names = await store.checkNames(jobId);
-  if (!checksArePublished(record) && names.length === 0) {
+  if (!isPublished(record) && names.length === 0) {
     return new Response(
-      `job ${jobId} is still running. Its checks are published when it has a verdict, not before.\n`,
+      `job ${jobId}'s checks are published once it has a verdict and its money has moved, not before.\n`,
       { status: 409, headers: TEXT },
     );
   }

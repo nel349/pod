@@ -146,7 +146,7 @@ describe.skipIf(!available)("the wall, driven the way a person drives it", () =>
     expect(await browser.evaluate<string>(`[...document.querySelectorAll("#pod li.open .seat-role")].map((seat) => seat.textContent).join(",")`)).toContain("security");
 
     await browser.open(base + checksPath("one-still-open"));
-    expect(await browser.text()).toContain("published when it has a verdict");
+    expect(await browser.text()).toContain("published once it has a verdict and its money has moved");
   }, 60_000);
 
   test("the command to repeat the run is on the page, and is the real one", async () => {

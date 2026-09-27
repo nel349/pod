@@ -59,6 +59,8 @@ export interface OnChain {
   readonly jobId: string;
   readonly jobs: Address;
   readonly settled?: string;
+  /** when the worker saw the chain say the money had moved, for a job whose settlement it did not send itself */
+  readonly moneyMovedAt?: string;
   readonly minted?: string;
   readonly tokenId?: string;
 }
@@ -111,9 +113,42 @@ const NOTES = "notes.jsonl";
 const SPEC = "spec.json";
 const HISTORY = "history.bundle";
 
-/** A verdict is what makes the checks publishable: before that, they are the sealed part of the job. */
-export function checksArePublished(record: JobRecord): boolean {
-  return record.tile.verdict !== "running";
+/**
+ * Whether a job's hidden part is public: its hidden checks, its receipt, every check's outcome, its
+ * notes, and its verdict itself.
+ *
+ * Only once there is a verdict and either the money has moved on the chain or the job's window has
+ * closed. Publishing sooner let a pod read the exam, or even just see "failed", between the grading
+ * and the settlement, and approve another commit so the settlement was skipped and the new commit
+ * graded with the exam in hand. A job with no verdict, withdrawn or still running, publishes nothing,
+ * since nothing was judged. Jobs from before the chain was wired keep the rule they were published
+ * under: public with their verdict.
+ */
+export function isPublished(record: JobRecord, now: Date = new Date()): boolean {
+  const { verdict } = record.tile;
+  if (verdict === "running" || verdict === "withdrawn") return false;
+  if (!record.chain) return true;
+  // the money has moved: the settlement, or the title that only a settlement leads to
+  if (record.chain.settled || record.chain.moneyMovedAt || record.chain.minted || record.chain.tokenId) return true;
+  const endsAt = record.brief?.endsAt;
+  return endsAt !== undefined && new Date(endsAt) <= now;
+}
+
+/**
+ * A job as anybody may see it now: the same record once it is published, and before that one with
+ * nothing of the grading in it but that it happened. A job the runs disagreed on says so, since that
+ * is about the work's repeatability and not the exam; one that passed or failed says only "graded".
+ */
+export function publicRecord(record: JobRecord, now: Date = new Date()): JobRecord {
+  const { verdict } = record.tile;
+  if (isPublished(record, now) || verdict === "running" || verdict === "withdrawn") return record;
+  const { receiptURI: _receipt, receiptHash: _hash, seconds: _seconds, ...tile } = record.tile;
+  const { signed: _signed, ...rest } = record;
+  return {
+    ...rest,
+    tile: { ...tile, verdict: verdict === "not-reproducible" ? verdict : "graded" },
+    checksSaid: record.checksSaid.filter((check) => !check.hidden).map(({ says, hidden }) => ({ says, hidden })),
+  };
 }
 
 /**
@@ -214,7 +249,7 @@ export class JobStore {
     } catch {
       return [];
     }
-    if (checksArePublished(record)) return names.sort();
+    if (isPublished(record)) return names.sort();
     const visible = await this.visibleCheckFiles(jobId);
     return names.filter((name) => visible.includes(name)).sort();
   }

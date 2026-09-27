@@ -16,7 +16,7 @@ import { NO_STORE, SIGN_IN } from "../headers.ts";
 import { noteMessage } from "../messages.ts";
 import { LONGEST_NOTE, NoteSchema, type Note } from "../note.ts";
 import { ROUTES } from "../routes.ts";
-import { checksArePublished, type JobStore } from "../store.ts";
+import { isPublished, type JobStore } from "../store.ts";
 import { PerMinute, type Answer, type Doorkeeper } from "./Doorkeeper.ts";
 import { secondsNow } from "../clock.ts";
 
@@ -37,7 +37,7 @@ export class NoteBoard {
     if (!job.ok) return refusal(job);
 
     if (request.method === "GET") {
-      if (!checksArePublished(job.value.record)) {
+      if (!isPublished(job.value.record)) {
         const admitted = await keeper.admit(request, job.value);
         if (!admitted.ok) return refusal(admitted);
       }

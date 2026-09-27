@@ -33,7 +33,7 @@ import { SEATS } from "../seal.ts";
 import type { Registries } from "../registry.ts";
 import { readableToTheBox } from "../sandbox.ts";
 import type { SignedReceipt } from "../receipt.ts";
-import type { JobRecord, JobStore, OnChain } from "../store.ts";
+import { isPublished, type JobRecord, type JobStore, type OnChain } from "../store.ts";
 import { mintPod, tokenOfJob } from "../token.ts";
 import { RegistryAnswers } from "./RegistryAnswers.ts";
 
@@ -153,6 +153,13 @@ export class Worker {
       return;
     }
 
+    // a verdict whose money has moved without this worker recording it, such as a job matched to the
+    // chain after the fact: written down once, since the publishing rule waits on it
+    if ((onChain.state === "settled" || onChain.state === "refunded") && record.tile.verdict !== "running" && !isPublished(record)) {
+      await this.remember(record.jobId, { moneyMovedAt: new Date().toISOString() });
+      this.say(`${jobId}: its money has moved on the chain, so its verdict is public`);
+    }
+
     const signed = record.signed;
     if (signed && record.tile.verdict !== "running") {
       const graded = signed.receipt;
@@ -222,7 +229,7 @@ export class Worker {
    */
   private isFinished(record: JobRecord): boolean {
     if (record.tile.verdict === "withdrawn") return true;
-    if (!record.chain?.settled || !record.signed) return false;
+    if (!(record.chain?.settled || record.chain?.moneyMovedAt) || !record.signed) return false;
     if (record.signed.receipt.verdict !== "passed") return true;
     const titled = !this.options.token || record.chain.tokenId !== undefined;
     const published = !this.options.publishTo || record.opensOnMain === true;
@@ -283,8 +290,13 @@ export class Worker {
         ...(fetchFrom.onGitHub ? { repository: fetchFrom.url } : record.repository ? { repository: record.repository } : {}),
         ...(record.podHolder ? { podHolder: record.podHolder } : {}),
       });
-      // what the chain already knows about the job, and who paid for it, stay with it: the grading knows neither
-      await store.save({ ...published, chain: record.chain, ...(record.poster ? { poster: record.poster } : {}) });
+      // what the chain already knows about the job, who paid for it, and its brief, whose window decides
+      // when a held verdict is published, stay with it: the grading knows none of them
+      await store.save({
+        ...published, chain: record.chain,
+        ...(record.poster ? { poster: record.poster } : {}),
+        ...(record.brief ? { brief: record.brief } : {}),
+      });
       this.say(`${record.jobId}: ${report.signed.receipt.verdict}`);
     } finally {
       await rm(checks, { recursive: true, force: true });

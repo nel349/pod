@@ -15,7 +15,7 @@ import { signReceipt } from "../receipt.ts";
 import { receiptPath } from "../routes.ts";
 import { IMAGE } from "../sandbox.ts";
 import { SEATS } from "../seal.ts";
-import { JobStore } from "../store.ts";
+import { isPublished, JobStore } from "../store.ts";
 import { podTokenAbi, tokenOfJob } from "../token.ts";
 import { Worker } from "../worker/index.ts";
 import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
@@ -283,6 +283,29 @@ describe.skipIf(!available)("the worker", () => {
     await aWorker().tick();
     expect(jobReads).not.toContain(onChainId);
   }, 60_000);
+
+  test("a verdict is public only once its money has moved, and a job settled without the worker recording it is noticed", async () => {
+    const job = await aJob("a-coat-published-when-paid", ALWAYS_A_COAT, SEATS);
+    const said: string[] = [];
+    const worker = aWorker(said);
+    await untilSettled(worker, said, async () => (await readJob(reading(), job.onChainId)).state === "refunded");
+    const settled = await store.read(job.jobId);
+    if (!settled?.chain?.settled) throw new Error("the worker did not write down its settlement");
+    expect(isPublished(settled)).toBe(true);
+
+    // as if matched to the chain after the fact: the verdict is kept, the settlement is not
+    await store.save({ ...settled, chain: { ...settled.chain, settled: undefined } });
+    const unmatched = await store.read(job.jobId);
+    if (!unmatched) throw new Error("the record was not kept");
+    expect(isPublished(unmatched)).toBe(false);
+    await worker.tick();
+    const noticed = await store.read(job.jobId);
+    expect(noticed?.chain?.moneyMovedAt).toMatch(/^\d{4}-/);
+    expect(noticed && isPublished(noticed)).toBe(true);
+    // and written down once
+    await worker.tick();
+    expect(said.filter((line) => line.includes(`${job.jobId}: its money has moved on the chain`))).toHaveLength(1);
+  }, 300_000);
 
   test("each agent that asks has the verdict on its seat recorded in ERC-8004, once per seat, and nobody else does", async () => {
     const job = await aJob("a-coat-with-a-record", WORKING, SEATS);

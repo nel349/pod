@@ -5,8 +5,9 @@ import type { JobView } from "../../views/index.ts";
 
 type Outcome = keyof typeof SITE.job.outcome;
 
-const outcomeOf = (exitCode: number | undefined): Outcome =>
-  exitCode === undefined ? "notRun" : exitCode === 0 ? "passed" : "failed";
+/** A check with no outcome was either not run yet, or ran on a job whose outcomes are not public yet. */
+const outcomeOf = (exitCode: number | undefined, isRunning: boolean): Outcome =>
+  exitCode === undefined ? (isRunning ? "notRun" : "notPublic") : exitCode === 0 ? "passed" : "failed";
 
 /** The checks anybody may read now, what each said, and how many are still sealed. */
 export function ChecksSheet({ job }: { readonly job: JobView }): ReactElement {
@@ -18,7 +19,7 @@ export function ChecksSheet({ job }: { readonly job: JobView }): ReactElement {
     <Sheet number={4} id="checks" title={title} stamp={false}>
       <ul className="checks">
         {job.checks.map((check) => {
-          const outcome = outcomeOf(check.exitCode);
+          const outcome = outcomeOf(check.exitCode, isRunning);
           return (
             <li key={check.says} className={outcome}>
               <span className="outcome">{SITE.job.outcome[outcome]}</span>

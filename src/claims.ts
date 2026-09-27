@@ -107,6 +107,7 @@ const NO_TITLE: Record<Tile["verdict"], string> = {
   failed: "This job's checks failed, so no title was minted and there is nothing to claim.",
   "not-reproducible": "This job's runs disagreed, so it has no verdict, no title was minted, and there is nothing to claim.",
   withdrawn: "This job was withdrawn before any verdict, so no title was minted and there is nothing to claim.",
+  graded: "This job has been graded and its verdict is being settled. If it passed, its title is minted once that is done.",
 };
 
 /** What a claim needs, a title and a repository on GitHub, or why the job has nothing to claim yet. */

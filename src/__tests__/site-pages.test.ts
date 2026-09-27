@@ -269,13 +269,13 @@ describe("a job whose poster took the money back before any verdict", () => {
     expect(html).not.toContain("Fetch the checks");
   });
 
-  test("once written down, it is closed on the wall too, counted apart, and its checks are published", () => {
+  test("once written down, it is closed on the wall too and counted apart, and nothing hidden is published: nothing was judged", () => {
     const closed = record({ tile: tile({ verdict: "withdrawn", receiptURI: undefined }), chain: ON_CHAIN });
     expect(wall([closed.tile])).toContain("<b>1</b> withdrawn");
     const view = jobView(closed, [], {});
     expect(view.standing).toBe("withdrawn, the money taken back");
-    expect(view.checks).toHaveLength(2);
-    expect(draw({ page: "job", job: view })).toContain("Fetch the checks");
+    expect(view.checks.map((check) => check.says)).toEqual(["the page answers"]);
+    expect(draw({ page: "job", job: view })).not.toContain("Fetch the checks");
   });
 });
 

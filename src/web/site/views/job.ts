@@ -7,7 +7,7 @@ import type { OnChainJob } from "../../../posting.ts";
 import { checksPath, claimPath, receiptFilePath, receiptPath } from "../../../routes.ts";
 import { SEATS } from "../../../seal.ts";
 import type { SignedReceipt } from "../../../receipt.ts";
-import type { JobRecord } from "../../../store.ts";
+import { isPublished, type JobRecord } from "../../../store.ts";
 import { MODES, VerdictSchema, WEI } from "./kinds.ts";
 import { MoneyViewSchema, moneyOf } from "./money.ts";
 
@@ -79,8 +79,8 @@ export function jobView(record: JobRecord, notes: readonly Note[], chainSays: Ch
   const isWithdrawn = record.tile.verdict === "running" && chainSays.onChain?.state === "refunded";
   const tile: Tile = isWithdrawn ? { ...record.tile, verdict: "withdrawn" } : record.tile;
   const isRunning = tile.verdict === "running";
-  // what is sealed follows the record, which is what the server serves the checks and notes by
-  const isSealed = record.tile.verdict === "running";
+  // what is sealed follows the one publishing rule, which the server serves the checks and notes by
+  const isSealed = !isPublished(record);
   const money = moneyOf(record, chainSays.onChain);
   const tokenId = record.chain?.tokenId;
   return {
