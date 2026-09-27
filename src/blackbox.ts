@@ -11,6 +11,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { PORT } from "./job.ts";
+import { DOCKER_COULD_NOT_START, DockerFailed } from "./DockerFailed.ts";
 import { runDocker } from "./runDocker.ts";
 
 /**
@@ -78,7 +79,7 @@ async function docker(
   container?: string,
 ): Promise<{ code: number; out: string }> {
   const answer = await runDocker(args, seconds, container);
-  if (answer.timedOut) throw new Error(`Docker did not answer "docker ${args[0]}" within ${seconds}s`);
+  if (answer.timedOut) throw new DockerFailed(`Docker did not answer "docker ${args[0]}" within ${seconds}s`);
   return answer;
 }
 
@@ -96,7 +97,8 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
 
   try {
     // inside, so a network Docker made after it stopped answering is still taken down
-    await docker(["network", "create", "--internal", network]);
+    const made = await docker(["network", "create", "--internal", network]);
+    if (made.code !== 0) throw new DockerFailed(`Docker would not make the grading's network: ${made.out}`);
     const launched = await docker([
       "run", "-d",
       "--name", artefactName,
@@ -109,7 +111,8 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
       request.image,
       "sh", "-c", `cp -r /repo/. /work/ && cd /work && ${request.start}`,
     ]);
-    if (launched.code !== 0) throw new Error(`the artefact's box would not start: ${launched.out}`);
+    // the work's own command runs after this answers, inside the box: a refusal here is Docker's
+    if (launched.code !== 0) throw new DockerFailed(`Docker would not start the artefact's box: ${launched.out}`);
 
     await waitUntilAnswering(artefactName, request.startSeconds ?? 90);
 
@@ -132,6 +135,8 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
         request.image,
         "sh", "-c", `cd /checks && timeout ${checkSeconds} ${check.command}`,
       ], checkSeconds + DOCKER_ANSWER_SECONDS, checkName);
+      // a check whose box never started has not been run, so it is no failure of the work's
+      if (result.code === DOCKER_COULD_NOT_START) throw new DockerFailed(`Docker could not start the box for "${check.says}": ${result.out}`);
       outcomes.push({
         says: check.says,
         command: check.command,
@@ -172,7 +177,7 @@ async function waitUntilAnswering(target: string, seconds: number): Promise<void
   const deadline = Date.now() + seconds * 1000;
   while (Date.now() < deadline) {
     const state = await docker(["inspect", "-f", "{{.State.Running}} {{.State.ExitCode}}", target]);
-    if (state.code !== 0) throw new Error(`the artefact's box is gone: ${state.out}`);
+    if (state.code !== 0) throw new DockerFailed(`the artefact's box is gone from Docker: ${state.out}`);
     if (!state.out.startsWith("true")) {
       const log = await docker(["logs", target]);
       const code = state.out.split(" ")[1] ?? "?";

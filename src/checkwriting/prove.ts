@@ -12,6 +12,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { grade, type CheckToRun } from "../blackbox.ts";
+import { DockerFailed } from "../DockerFailed.ts";
 import { PORT, START, WORK_FILE } from "../job.ts";
 import { readableToTheBox } from "../sandbox.ts";
 import { firstLine } from "../errors.ts";
@@ -122,11 +123,12 @@ async function tryNearMiss(
 const notTried = (said: string): Outcome => ({ hasRun: false, hasHeld: false, said });
 
 /**
- * Exit codes that mean the check never really ran: Docker could not start the box (125), the command
- * could not be run or found (126, 127), or the box was killed from outside (137). None of them says
- * anything about the version being tried, so none of them counts as the check failing.
+ * Exit codes that mean the check never really ran: the command could not be run or found (126, 127),
+ * or the box was killed from outside (137). None of them says anything about the version being tried,
+ * so none of them counts as the check failing. Docker not starting the box at all is thrown by the
+ * grading as DockerFailed, and never reaches here.
  */
-const NEVER_RAN = new Set([125, 126, 127, 137]);
+const NEVER_RAN = new Set([126, 127, 137]);
 
 /**
  * Run the checks against one version, the same way a verdict runs them, and hand back how each did.
@@ -149,6 +151,9 @@ async function tryAgainst(
         : { hasRun: true, hasHeld: check.exitCode === 0, said });
     }
   } catch (error) {
+    // Docker failing us says nothing about the version or the check: the trial was never held, and
+    // the writing is not to be charged for it, so it is not passed off as a check that failed
+    if (error instanceof DockerFailed) throw error;
     notRun = firstLine(error);
   }
   return (command) => outcomes.get(command) ?? { hasRun: false, hasHeld: false, said: notRun };

@@ -8,4 +8,5 @@ export * from "./CheckWriting.ts";
 export * from "./ProvenChecks.ts";
 export * from "./request.ts";
 export * from "./writeChecks.ts";
+export * from "./WritingFailed.ts";
 export * from "./written.ts";

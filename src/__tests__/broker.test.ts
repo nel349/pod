@@ -90,6 +90,17 @@ describe("what the broker allows", () => {
     expect(broker.transcript[0]?.answered).toContain("nothing:");
   });
 
+  test("only answers the model gave are counted as answered, which is what a writing is charged by", async () => {
+    let turn = 0;
+    const broker = await brokerSaying(() => { if (turn++ === 1) throw new Error("no"); return "fine"; });
+    const ask = () => fetch("http://model/", { method: "POST", body: "x", unix: broker.socket } as RequestInit & { unix: string });
+    expect((await ask()).status).toBe(200);
+    expect((await ask()).status).toBe(502);
+    expect((await ask()).status).toBe(200);
+    expect(broker.transcript).toHaveLength(3);
+    expect(broker.answered).toBe(2);
+  });
+
   test("a model past its deadline is told to stop, not only stopped waiting for", async () => {
     const socket = join(await mkdtemp(join(tmpdir(), "pod-broker-")), "model.sock");
     let wasTold = false;

@@ -21,6 +21,9 @@ import type { CheckToRun } from "../blackbox.ts";
 import { openBroker, type Broker, type Model } from "../broker.ts";
 import { checkCommand, PORT, type HowItIsAsked } from "../job.ts";
 import { writableByTheBox } from "../sandbox.ts";
+import { DockerFailed } from "../DockerFailed.ts";
+import { firstLine } from "../errors.ts";
+import { WritingFailed } from "./WritingFailed.ts";
 import { jsonFromTheBox, plainDashes, textFromTheBox } from "./fromTheBox.ts";
 import { prove, type Tried } from "./prove.ts";
 import type { Statement, WriteRequest } from "./request.ts";
@@ -74,9 +77,9 @@ interface Planned {
 /**
  * Write the checks, then try every one of them.
  *
- * Throws when the writer could not write anything, with the reason it gave. A check that was written
- * but did not prove itself is not an error: it comes back with its proof, so the poster can see which
- * trial failed and say it differently.
+ * Throws WritingFailed when the writer could not write anything, with the reason it gave, and whether
+ * the writing is charged all the same. A check that was written but did not prove itself is not an
+ * error: it comes back with its proof, so the poster can see which trial failed and say it differently.
  */
 export async function writeChecks(
   request: WriteRequest,
@@ -121,6 +124,10 @@ export async function writeChecks(
       };
     }));
     return howItIsAsked ? { checks: written, howItIsAsked } : { checks: written };
+  } catch (error) {
+    // Docker failing us is never charged; anything else is, once the model has answered
+    const isCharged = !(error instanceof DockerFailed) && (broker?.answered ?? 0) > 0;
+    throw new WritingFailed(firstLine(error), isCharged);
   } finally {
     await broker?.stop();
     await Promise.all(made.map((folder) => rm(folder, { recursive: true, force: true })));

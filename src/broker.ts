@@ -45,6 +45,8 @@ export type Model = (prompt: string, signal: AbortSignal) => Promise<string>;
 export interface Broker {
   readonly socket: string;
   readonly transcript: readonly Exchange[];
+  /** how many times the model actually answered, which is what writing checks is charged by */
+  readonly answered: number;
   readonly stop: () => Promise<void>;
 }
 
@@ -125,6 +127,7 @@ export async function openBroker(input: {
   const limits = { ...SENSIBLE, ...input.limits };
   const transcript: Exchange[] = [];
   let asked = 0;
+  let answeredCount = 0;
 
   await unlink(input.socket).catch(() => {});
 
@@ -152,6 +155,7 @@ export async function openBroker(input: {
         ]);
         // an answer that lands as the deadline passes is still late: the model was told to stop
         if (deadline.aborted) throw new Error("the model took too long");
+        answeredCount++;
         transcript.push({
           at: new Date().toISOString(), role: input.role, asked: prompt, answered,
           seconds: (Date.now() - started) / 1000,
@@ -178,6 +182,7 @@ export async function openBroker(input: {
   return {
     socket: input.socket,
     get transcript() { return transcript; },
+    get answered() { return answeredCount; },
     stop: async () => {
       server.stop(true);
       await unlink(input.socket).catch(() => {});

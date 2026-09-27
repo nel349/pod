@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IMAGE, readableToTheBox } from "../sandbox.ts";
 import {
-  CheckWriting, isStillWriting, ProvenChecks, readyToSeal, refusalOf, writeChecks, WritingSchema, type Written, type WriteRequest,
+  CheckWriting, isStillWriting, ProvenChecks, readyToSeal, refusalOf, writeChecks, WritingFailed, WritingSchema, type Written, type WriteRequest,
 } from "../checkwriting/index.ts";
 import { digestOf } from "../job.ts";
 import { handle, type Market } from "../server.ts";
@@ -14,6 +14,16 @@ import {
   COAT_REQUEST, DRY, GOOD_REPLY, WET, WORKING, good, replying, replyingInTurn, serverSaying, writerWith,
 } from "./support/coat.ts";
 import { dockerAvailable } from "./support/tools.ts";
+import { checkout } from "./support/checkout.ts";
+import { prove } from "../checkwriting/prove.ts";
+import { DockerFailed } from "../DockerFailed.ts";
+import type { Model } from "../broker.ts";
+
+/**
+ * An image Docker refuses to start any box from. Malformed on purpose: a well-formed name that no
+ * registry has would send Docker to a registry and to this machine's credentials to look for it.
+ */
+const NO_SUCH_IMAGE = "POD/NOT A VALID IMAGE";
 
 /**
  * A poster's sentences become checks, and every check is tried before it can be sealed.
@@ -287,5 +297,35 @@ fs.writeFileSync(process.env.POD_SAY, JSON.stringify({ decision: "shipped", why:
     const { model, asked } = replying("I would be happy to help with that!");
     await expect(writeChecks(COAT_REQUEST, writerWith(model))).rejects.toThrow("could not write the checks");
     expect(asked()).toBe(2);
+  }, 120_000);
+
+  test("a writing that gave up after the model answered is charged: the model's time was spent", async () => {
+    const { model } = replying("I would be happy to help with that!");
+    const failure = await writeChecks(COAT_REQUEST, writerWith(model)).then(() => undefined, (error: unknown) => error);
+    expect(failure).toBeInstanceOf(WritingFailed);
+    expect(failure instanceof WritingFailed && failure.isCharged).toBe(true);
+  }, 120_000);
+
+  test("a writing whose model could not be reached is not charged", async () => {
+    const unreachable: Model = async () => { throw new Error("the model would not answer: not signed in"); };
+    const failure = await writeChecks(COAT_REQUEST, writerWith(unreachable)).then(() => undefined, (error: unknown) => error);
+    expect(failure).toBeInstanceOf(WritingFailed);
+    expect(failure instanceof WritingFailed && failure.isCharged).toBe(false);
+  }, 120_000);
+
+  test("a writing whose box Docker never started is not charged, and the model is never asked", async () => {
+    const { model, asked } = replying(GOOD_REPLY);
+    const failure = await writeChecks(COAT_REQUEST, { ...writerWith(model), image: NO_SUCH_IMAGE })
+      .then(() => undefined, (error: unknown) => error);
+    expect(failure).toBeInstanceOf(WritingFailed);
+    expect(failure instanceof WritingFailed && failure.isCharged).toBe(false);
+    expect(asked()).toBe(0);
+  }, 120_000);
+
+  test("trials Docker could not run are no trials: the failure is Docker's, not a check that failed", async () => {
+    const checks = await checkout("pod-trial-checks-", { "check-1.mjs": good(0).check });
+    const working = await checkout("pod-trial-working-", { "server.js": WORKING });
+    await expect(prove(checks, [{ says: WET, command: "node check-1.mjs", hidden: false }], { working, nearMiss: new Map() }, NO_SUCH_IMAGE))
+      .rejects.toBeInstanceOf(DockerFailed);
   }, 120_000);
 });

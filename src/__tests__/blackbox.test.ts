@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { BOUNDED_LOGS, grade, type CheckToRun } from "../blackbox.ts";
 import { MOST_KEPT_BYTES } from "../readBounded.ts";
+import { DockerFailed } from "../DockerFailed.ts";
 import { checkout } from "./support/checkout.ts";
 import { dockerAvailable } from "./support/tools.ts";
 
@@ -126,6 +127,12 @@ describe.skipIf(!withDocker)("grading from outside the box", () => {
 
     expect(failure?.message).toContain("never answered within 30s");
     expect(failure?.message).toContain("listening, and saying nothing");
+  }, 240_000);
+
+  // an image name Docker refuses outright, so no registry and no credentials are ever asked
+  test("a box Docker will not start is Docker's failure, never a verdict on the work", async () => {
+    await expect(grade({ artefact: ARTEFACT, start: "node server.js", checks: CHECKS, toRun, image: "POD/NOT A VALID IMAGE" }))
+      .rejects.toBeInstanceOf(DockerFailed);
   }, 240_000);
 
   test("nothing is left running afterwards", async () => {
