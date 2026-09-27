@@ -8,7 +8,7 @@ function Page({ data }: { readonly data: SitePage }): ReactElement {
   switch (data.page) {
     case "wall": return <WallPage tiles={data.tiles} />;
     case "job": return <JobPage job={data.job} />;
-    case "agent": return <AgentPage agent={data.agent} record={data.record} tiles={data.tiles} />;
+    case "agent": return <AgentPage data={data} />;
     case "receipt": return <ReceiptPage receipt={data.receipt} />;
     case "yours": return <YoursPage />;
     case "missing": return <MissingPage why={data.why} />;

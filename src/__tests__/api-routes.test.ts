@@ -26,7 +26,11 @@ async function aMarket(atOnce = 0): Promise<Market> {
   return {
     page: MARKET_PAGE,
     // nothing here reaches the chain; a reader that would say so if it were asked
-    chain: { jobs: MARKET_PAGE.jobs, job: async () => { throw new Error("the chain was not meant to be asked"); } },
+    chain: {
+      jobs: MARKET_PAGE.jobs,
+      job: async () => { throw new Error("the chain was not meant to be asked"); },
+      now: async () => { throw new Error("the chain was not meant to be asked"); },
+    },
     // atOnce 0: nothing is ever started, so nothing reaches the model
     writing: new CheckWriting({ writer: writerWith(replying(GOOD_REPLY).model), proven, atOnce }),
     proven,

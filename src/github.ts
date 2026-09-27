@@ -20,6 +20,8 @@ export const GITHUB_OWNER_SETTING = "POD_GITHUB_OWNER";
 
 /** GitHub's API, which every call here, and the credit check's read of a gist, goes to */
 export const GITHUB_API = "https://api.github.com";
+/** Where a GitHub account is seen by a person */
+export const GITHUB_WEB = "https://github.com";
 
 async function token(): Promise<string> {
   const fromEnvironment = process.env.POD_GITHUB_TOKEN;

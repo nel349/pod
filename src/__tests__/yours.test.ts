@@ -56,7 +56,7 @@ beforeAll(async () => {
   await anvil.fund(STRANGER_ADDRESS);
   await aRunningJob("a-coat-still-open", POSTER);
   await aRunningJob("somebody-elses-coat", STRANGER);
-  const reader = readerFor({ jobs: titled.jobs, read: (id) => readJob({ address: titled.jobs, publicClient: anvil.publicClient }, id) });
+  const reader = readerFor({ jobs: titled.jobs, read: (id) => readJob({ address: titled.jobs, publicClient: anvil.publicClient }, id), now: async () => (await anvil.publicClient.getBlock()).timestamp });
   owners = ownersFrom({
     jobs: titled.jobs, job: reader.job, count: () => readJobCount({ address: titled.jobs, publicClient: anvil.publicClient }), holder: (tokenId) => holderOf({ address: titled.token, publicClient: anvil.publicClient }, tokenId) });
 }, 120_000);

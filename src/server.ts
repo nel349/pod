@@ -15,6 +15,7 @@ import { isAddress } from "viem";
 import { bodyWithin, tooLarge } from "./body.ts";
 import { NO_STORE } from "./headers.ts";
 import { firstLine } from "./errors.ts";
+import { chainJobToTheWire } from "./chainJob.ts";
 import { CREDIT_FOLDER, JOBS_FOLDER_SETTING, PROVEN_FOLDER, REPOSITORIES_FOLDER } from "./folders.ts";
 import { Claims } from "./claims.ts";
 import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard } from "./door/index.ts";
@@ -25,6 +26,7 @@ import { renderCard } from "./card.ts";
 import { checksArePublished, JobStore } from "./store.ts";
 import { cardPath, checkFilePath, isSafeName, isWallName, jobPath, RECEIPT_FILE, ROUTES, writingPath } from "./routes.ts";
 import { ownersFrom, type Owners } from "./owners.ts";
+import { agentFactsFrom, type AgentFactsReader } from "./agentFacts.ts";
 import { MONAD_TESTNET } from "./registry.ts";
 import { agentPage, jobData, receiptData, wallPage, yoursData } from "./sitePages.ts";
 import { renderSite, siteScript, type Head, type SitePage } from "./web/site/index.ts";
@@ -76,6 +78,8 @@ export interface Services {
   readonly claims?: Claims;
   /** who paid for each job and who holds its title, as the chain says */
   readonly owners?: Owners;
+  /** what is known of an agent beyond this wall: its ERC-8004 identity and record, and its credit */
+  readonly agents?: AgentFactsReader;
 }
 const BUNDLE = { "content-type": "application/x-git-bundle" } as const;
 
@@ -85,7 +89,7 @@ const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const guide = new URL("../public/llms.txt", import.meta.url);
 const MARKDOWN = { "content-type": "text/markdown; charset=utf-8" } as const;
 
-export async function handle(request: Request, store: JobStore, { market, door, notes, jobList, credit, claims, owners }: Services = {}): Promise<Response> {
+export async function handle(request: Request, store: JobStore, { market, door, notes, jobList, credit, claims, owners, agents }: Services = {}): Promise<Response> {
   const { pathname } = new URL(request.url);
   const page = (head: Head, drawn: SitePage, status = 200): Response =>
     new Response(renderSite(head, { ...drawn, ...(market ? { market: market.page } : {}), coin: market?.page.coin ?? MONAD_TESTNET.coin, drawnAt: new Date().toISOString() }), { status, headers: HTML });
@@ -134,6 +138,15 @@ export async function handle(request: Request, store: JobStore, { market, door, 
     const record = isWallName(jobId) ? await store.read(jobId) : undefined;
     if (!record?.chain) return Response.json({ why: "there is no job with money on the chain at that address" }, { status: 404 });
     return Response.json({ jobId, idea: record.tile.idea, onChainId: record.chain.jobId }, { headers: NO_STORE });
+  }
+
+  if (pathname.startsWith(ROUTES.chainJob)) {
+    if (!market) return Response.json({ why: "this server answers to no chain" }, { status: 404 });
+    const onChainId = pathname.slice(ROUTES.chainJob.length);
+    if (!/^[0-9]+$/.test(onChainId)) return Response.json({ why: `${onChainId} is not a job's number on the contract` }, { status: 400 });
+    const [job, now] = await Promise.all([market.chain.job(BigInt(onChainId)), market.chain.now()]);
+    if (!job) return Response.json({ why: `there is no job ${onChainId} on the contract` }, { status: 404 });
+    return Response.json(chainJobToTheWire(job, now), { headers: NO_STORE });
   }
 
   if (pathname.startsWith(`${ROUTES.writeChecks}/`)) {
@@ -238,7 +251,7 @@ export async function handle(request: Request, store: JobStore, { market, door, 
   if (pathname.startsWith(ROUTES.agent)) {
     const agent = pathname.slice(ROUTES.agent.length);
     if (!isAddress(agent, { strict: false })) return missing(`${agent} is not an address`);
-    return page({ title: SITE.agent.title(agent) }, await agentPage(store, agent));
+    return page({ title: SITE.agent.title(agent) }, await agentPage(store, agent, agents));
   }
 
   return missing(`Nothing at ${pathname}`);
@@ -346,7 +359,7 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
   if (!configured) return {};
   if (!isAddress(configured)) throw new Error(`POD_JOBS_ADDRESS is not an address: ${configured}`);
   const jobs = configured;
-  const { readJob, readJobCount, readSeats, readTerms } = await import("./jobs.ts");
+  const { readJob, readJobCount, readSeats, readTerms, readValidator } = await import("./jobs.ts");
   const { monadClient } = await import("./live.ts");
   const { MONAD_REGISTRIES, MONAD_TESTNET } = await import("./registry.ts");
   const rpc = process.env.MONAD_TESTNET_RPC ?? MONAD_TESTNET.rpc;
@@ -386,6 +399,7 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
     chain: readerFor({
       jobs,
       read: (id) => readJob(contract, id),
+      now: async () => (await publicClient.getBlock()).timestamp,
     }),
     writing: new CheckWriting({
       writer: { model: claudeOnThisMachine(), image: IMAGE, agents: new URL("../agents", import.meta.url).pathname },
@@ -400,7 +414,8 @@ async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string
     count: () => readJobCount(contract),
     ...(token ? { holder: (tokenId: bigint) => holderOf(token, tokenId) } : {}),
   });
-  return { market, door, notes, jobList, credit, owners, ...(claims ? { claims } : {}) };
+  const agents = agentFactsFrom({ client: publicClient, registries: MONAD_REGISTRIES, validator: () => readValidator(contract), credit: book });
+  return { market, door, notes, jobList, credit, owners, agents, ...(claims ? { claims } : {}) };
 }
 
 

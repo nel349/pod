@@ -184,6 +184,11 @@ export async function readTerms(at: Omit<Contract, "wallet">, jobId: bigint): Pr
   return Object.fromEntries(terms) as Record<Role, { readonly pay: bigint; readonly deposit: bigint }>;
 }
 
+/** The runner the contract takes verdicts from, which is also who answers in ERC-8004. */
+export function readValidator(at: Omit<Contract, "wallet">): Promise<Address> {
+  return at.publicClient.readContract({ address: at.address, abi: podJobsAbi, functionName: "validator" });
+}
+
 /** How many jobs have ever been posted on the contract. They are numbered from 1, in the order they were paid for. */
 export async function readJobCount(at: Omit<Contract, "wallet">): Promise<bigint> {
   const next = await at.publicClient.readContract({ address: at.address, abi: podJobsAbi, functionName: "nextJobId" });

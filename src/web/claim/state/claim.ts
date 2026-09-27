@@ -23,6 +23,8 @@ export const ClaimableSchema = z.object({
 
 export const ClaimedSchema = z.object({ invited: InvitationSchema });
 export const WhySchema = z.object({ why: z.string() });
+/** Why there is nothing to claim, and the job's own page when there is a job */
+export const NotClaimableSchema = z.object({ why: z.string(), job: z.string().optional() });
 
 export type Claimable = z.infer<typeof ClaimableSchema>;
 export type Invitation = z.infer<typeof InvitationSchema>;
@@ -73,6 +75,7 @@ export const COPY = {
     stand: "Sign with the wallet that holds the title, name a GitHub account, and the repository is handed to it. Nobody signs in here: the chain says who holds it.",
   },
   loading: "Reading the title from the chain…",
+  backToJob: "Back to the job",
   noWallet: "This browser has no wallet in it. Open this page where the wallet that holds the title lives.",
   what: {
     title: "What you are claiming",

@@ -6,6 +6,7 @@
  * followed, so it is a schema: the browser reads it through these rather than trusting it. Money is in
  * wei as a decimal string and times are ISO strings, because JSON has neither.
  */
+export * from "./agent.ts";
 export * from "./job.ts";
 export * from "./kinds.ts";
 export * from "./money.ts";

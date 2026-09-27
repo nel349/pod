@@ -16,7 +16,8 @@ import { transferRepository, type Published } from "./github.ts";
 import { checkClaim, holderOf } from "./handover.ts";
 import { NO_STORE } from "./headers.ts";
 import type { Contract } from "./jobs.ts";
-import { isWallName, ROUTES } from "./routes.ts";
+import { isWallName, jobPath, ROUTES } from "./routes.ts";
+import type { Tile } from "./gallery.ts";
 import type { JobRecord, JobStore } from "./store.ts";
 
 /** A GitHub account's name, as GitHub allows it: letters, numbers and single dashes, at most 39 */
@@ -51,10 +52,13 @@ export class Claims {
 
   async handle(request: Request): Promise<Response> {
     const jobId = new URL(request.url).pathname.slice(ROUTES.claimApi.length);
-    if (!isWallName(jobId)) return Response.json({ why: "there is no job at that address" }, { status: 404 });
+    if (!isWallName(jobId)) return Response.json({ why: NOTHING_HERE }, { status: 404 });
     const record = await this.options.store.read(jobId);
     const parts = claimable(record);
-    if (!record || !parts.ok) return Response.json({ why: parts.ok ? "there is no job at that address" : parts.why }, { status: 404 });
+    if (!record || !parts.ok) {
+      const why = parts.ok ? NOTHING_HERE : parts.why;
+      return Response.json({ why, ...(record ? { job: jobPath(jobId) } : {}) }, { status: 404 });
+    }
     const { tokenId, repository } = parts;
 
     if (request.method === "GET") {
@@ -94,14 +98,25 @@ export class Claims {
   }
 }
 
+const NOTHING_HERE = "There is no job at that address.";
+
+/** Why a job with no title has nothing to claim, in terms of where it stands. */
+const NO_TITLE: Record<Tile["verdict"], string> = {
+  running: "Not yet: this job is still open. Its title is minted to whoever posted it once the work passes, and then the repository can be claimed here.",
+  passed: "This job passed, and no title was minted for it, so there is nothing to claim.",
+  failed: "This job's checks failed, so no title was minted and there is nothing to claim.",
+  "not-reproducible": "This job's runs disagreed, so it has no verdict, no title was minted, and there is nothing to claim.",
+  withdrawn: "This job was withdrawn before any verdict, so no title was minted and there is nothing to claim.",
+};
+
 /** What a claim needs, a title and a repository on GitHub, or why the job has nothing to claim yet. */
 function claimable(record: JobRecord | undefined):
   | { readonly ok: true; readonly tokenId: bigint; readonly repository: string }
   | { readonly ok: false; readonly why: string } {
-  if (!record) return { ok: false, why: "there is no job at that address" };
+  if (!record) return { ok: false, why: NOTHING_HERE };
   const tokenId = record.chain?.tokenId;
-  if (tokenId === undefined) return { ok: false, why: `${record.jobId} has no title, so there is nothing to claim` };
-  if (!record.repository) return { ok: false, why: `${record.jobId} has a title, and its repository is not on GitHub yet. Try again in a while` };
+  if (tokenId === undefined) return { ok: false, why: NO_TITLE[record.tile.verdict] };
+  if (!record.repository) return { ok: false, why: "This job's title is minted, and its repository is not on GitHub yet. Try again in a while." };
   return { ok: true, tokenId: BigInt(tokenId), repository: record.repository };
 }
 

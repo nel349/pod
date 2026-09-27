@@ -29,7 +29,7 @@ function Refunding({ job, onChain, market }: { readonly job: Refundable; readonl
 }
 
 export function RefundPage({ target, market }: { readonly target: RefundTarget; readonly market: MarketConfig }): ReactElement {
-  const state = useRefundable(target, market);
+  const state = useRefundable(target);
   return (
     <div className="poster">
       <RefundBill />

@@ -50,7 +50,11 @@ describe.skipIf(!withDocker)("the route the page starts writing with", () => {
         chainId: 31337, chainName: "a local chain", rpc: "http://127.0.0.1:8545",
         jobs: "0x0000000000000000000000000000000000000001", explorer: "http://explorer.invalid", coin: "ETH",
       },
-      chain: { jobs: "0x0000000000000000000000000000000000000001", job: async () => undefined },
+      chain: {
+        jobs: "0x0000000000000000000000000000000000000001",
+        job: async () => undefined,
+        now: async () => { throw new Error("writing checks never asks the chain the time"); },
+      },
       writing: new CheckWriting({ writer: writerWith(replying(GOOD_REPLY).model), proven }),
       proven,
     };

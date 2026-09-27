@@ -1,4 +1,4 @@
-export * from "./AgentPage.tsx";
+export * from "./agent/index.ts";
 export * from "./job/index.ts";
 export * from "./MissingPage.tsx";
 export * from "./ReceiptPage.tsx";

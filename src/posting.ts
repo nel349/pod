@@ -62,6 +62,8 @@ export interface OnChainJob {
 export interface ChainReader {
   readonly jobs: Address;
   job(onChainId: bigint): Promise<OnChainJob | undefined>;
+  /** the chain's own time, which is what the contract's windows are measured by */
+  now(): Promise<bigint>;
 }
 
 export type Accepted =
@@ -159,9 +161,11 @@ export async function acceptPosting(store: JobStore, chain: ChainReader, asked: 
 export function readerFor(input: {
   readonly jobs: Address;
   readonly read: (onChainId: bigint) => Promise<{ poster: Address; price: bigint; seal: Hex; endsAt: bigint; state: OnChainJob["state"] }>;
+  readonly now: () => Promise<bigint>;
 }): ChainReader {
   return {
     jobs: input.jobs,
+    now: input.now,
     async job(onChainId) {
       const found = await input.read(onChainId);
       // the contract answers zeroes for a job that was never posted, rather than refusing

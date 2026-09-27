@@ -93,6 +93,7 @@ beforeAll(async () => {
   reader = readerFor({
     jobs,
     read: async (id) => readJob({ address: jobs, publicClient: anvil.publicClient }, id),
+    now: async () => (await anvil.publicClient.getBlock()).timestamp,
   });
   // the two checks every honest posting below carries have been through their trials here
   proven = new ProvenChecks(await mkdtemp(join(tmpdir(), "pod-proven-")));

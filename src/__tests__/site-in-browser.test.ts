@@ -52,7 +52,7 @@ beforeAll(async () => {
   anvil = await startAnvil();
   const jobs = await anvil.deploy("PodJobs", [privateKeyToAccount(ANVIL_KEYS[6]).address]);
   store = new JobStore(await mkdtemp(join(tmpdir(), "pod-site-")));
-  const reader = readerFor({ jobs, read: (id) => readJob({ address: jobs, publicClient: anvil.publicClient }, id) });
+  const reader = readerFor({ jobs, read: (id) => readJob({ address: jobs, publicClient: anvil.publicClient }, id), now: async () => (await anvil.publicClient.getBlock()).timestamp });
   const proven = new ProvenChecks(join(await mkdtemp(join(tmpdir(), "pod-site-proven-")), "proven"));
   market = {
     page: { chainId: 31337, chainName: "a local chain", rpc: anvil.rpc, jobs, explorer: "http://explorer.invalid", coin: "ETH" },

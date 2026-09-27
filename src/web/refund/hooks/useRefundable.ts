@@ -1,9 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { useConfig } from "wagmi";
-import { getBlock, readContract } from "wagmi/actions";
-import { podJobsAbi, stateOf } from "../../../jobs.ts";
-import type { MarketConfig } from "../../../market.ts";
-import { refundApiPath } from "../../../routes.ts";
+import { ChainJobSchema } from "../../../chainJob.ts";
+import { chainJobPath, refundApiPath } from "../../../routes.ts";
 import { readAnswer } from "../../shared/index.ts";
 import { COPY, type OnChainNow, type Refundable, RefundableSchema, type RefundTarget, WhySchema } from "../state/index.ts";
 import { REFUND_QUERY_KEYS } from "./queryKeys.ts";
@@ -13,10 +10,13 @@ export type RefundableState =
   | { readonly kind: "failed"; readonly why: string }
   | { readonly kind: "ready"; readonly job: Refundable; readonly onChain: OnChainNow };
 
-/** The job, from the server, and where it stands, from the chain itself: the chain is what decides. */
-export function useRefundable(target: RefundTarget, market: MarketConfig): RefundableState {
+/**
+ * The job, and where it stands on the chain, both as the server reads them: it reads Monad with the
+ * patience the public node needs. The refund itself goes from the wallet to the contract, which is
+ * what decides whether it is allowed.
+ */
+export function useRefundable(target: RefundTarget): RefundableState {
   const jobId = target.by === "name" ? target.jobId : `#${target.onChainId}`;
-  const config = useConfig();
   const job = useQuery({
     queryKey: REFUND_QUERY_KEYS.refundable(jobId),
     queryFn: async (): Promise<Refundable> => {
@@ -33,11 +33,9 @@ export function useRefundable(target: RefundTarget, market: MarketConfig): Refun
     queryKey: REFUND_QUERY_KEYS.onChain(jobId),
     enabled: onChainId !== undefined,
     queryFn: async (): Promise<OnChainNow> => {
-      const [poster, price, , endsAt, state] = await readContract(config, {
-        address: market.jobs, abi: podJobsAbi, functionName: "jobs", args: [BigInt(onChainId ?? "0")], chainId: market.chainId,
-      });
-      const block = await getBlock(config, { chainId: market.chainId });
-      return { poster, price, endsAt, state: stateOf(state), now: block.timestamp };
+      const response = await fetch(chainJobPath(onChainId ?? ""), { cache: "no-store" });
+      if (!response.ok) throw new Error((await readAnswer(response, WhySchema)).why);
+      return readAnswer(response, ChainJobSchema);
     },
   });
   if (job.isError) return { kind: "failed", why: job.error.message };

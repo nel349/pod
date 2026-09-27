@@ -6,8 +6,9 @@ import { parseEther, toHex, type Address, type Hex, type PublicClient } from "vi
 import { privateKeyToAccount } from "viem/accounts";
 import { agentEmail, branchFor } from "../door/index.ts";
 import { sealSpec, type Role, type Spec } from "../job.ts";
-import { approve, MOST_BLOCKS_A_LOG_READ_COVERS, post, readJob, takeSeat } from "../jobs.ts";
+import { approve, MOST_BLOCKS_A_LOG_READ_COVERS, post, readJob, readValidator, takeSeat } from "../jobs.ts";
 import { openJob } from "../publish.ts";
+import { agentFactsFrom } from "../agentFacts.ts";
 import { commitToBytes32, commitWork, head, openRepository } from "../repo.ts";
 import { record, registerAgent, requestValidation, verdictOnChain, type Registries } from "../registry.ts";
 import { signReceipt } from "../receipt.ts";
@@ -333,6 +334,15 @@ describe.skipIf(!available)("the worker", () => {
     const third: string[] = [];
     await aWorker(third).tick();
     expect(recordsSaid(third)).toEqual([]);
+
+    // and an agent's page reads it all back: the identity it named, who owns it, the chain's record by seat
+    const agents = agentFactsFrom({ client: anvil.publicClient, registries, validator: () => readValidator(reading()) });
+    const records = await store.all();
+    expect(await agents.of(job.pod.builder.address, records)).toEqual({
+      identity: { id: builderId, owner: job.pod.builder.address, seats: [{ role: "builder", recorded: 1, passed: 1, unsure: 0 }] },
+    });
+    // an identity nothing was recorded for is named nowhere here, so none is claimed for it
+    expect(await agents.of(stranger.address, records)).toEqual({});
   }, 300_000);
 
   test("somebody a seat names as its owner is not the seat: only the key that held it has its verdict recorded", async () => {

@@ -10,8 +10,15 @@ import { useConnectedAccount } from "../shared/index.ts";
 import { useClaim, useClaimable } from "./hooks/index.ts";
 import { COPY, type Claimable } from "./state/index.ts";
 
-function Notice({ children }: { readonly children: string }): ReactElement {
-  return <main className="sheets"><section className="sheet notice"><p>{children}</p></section></main>;
+function Notice({ children, job }: { readonly children: string; readonly job?: string }): ReactElement {
+  return (
+    <main className="sheets">
+      <section className="sheet notice">
+        <p>{children}</p>
+        {job && <p><a className="primary" href={job}>{COPY.backToJob}</a></p>}
+      </section>
+    </main>
+  );
 }
 
 function Claiming({ claimable, market }: { readonly claimable: Claimable; readonly market: MarketConfig }): ReactElement {
@@ -33,6 +40,7 @@ export function ClaimPage({ jobId, market }: { readonly jobId: string; readonly 
       <ClaimBill />
       {state.kind === "loading" && <Notice>{COPY.loading}</Notice>}
       {state.kind === "failed" && <Notice>{state.why}</Notice>}
+      {state.kind === "nothing" && <Notice job={state.job}>{state.why}</Notice>}
       {state.kind === "ready" && <Claiming claimable={state.claimable} market={market} />}
     </div>
   );

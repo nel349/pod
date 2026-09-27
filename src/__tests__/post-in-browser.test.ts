@@ -66,7 +66,7 @@ function aMarket(): Market {
   const proven = new ProvenChecks(provenFolder);
   return {
     page: { chainId: 31337, chainName: "a local chain", rpc: anvil.rpc, jobs, explorer: "http://explorer.invalid", coin: "ETH" },
-    chain: readerFor({ jobs, read: (id) => readJob({ address: jobs, publicClient: anvil.publicClient }, id) }),
+    chain: readerFor({ jobs, read: (id) => readJob({ address: jobs, publicClient: anvil.publicClient }, id), now: async () => (await anvil.publicClient.getBlock()).timestamp }),
     writing: new CheckWriting({ writer: writerWith(replying(GOOD_REPLY).model), proven }),
     proven,
   };

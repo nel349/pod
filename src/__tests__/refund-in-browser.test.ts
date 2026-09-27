@@ -8,8 +8,9 @@ import { CheckWriting, ProvenChecks } from "../checkwriting/index.ts";
 import { sealSpec } from "../job.ts";
 import { post, readJob } from "../jobs.ts";
 import { readerFor } from "../posting.ts";
+import { ChainJobSchema } from "../chainJob.ts";
 import { openJob } from "../publish.ts";
-import { refundByNumberPath, refundPath } from "../routes.ts";
+import { chainJobPath, refundByNumberPath, refundPath } from "../routes.ts";
 import { serve } from "../server.ts";
 import { JobStore } from "../store.ts";
 import { COPY } from "../web/refund/state/index.ts";
@@ -72,7 +73,7 @@ beforeAll(async () => {
   const serving = serve(store, 0, {
     market: {
       page: { chainId: 31337, chainName: "a local chain", rpc: anvil.rpc, jobs, explorer: "http://explorer.invalid", coin: "ETH" },
-      chain: readerFor({ jobs, read: (id) => readJob({ address: jobs, publicClient: anvil.publicClient }, id) }),
+      chain: readerFor({ jobs, read: (id) => readJob({ address: jobs, publicClient: anvil.publicClient }, id), now: async () => (await anvil.publicClient.getBlock()).timestamp }),
       writing: new CheckWriting({ writer: writerWith(replying(GOOD_REPLY).model), proven }),
       proven,
     },
@@ -110,6 +111,18 @@ const text = (page: Browser, selector: string): Promise<string> => page.evaluate
 const isDisabled = (page: Browser): Promise<boolean> => page.evaluate<boolean>(`document.querySelector("#refund").disabled`);
 
 describe.skipIf(!available)("taking the money back from a browser", () => {
+  test("the server says where a job stands on the contract, by its number, with the chain's own time", async () => {
+    const answer = await fetch(base + chainJobPath(unpublished.toString()));
+    expect(answer.status).toBe(200);
+    const job = ChainJobSchema.parse(await answer.json());
+    expect(job.poster).toBe(privateKeyToAccount(POSTER).address);
+    expect(job.price).toBe(PRICE);
+    expect(job.state).toBe("open");
+    expect(job.now).toBe((await anvil.publicClient.getBlock()).timestamp);
+    expect((await fetch(base + chainJobPath("99999"))).status).toBe(404);
+    expect((await fetch(base + chainJobPath("not-a-number"))).status).toBe(400);
+  });
+
   test("while the window is open, the page says until when, and there is nothing to press", async () => {
     const page = await openTheRefund(OPEN, POSTED_BY);
     await page.until(`document.querySelector("#standing").dataset.standing === "too early"`, "the job to read as too early");

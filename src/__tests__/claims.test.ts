@@ -3,7 +3,8 @@ import type { Address, Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { Claims } from "../claims.ts";
 import { claimToSign } from "../messages.ts";
-import { claimApiPath } from "../routes.ts";
+import { claimApiPath, jobPath } from "../routes.ts";
+import { NotClaimableSchema } from "../web/claim/state/index.ts";
 import type { JobStore } from "../store.ts";
 import { podTokenAbi } from "../token.ts";
 import { anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
@@ -102,5 +103,21 @@ describe.skipIf(!available)("claiming a POD's repository", () => {
     expect((await claimAs(POSTER, "-dash-first")).status).toBe(400);
     const nothing = await claims.handle(new Request(`http://pod.test${claimApiPath("no-such-job")}`));
     expect(nothing.status).toBe(404);
+    expect(await nothing.json()).toEqual({ why: "There is no job at that address." });
+  }, 60_000);
+
+  test("a job with no title yet says why, in terms of where it stands, and names its page", async () => {
+    const titled = await store.read(JOB);
+    if (!titled) throw new Error("the titled job is not kept");
+    // the same job with nothing on the chain yet, so no title
+    const untitled = { ...titled, chain: undefined };
+    for (const [verdict, words] of [["running", "still open"], ["failed", "checks failed"], ["withdrawn", "withdrawn before any verdict"]] as const) {
+      await store.save({ ...untitled, jobId: `a-coat-${verdict}`, tile: { ...titled.tile, jobId: `a-coat-${verdict}`, verdict } });
+      const answer = await claims.handle(new Request(`http://pod.test${claimApiPath(`a-coat-${verdict}`)}`));
+      expect(answer.status).toBe(404);
+      const said = NotClaimableSchema.parse(await answer.json());
+      expect(said.why).toContain(words);
+      expect(said.job).toBe(jobPath(`a-coat-${verdict}`));
+    }
   }, 60_000);
 });

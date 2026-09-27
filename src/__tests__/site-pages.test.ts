@@ -4,7 +4,7 @@ import type { JobRecord } from "../store.ts";
 import { recordByRole } from "../agentpage.ts";
 import { claimPath, receiptFilePath, receiptPath, refundByNumberPath, refundPath } from "../routes.ts";
 import {
-  jobView, moneyAt, needsTheChainForMoney, receiptView, renderSite, tileView, unpublishedView, type SiteData, type SitePage,
+  jobView, moneyAt, needsTheChainForMoney, receiptView, renderSite, tileView, unpublishedView, type AgentFactsView, type SiteData, type SitePage,
 } from "../web/site/index.ts";
 import { lengthOf, timeLeft, whenInUTC } from "../web/site/copy.ts";
 import type { SignedReceipt } from "../receipt.ts";
@@ -335,9 +335,10 @@ describe("a job paid for and never published", () => {
 
 describe("an agent's page", () => {
   const AGENT = "0x1111111111111111111111111111111111111111";
+  const OWNER = "0x2222222222222222222222222222222222222222";
   const theirs = (over: Partial<Tile> = {}): Tile => tile({ pod: [{ role: "lead", agent: AGENT, owner: AGENT }], ...over });
-  const agentPage = (tiles: readonly Tile[]): string =>
-    draw({ page: "agent", agent: AGENT, record: [...recordByRole(AGENT, tiles)], tiles: tiles.map((one) => tileView(one, true)) });
+  const agentPage = (tiles: readonly Tile[], facts: AgentFactsView = { isUnread: false }): string =>
+    draw({ page: "agent", agent: AGENT, record: [...recordByRole(AGENT, tiles)], facts, tiles: tiles.map((one) => tileView(one, true)) });
 
   test("it names the agent and shows failures as plainly as passes", () => {
     const html = agentPage([theirs({ jobId: "a" }), theirs({ jobId: "b", verdict: "failed" })]);
@@ -352,8 +353,27 @@ describe("an agent's page", () => {
     expect(html).not.toContain("<article");
   });
 
-  test("it says the chain's record is not what is on the page", () => {
-    expect(agentPage([theirs()])).toContain("this page does not show it yet");
+  test("it says who the agent is: its ERC-8004 identity, who owns it, and what the chain holds of it seat by seat", () => {
+    const html = agentPage([theirs()], {
+      isUnread: false,
+      identity: { id: "1875", owner: OWNER, seats: [{ role: "lead", recorded: 3, passed: 2, unsure: 1 }] },
+      github: { login: "octocat", gist: "https://gist.github.com/octocat/abc" },
+    });
+    expect(html).toContain("Agent #1875");
+    expect(html).toContain("ERC-8004 identity #1875, owned by");
+    expect(html).toContain("0x2222…2222");
+    expect(html).toContain("Its record on the chain, seat by seat");
+    expect(html).toMatch(/<th scope="row">lead<\/th><td>3<\/td><td>2<\/td><td>1<\/td>/);
+    expect(html).toContain(`href="https://github.com/octocat"`);
+    expect(html).toContain(`href="https://gist.github.com/octocat/abc"`);
+  });
+
+  test("with no identity it says why, with the chain unread it says that instead, and never claims credit it has not got", () => {
+    const none = agentPage([theirs()]);
+    expect(none).toContain("none of its verdicts has been recorded on the chain yet");
+    expect(none).toContain("has not linked a GitHub account");
+    expect(none).not.toContain("Its record on the chain");
+    expect(agentPage([theirs()], { isUnread: true })).toContain("could not be read just now");
   });
 });
 

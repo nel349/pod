@@ -7,11 +7,12 @@
 import { isAddressEqual, type Address } from "viem";
 import { recordByRole } from "./agentpage.ts";
 import { firstLine } from "./errors.ts";
+import type { AgentFactsReader } from "./agentFacts.ts";
 import type { Owners } from "./owners.ts";
 import { jobPath } from "./routes.ts";
 import type { JobRecord, JobStore } from "./store.ts";
 import {
-  jobView, needsTheChainForMoney, receiptView, tileView, unpublishedView, yoursEntry,
+  agentFactsView, jobView, needsTheChainForMoney, receiptView, tileView, unpublishedView, yoursEntry,
   type ChainSays, type JobView, type ReceiptView, type SitePage, type TileView, type YoursEntry, type YoursView,
 } from "./web/site/index.ts";
 
@@ -60,10 +61,16 @@ export async function jobData(store: JobStore, owners: Owners | undefined, jobId
   return jobView(record, await store.notes(jobId), await chainSaysOf(record, owners, now));
 }
 
-export async function agentPage(store: JobStore, agent: Address): Promise<SitePage> {
+export async function agentPage(store: JobStore, agent: Address, agents: AgentFactsReader | undefined): Promise<SitePage> {
   const wanted = agent.toLowerCase();
-  const sat = (await store.inWallOrder()).filter((record) => record.tile.pod.some((seat) => seat.agent.toLowerCase() === wanted));
-  return { page: "agent", agent, record: [...recordByRole(agent, sat.map((record) => record.tile))], tiles: sat.map(tileOf) };
+  const records = await store.inWallOrder();
+  const sat = records.filter((record) => record.tile.pod.some((seat) => seat.agent.toLowerCase() === wanted));
+  // with no chain to answer to, nothing is known beyond this wall, and that is not a failure to read
+  const facts = agents ? await quietly(`what is known of ${agent}`, () => agents.of(agent, records)) : {};
+  return {
+    page: "agent", agent, record: [...recordByRole(agent, sat.map((record) => record.tile))],
+    facts: agentFactsView(facts), tiles: sat.map(tileOf),
+  };
 }
 
 export async function receiptData(store: JobStore, jobId: string): Promise<ReceiptView | undefined> {

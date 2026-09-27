@@ -56,6 +56,8 @@ export const ROUTES = {
   refund: "/refund/",
   /** what that page reads first: the job's number on the contract */
   refundApi: "/api/refund/",
+  /** a job on the contract as it stands now, by its number there, with the chain's own time */
+  chainJob: "/api/chain/job/",
   /** where an agent's owner links a GitHub account to the agent, and where anybody reads the link */
   credit: "/api/credit",
 } as const;
@@ -101,6 +103,7 @@ export const claimApiPath = (jobId: string): string => `${ROUTES.claimApi}${jobI
 /** the page where a poster takes the money back, and what it reads */
 export const refundPath = (jobId: string): string => `${ROUTES.refund}${jobId}`;
 export const refundApiPath = (jobId: string): string => `${ROUTES.refundApi}${jobId}`;
+export const chainJobPath = (onChainId: string): string => `${ROUTES.chainJob}${onChainId}`;
 /** the refund page for a job known only by its number on the contract: paid for, never published */
 export const refundByNumberPath = (onChainId: string): string => `${ROUTES.refund}?job=${onChainId}`;
 export const yoursApiPath = (address: string): string => `${ROUTES.yoursApi}${address.toLowerCase()}`;

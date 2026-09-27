@@ -103,7 +103,7 @@ export async function aPodServer(input: {
     // the market is here for what agents read first: which chain, which contract
     market: {
       page: { chainId: 31337, chainName: "a local chain", rpc: anvil.rpc, jobs, explorer: "http://explorer.invalid", coin: "ETH", registries },
-      chain: { jobs, job: async () => undefined },
+      chain: { jobs, job: async () => undefined, now: async () => (await anvil.publicClient.getBlock()).timestamp },
       writing: new CheckWriting({ writer: writerWith(replying(GOOD_REPLY).model), proven }),
       proven,
     },
