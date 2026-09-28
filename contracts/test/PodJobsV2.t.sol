@@ -14,11 +14,16 @@ contract GasBurner {
     receive() external payable { while (true) {} }
 }
 
-/// @dev a payee that takes the money and answers with as much data as it can afford
+/// @dev a payee that takes the money and answers with nearly as much data as the gas it is sent can pay for
 contract Flood {
     receive() external payable {
-        assembly { return(0, 65536) }
+        assembly { return(0, 163840) }
     }
+}
+
+/// @dev a payee that takes the money and says nothing, to measure the flood against
+contract Quiet {
+    receive() external payable {}
 }
 
 /// @dev a poster that, on being refunded, tries to take the same money back again
@@ -61,6 +66,8 @@ abstract contract PodJobsV2Fixture is Test {
     address securityOwner;
 
     uint256 constant FIRST_JOB = 10;
+    /// @dev how many roles a job has seats for
+    uint8 constant ROLES = 5;
     uint256 constant WRITING = 0.05 ether;
     uint256 constant PAYOUT_GAS = 100_000;
     uint256 constant PRICE = 20 ether;
@@ -194,7 +201,7 @@ abstract contract PodJobsV2Fixture is Test {
                 total += price;
             }
             total += _balance(id) + _reserved(id);
-            for (uint8 r; r < 5; r++) {
+            for (uint8 r; r < ROLES; r++) {
                 uint256 count = jobs.seatCount(id, PodJobsV2.Role(r));
                 for (uint256 i; i < count; i++) total += jobs.seatAt(id, PodJobsV2.Role(r), i).deposit;
             }
@@ -204,6 +211,10 @@ abstract contract PodJobsV2Fixture is Test {
 
     function _assertConserved() internal view {
         assertEq(address(jobs).balance, _stillOwed(), "the contract holds exactly what it still owes");
+        // writing money not yet spent belongs to a job still preparing; once it is not, it has gone back
+        for (uint256 id = FIRST_JOB; id < jobs.nextJobId(); id++) {
+            if (_state(id) != PodJobsV2.State.Preparing) assertEq(_balance(id), 0, "no writing money is left in a job that is not preparing");
+        }
     }
 }
 
@@ -317,6 +328,25 @@ contract PodJobsV2Test is PodJobsV2Fixture {
         vm.prank(poster);
         vm.expectRevert(PodJobsV2.NotWritten.selector);
         jobs.approveChecks(id, SEAL, mirrored);
+    }
+
+    function test_aSignatureForAnotherChainIsRefused() public {
+        uint256 id = _post();
+        bytes memory signedHere = _written(id, SEAL);
+        vm.chainId(block.chainid + 1);
+        vm.prank(poster);
+        vm.expectRevert(PodJobsV2.NotWritten.selector);
+        jobs.approveChecks(id, SEAL, signedHere);
+    }
+
+    function test_aSignatureOverTheSameFactsForAnotherPurposeIsRefused() public {
+        uint256 id = _post();
+        // everything the approval names, but not what the signature is for
+        bytes32 noPurpose = keccak256(abi.encode(address(jobs), block.chainid, id, SEAL));
+        bytes memory signed = _sign(writerKey, noPurpose);
+        vm.prank(poster);
+        vm.expectRevert(PodJobsV2.NotWritten.selector);
+        jobs.approveChecks(id, SEAL, signed);
     }
 
     function test_onlyThePosterApprovesTheChecks_andOnlyOnce() public {
@@ -446,6 +476,22 @@ contract PodJobsV2Test is PodJobsV2Fixture {
         _assertConserved();
     }
 
+    function test_aWritingReleasedAfterATakeBackPaysThePoster_notTheJob() public {
+        uint256 id = _post();
+        vm.prank(writer);
+        jobs.reserveWriting(id);
+        vm.prank(poster);
+        jobs.takeBack(id);
+
+        uint256 before = poster.balance;
+        vm.prank(writer);
+        jobs.releaseWriting(id);
+        assertEq(poster.balance, before + WRITING, "released after the job ended, it goes to the poster");
+        assertEq(_balance(id), 0);
+        assertEq(address(jobs).balance, 0, "nothing is stranded in a job taken back");
+        _assertConserved();
+    }
+
     function test_aWritingKeptAfterApprovalPaysTheValidator() public {
         uint256 id = _post();
         vm.prank(writer);
@@ -474,6 +520,21 @@ contract PodJobsV2Test is PodJobsV2Fixture {
         jobs.releaseWriting(id);
         assertEq(_balance(id), 3 * WRITING);
         _assertConserved();
+    }
+
+    function test_onlyThePosterMayReleaseAWritingLeftADay() public {
+        uint256 id = _post();
+        vm.prank(writer);
+        jobs.reserveWriting(id);
+        vm.warp(block.timestamp + 2 days);
+        address[2] memory others = [stranger, validator];
+        for (uint256 i; i < others.length; i++) {
+            vm.prank(others[i]);
+            vm.expectRevert(PodJobsV2.NotWriter.selector);
+            jobs.releaseWriting(id);
+        }
+        vm.prank(poster);
+        jobs.releaseWriting(id);
     }
 
     function test_onlyTheWriterReservesKeepsAndReleases() public {
@@ -578,7 +639,7 @@ contract PodJobsV2Test is PodJobsV2Fixture {
         jobs.releaseLock(id);
         assertEq(_commit(id), bytes32(0));
         assertFalse(jobs.locked(id));
-        for (uint8 r; r < 5; r++) assertFalse(_approved(id, PodJobsV2.Role(r)));
+        for (uint8 r; r < ROLES; r++) assertFalse(_approved(id, PodJobsV2.Role(r)));
 
         bytes32 fixedUp = keccak256("fixed after the hold");
         _approveAll(id, fixedUp);
@@ -664,7 +725,7 @@ contract PodJobsV2Test is PodJobsV2Fixture {
         uint256 posterBefore = poster.balance;
         uint256 builderDue = jobs.seatPay(id, PodJobsV2.Role.Builder) + jobs.seatDeposit(id, PodJobsV2.Role.Builder);
         uint256 paid;
-        for (uint8 r; r < 5; r++) paid += jobs.seatPay(id, PodJobsV2.Role(r));
+        for (uint8 r; r < ROLES; r++) paid += jobs.seatPay(id, PodJobsV2.Role(r));
 
         _settle(id, PodJobsV2.Verdict.Passed);
         assertEq(builderAgent.balance, builderBefore + builderDue);
@@ -750,6 +811,16 @@ contract PodJobsV2Test is PodJobsV2Fixture {
         _assertConserved();
     }
 
+    function test_aNumberNobodyWasGivenCannotBeClosed() public {
+        vm.prank(stranger);
+        vm.expectRevert(PodJobsV2.NoSuchJob.selector);
+        jobs.close(FIRST_JOB - 1);
+        uint256 next = jobs.nextJobId();
+        vm.prank(stranger);
+        vm.expectRevert(PodJobsV2.NoSuchJob.selector);
+        jobs.close(next);
+    }
+
     function test_aJobStillPreparingHasNoWindowToClose() public {
         uint256 id = _post();
         vm.warp(block.timestamp + 30 days);
@@ -812,6 +883,21 @@ contract PodJobsV2Test is PodJobsV2Fixture {
         _assertEverybodyElsePaid(_seatAPayee(payee), payee);
     }
 
+    function test_aFloodOfDataIsNeverReadBack_soItCostsTheSettlementNoMoreThanItsOwnGas() public {
+        uint256 quietJob = _seatAPayee(address(new Quiet()));
+        uint256 floodJob = _seatAPayee(address(new Flood()));
+        vm.startPrank(validator);
+        uint256 before = gasleft();
+        jobs.settle(quietJob, COMMIT, PodJobsV2.Verdict.Passed, RECEIPT);
+        uint256 quiet = before - gasleft();
+        before = gasleft();
+        jobs.settle(floodJob, COMMIT, PodJobsV2.Verdict.Passed, RECEIPT);
+        uint256 flooded = before - gasleft();
+        vm.stopPrank();
+        // the flood spends the payee's own gas; copied back, it would cost the settlement as much again
+        assertLt(flooded - quiet, PAYOUT_GAS, "reading the flood back would cost the settlement more than the payee's own gas");
+    }
+
     function test_aPosterThatRefuses_canWithdrawItsRefund() public {
         Refuser refuser = new Refuser();
         vm.deal(address(refuser), 100 ether);
@@ -843,7 +929,7 @@ contract PodJobsV2Test is PodJobsV2Fixture {
     function test_theSharesAddUpToThePrice() public {
         uint256 id = _openJob();
         uint256 total;
-        for (uint8 r; r < 5; r++) total += jobs.seatPay(id, PodJobsV2.Role(r));
+        for (uint8 r; r < ROLES; r++) total += jobs.seatPay(id, PodJobsV2.Role(r));
         assertEq(total, PRICE);
     }
 

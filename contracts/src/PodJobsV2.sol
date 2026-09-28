@@ -69,6 +69,12 @@ contract PodJobsV2 {
     uint64 public constant RESERVATION_TIMEOUT = 1 days;
     /// @notice what the writer's signature over an approval is for, so it can mean nothing else
     bytes32 public constant CHECKS_WRITTEN = keccak256("pod.checks-written.v1");
+    /// @dev how many roles there are, in the order of the Role enum
+    uint8 internal constant ROLE_COUNT = 5;
+    /// @dev half the order of the curve signatures are made on: a signature's s above it is the
+    ///      mirror of one below, the same signature in another form
+    uint256 internal constant HALF_THE_CURVE =
+        0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
 
     /// @notice the only address whose verdict this contract will accept, and where writing money goes
     address public immutable validator;
@@ -114,6 +120,7 @@ contract PodJobsV2 {
     error WrongAmount();
     error TooManyReviewers();
     error NoWindow();
+    error NoSuchJob();
     error NotWritten();
     error WritingUnderWay();
     error NoWritingUnderWay();
@@ -372,6 +379,8 @@ contract PodJobsV2 {
     ///         the poster and every deposit home, since nothing was judged.
     function close(uint256 jobId) external {
         Job storage job = jobs[jobId];
+        // a number never given out reads as an open job with no window: it is no job at all
+        if (job.poster == address(0)) revert NoSuchJob();
         if (job.state != State.Open && job.state != State.Working) revert WrongState();
         if (block.timestamp < job.endsAt) revert TooEarly();
         job.state = State.Refunded;
@@ -407,7 +416,7 @@ contract PodJobsV2 {
         Job storage job = jobs[jobId];
         job.state = State.Settled;
         uint256 paid;
-        for (uint8 r; r < 5; r++) {
+        for (uint8 r; r < ROLE_COUNT; r++) {
             Seat[] storage row = seats[jobId][r];
             // seatPay already divides the reviewer share by the number of reviewer seats
             uint256 pay = seatPay(jobId, Role(r));
@@ -427,7 +436,7 @@ contract PodJobsV2 {
         Job storage job = jobs[jobId];
         job.state = State.Refunded;
         uint256 forfeited;
-        for (uint8 r; r < 5; r++) {
+        for (uint8 r; r < ROLE_COUNT; r++) {
             Seat[] storage row = seats[jobId][r];
             for (uint256 i; i < row.length; i++) {
                 uint256 deposit = row[i].deposit;
@@ -445,7 +454,7 @@ contract PodJobsV2 {
     }
 
     function _returnDeposits(uint256 jobId) internal {
-        for (uint8 r; r < 5; r++) {
+        for (uint8 r; r < ROLE_COUNT; r++) {
             Seat[] storage row = seats[jobId][r];
             for (uint256 i; i < row.length; i++) {
                 uint256 deposit = row[i].deposit;
@@ -481,7 +490,7 @@ contract PodJobsV2 {
     }
 
     function _clearApprovals(uint256 jobId) internal {
-        for (uint8 r; r < 5; r++) {
+        for (uint8 r; r < ROLE_COUNT; r++) {
             Seat[] storage row = seats[jobId][r];
             for (uint256 i; i < row.length; i++) row[i].approved = false;
         }
@@ -501,7 +510,7 @@ contract PodJobsV2 {
             v := byte(0, calldataload(add(signature.offset, 64)))
         }
         // the lower half of the curve only, so one signature has one form
-        if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) return address(0);
+        if (uint256(s) > HALF_THE_CURVE) return address(0);
         if (v != 27 && v != 28) return address(0);
         bytes32 signed = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", digest));
         return ecrecover(signed, v, r, s);

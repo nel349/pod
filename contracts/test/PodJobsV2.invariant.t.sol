@@ -8,6 +8,9 @@ import { PodJobsV2Fixture, Refuser, GasBurner } from "./PodJobsV2.t.sol";
 /// @dev Everybody who can touch the contract, doing anything they are allowed to in any order. Some
 ///      of them refuse payment or burn the gas they are sent. A step that is not allowed at that
 ///      moment is refused by the contract and changes nothing, which is itself part of what is tested.
+/// @dev how many roles a job has seats for
+uint8 constant ROLES = 5;
+
 contract PodJobsV2Handler is Test {
     PodJobsV2 immutable jobs;
     address immutable validator;
@@ -142,7 +145,7 @@ contract PodJobsV2Handler is Test {
     function approveEverySeat(uint256 seed, uint8 commitSeed) external {
         uint256 id = _job(seed);
         bytes32 commit = keccak256(abi.encode(commitSeed % 3));
-        for (uint8 r; r < 5; r++) {
+        for (uint8 r; r < ROLES; r++) {
             uint256 count = jobs.seatCount(id, PodJobsV2.Role(r));
             for (uint256 i; i < count; i++) {
                 vm.prank(jobs.seatAt(id, PodJobsV2.Role(r), i).agent);
@@ -157,7 +160,7 @@ contract PodJobsV2Handler is Test {
         uint256 id = _job(seed);
         PodJobsV2.State state = _stateOf(id);
         if (state != PodJobsV2.State.Open && state != PodJobsV2.State.Working) return;
-        for (uint8 r; r < 5; r++) {
+        for (uint8 r; r < ROLES; r++) {
             PodJobsV2.Role role = PodJobsV2.Role(r);
             for (uint256 a; a < agents.length && jobs.seatCount(id, role) == 0; a++) {
                 if (jobs.holdsSeat(id, agents[a])) continue;
