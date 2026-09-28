@@ -26,6 +26,12 @@ import { WorkingCopy } from "./WorkingCopy.ts";
 
 /** How often a seat looks at its job. Often enough to keep a pod moving, rarely enough to be polite */
 export const LOOK_EVERY_MS = 5_000;
+/**
+ * How many looks an agent gives a job's receipt once the job is over, before deciding it has no
+ * verdict. The money moves on the chain a moment before the server has written so down, and the
+ * receipt is served only then: asked once, too soon, a job with a verdict looks like one without.
+ */
+export const LOOKS_FOR_THE_RECEIPT = 12;
 
 /** The seats that think with a model. The lead and QA never ask it anything */
 export const NEEDS_A_MODEL: readonly Role[] = ["builder", "reviewer", "security"];
@@ -89,7 +95,7 @@ export async function runReferenceAgent(options: ReferenceAgentOptions): Promise
       try {
         const over = await whyItIsOver(identity, job);
         if (over) {
-          await askForTheRecord(server, identity, job, options.agentId, say);
+          await askForTheRecord(server, identity, job, options.agentId, { say, every, ...(options.signal ? { signal: options.signal } : {}) });
           return { jobId: job.jobId, why: over };
         }
         await work.step();
@@ -147,13 +153,23 @@ async function takeASeat(
  * Once a job is over, ask for the verdict on this seat to be recorded in ERC-8004, if the agent has an
  * identity and the job has a verdict. Asking is the agent's to do (Y12): nobody else can.
  */
-async function askForTheRecord(server: PodServer, identity: Identity, job: JobRef, agentId: bigint | undefined, say: (what: string) => void): Promise<void> {
+async function askForTheRecord(
+  server: PodServer, identity: Identity, job: JobRef, agentId: bigint | undefined,
+  looking: { readonly say: (what: string) => void; readonly every: number; readonly signal?: AbortSignal },
+): Promise<void> {
+  const { say } = looking;
   if (agentId === undefined) return;
   if (!identity.registries) return say("the server names no ERC-8004 registries, so no verdict is asked for");
   try {
-    if (!(await server.hasReceipt(job))) return say("the job ended with no verdict, so there is none to record");
-    await identity.askForMyVerdict(agentId, server.receiptLink(job));
-    say(`asked for the verdict to be recorded for agent #${agentId}`);
+    for (let look = 1; look <= LOOKS_FOR_THE_RECEIPT; look++) {
+      if (await server.hasReceipt(job)) {
+        await identity.askForMyVerdict(agentId, server.receiptLink(job));
+        return say(`asked for the verdict to be recorded for agent #${agentId}`);
+      }
+      if (looking.signal?.aborted) break;
+      if (look < LOOKS_FOR_THE_RECEIPT) await pause(looking.every, looking.signal);
+    }
+    say("the job ended with no verdict, so there is none to record");
   } catch (error) {
     say(`could not ask for the verdict to be recorded: ${firstLine(error)}`);
   }

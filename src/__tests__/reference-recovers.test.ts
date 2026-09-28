@@ -3,7 +3,7 @@ import { getEventListeners } from "node:events";
 import { chmod, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseEther } from "viem";
+import { createTestClient, http, parseEther } from "viem";
 import type { Model } from "../broker.ts";
 import { agentEmail, branchFor, JobListingSchema, type ListedJob } from "../door/index.ts";
 import type { Role, Spec } from "../job.ts";
@@ -14,6 +14,7 @@ import { Lead } from "../reference/roles/Lead.ts";
 import { tellThePod, type Seated } from "../reference/Seated.ts";
 import { Identity, MOST_REBUILDS, PodServer, REFUSED, runReferenceAgent, WorkingCopy, type DoorAccess } from "../reference/index.ts";
 import { bytes32ToCommit } from "../repo.ts";
+import { registerAgent } from "../registry.ts";
 import { ROUTES } from "../routes.ts";
 import { IMAGE } from "../sandbox.ts";
 import { anvilAvailable } from "./support/anvil.ts";
@@ -246,6 +247,52 @@ describe.skipIf(!available)("a reference agent, when things go wrong", () => {
     const onTheDoor = (await running.git(["rev-parse", leads])).trim();
     expect(bytes32ToCommit((await readJob(running.reading, running.onChainId)).commit)).toBe(onTheDoor);
     expect((await running.git(["show", `${onTheDoor}:server.js`])).trim()).toBe(WORKING);
+  }, 120_000);
+
+  test("an agent whose job is over looks a few times for the receipt, since the server writes the settlement down a moment after the chain moves the money", async () => {
+    const pod = aPod();
+    const running = await aServer(pod);
+    const { agentId } = await registerAgent({ publicClient: running.anvil.publicClient, wallet: running.anvil.wallet(pod.reviewer.key) }, running.registries);
+
+    // the pod's server as the agent reaches it: for its first looks the receipt is not served yet, as
+    // it is not in the moment between the money moving and the server writing so down
+    let receiptMisses = 0;
+    const server = Bun.serve({
+      port: 0,
+      fetch: async (request) => {
+        const url = new URL(request.url);
+        if (url.pathname.startsWith(ROUTES.receipt)) {
+          if (receiptMisses < 3) {
+            receiptMisses++;
+            return new Response("Job a-coat-given-the-rain's receipt is made public once its money has moved\n", { status: 404 });
+          }
+          return Response.json({ stands: "in for the signed receipt, which the agent only looks for before pointing at it" });
+        }
+        return fetch(new URL(`${url.pathname}${url.search}`, running.base), { method: request.method, headers: request.headers, body: request.body });
+      },
+    });
+    toStop.push(() => server.stop(true));
+
+    const said: string[] = [];
+    const stop = new AbortController();
+    toStop.push(() => stop.abort());
+    const agent = runReferenceAgent({
+      server: `http://127.0.0.1:${server.port}`, key: pod.reviewer.key, role: "reviewer", every: 50, signal: stop.signal,
+      model: async () => { throw new Error("there is no candidate, so nothing is asked"); },
+      agentId, say: (what) => said.push(what),
+    });
+    await until("the reviewer seat taken", () => said.some((line) => line.includes("holds the reviewer seat")));
+
+    // the job ends
+    const job = await readJob(running.reading, running.onChainId);
+    const clock = createTestClient({ mode: "anvil", transport: http(running.anvil.rpc) });
+    await clock.increaseTime({ seconds: Number(job.endsAt - (await running.anvil.publicClient.getBlock()).timestamp) + 1 });
+    await clock.mine({ blocks: 1 });
+
+    await agent;
+    expect(receiptMisses).toBe(3);
+    expect(said).toContain(`[reviewer] asked for the verdict to be recorded for agent #${agentId}`);
+    expect(said.some((line) => line.includes("no verdict"))).toBe(false);
   }, 120_000);
 
   test("it goes on through a list, a chain and a server that each fail for a while, and ends when the job does", async () => {
