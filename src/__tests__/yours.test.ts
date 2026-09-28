@@ -29,7 +29,13 @@ let anvil: Anvil;
 let titled: Titled;
 let store: JobStore;
 let owners: Owners;
-let windowEnds: Date;
+/** when each job posted here stops taking work, by its name: jobs posted a second apart end a second apart */
+const windowEnds = new Map<string, Date>();
+const windowOf = (jobId: string): Date => {
+  const ends = windowEnds.get(jobId);
+  if (!ends) throw new Error(`${jobId} was never posted here`);
+  return ends;
+};
 
 /** A job paid for by `key`, opened on the wall, saved the way an older server left it: without who paid. */
 async function aRunningJob(jobId: string, key: `0x${string}`): Promise<void> {
@@ -39,8 +45,8 @@ async function aRunningJob(jobId: string, key: `0x${string}`): Promise<void> {
     { address: titled.jobs, publicClient: anvil.publicClient, wallet: anvil.wallet(key) },
     { seal, endsAt: now + 3600n, reviewers: 1, price: TITLED_SPEC.price },
   );
-  windowEnds = new Date(Number(now + 3600n) * 1000);
-  const opened = await openJob(store, { jobId, seal, spec: TITLED_SPEC, endsAt: windowEnds, seats: [] });
+  windowEnds.set(jobId, new Date(Number(now + 3600n) * 1000));
+  const opened = await openJob(store, { jobId, seal, spec: TITLED_SPEC, endsAt: windowOf(jobId), seats: [] });
   await store.save({ ...opened, chain: { network: "monad-testnet", jobId: String(onChainId), jobs: titled.jobs } });
 }
 
@@ -68,7 +74,7 @@ describe.skipIf(!available)("a wallet's own page", () => {
     const yours = await yoursData(store, owners, POSTER_ADDRESS, new Date());
     expect(yours.posted.map((entry) => entry.tile.jobId).sort()).toEqual(["a-coat-still-open", "a-coat-titled"]);
     const open = yours.posted.find((entry) => entry.tile.jobId === "a-coat-still-open");
-    expect(open?.money).toEqual({ kind: "held", endsAt: windowEnds.toISOString(), takeBack: refundPath("a-coat-still-open") });
+    expect(open?.money).toEqual({ kind: "held", endsAt: windowOf("a-coat-still-open").toISOString(), takeBack: refundPath("a-coat-still-open") });
     // what is happening now comes first
     expect(yours.posted[0]?.tile.jobId).toBe("a-coat-still-open");
   });
@@ -80,10 +86,10 @@ describe.skipIf(!available)("a wallet's own page", () => {
   });
 
   test("past the window, money nobody settled is the poster's to take back, as the contract says", async () => {
-    const later = new Date(windowEnds.getTime() + 60_000);
+    const later = new Date(windowOf("a-coat-still-open").getTime() + 60_000);
     const open = (await yoursData(store, owners, POSTER_ADDRESS, later)).posted.find((entry) => entry.tile.jobId === "a-coat-still-open");
     // the record alone could not say, so the contract was asked, and its window is the one on the chain
-    expect(open?.money).toEqual({ kind: "held", endsAt: windowEnds.toISOString(), takeBack: refundPath("a-coat-still-open") });
+    expect(open?.money).toEqual({ kind: "held", endsAt: windowOf("a-coat-still-open").toISOString(), takeBack: refundPath("a-coat-still-open") });
     if (!open?.money) throw new Error("the open job has no money on the page");
     expect(moneyAt(open.money, later)).toEqual({ kind: "returnable", takeBack: refundPath("a-coat-still-open") });
   });
@@ -133,7 +139,7 @@ describe.skipIf(!available)("a wallet's own page", () => {
   });
 
   test("a job from an earlier contract is never asked of this one by its number, which here is somebody else's", async () => {
-    const opened = await openJob(store, { jobId: "from-an-earlier-contract", seal: `0x${"12".repeat(32)}`, spec: TITLED_SPEC, endsAt: windowEnds, seats: [] });
+    const opened = await openJob(store, { jobId: "from-an-earlier-contract", seal: `0x${"12".repeat(32)}`, spec: TITLED_SPEC, endsAt: windowOf("a-coat-still-open"), seats: [] });
     // number 1 on another contract; on this one, job 1 is the poster's titled job
     await store.save({ ...opened, chain: { network: "monad-testnet", jobId: "1", jobs: "0x00000000000000000000000000000000000000e1", tokenId: titled.tokenId.toString() } });
     const record = await store.read("from-an-earlier-contract");
