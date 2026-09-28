@@ -121,6 +121,7 @@ contract PodJobsV2 {
     error TooManyReviewers();
     error NoWindow();
     error NoSuchJob();
+    error BuildersDoNotApprove();
     error NotWritten();
     error WritingUnderWay();
     error NoWritingUnderWay();
@@ -309,6 +310,9 @@ contract PodJobsV2 {
     ///      work is being graded, and nothing else is taken until it settles, the window closes, or the
     ///      validator releases it.
     function approve(uint256 jobId, Role role, bytes32 commitHash) external {
+        // the builder builds and the other seats judge: its approval would count for nothing, and a
+        // failed visible check would cost it its deposit for it (the user's choice, 28 Sep)
+        if (role == Role.Builder) revert BuildersDoNotApprove();
         Job storage job = jobs[jobId];
         if (job.state != State.Working) revert WrongState();
         if (block.timestamp >= job.endsAt) revert TooLate();

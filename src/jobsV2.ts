@@ -37,6 +37,7 @@ export const podJobsV2Abi = parseAbi([
   "error TooManyReviewers()",
   "error NoWindow()",
   "error NoSuchJob()",
+  "error BuildersDoNotApprove()",
   "error NotWritten()",
   "error WritingUnderWay()",
   "error NoWritingUnderWay()",

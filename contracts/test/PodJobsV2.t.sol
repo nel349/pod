@@ -601,7 +601,7 @@ contract PodJobsV2Test is PodJobsV2Fixture {
         _fillEverySeat(id);
         vm.prank(leadAgent); jobs.approve(id, PodJobsV2.Role.Lead, COMMIT);
         bytes32 later = keccak256("pushed again");
-        vm.prank(builderAgent); jobs.approve(id, PodJobsV2.Role.Builder, later);
+        vm.prank(reviewerAgent); jobs.approve(id, PodJobsV2.Role.Reviewer, later);
         assertEq(_commit(id), later);
         assertFalse(_approved(id, PodJobsV2.Role.Lead));
     }
@@ -609,12 +609,12 @@ contract PodJobsV2Test is PodJobsV2Fixture {
     function test_onceTheApprovalsAreInPlaceADifferentCommitIsRefused() public {
         uint256 id = _lockedJob();
         assertTrue(jobs.locked(id));
-        vm.prank(builderAgent);
+        vm.prank(reviewerAgent);
         vm.expectRevert(PodJobsV2.Locked.selector);
-        jobs.approve(id, PodJobsV2.Role.Builder, keccak256("swapped while being graded"));
+        jobs.approve(id, PodJobsV2.Role.Reviewer, keccak256("swapped while being graded"));
         // the same commit is still fine to approve
-        vm.prank(builderAgent);
-        jobs.approve(id, PodJobsV2.Role.Builder, COMMIT);
+        vm.prank(reviewerAgent);
+        jobs.approve(id, PodJobsV2.Role.Reviewer, COMMIT);
     }
 
     function test_noSeatIsTakenWhileTheJobIsLocked_oneOpensAgainOnceItIsReleased() public {
@@ -643,17 +643,17 @@ contract PodJobsV2Test is PodJobsV2Fixture {
     function test_theLockEndsWithTheSettlement() public {
         uint256 id = _lockedJob();
         _settle(id, PodJobsV2.Verdict.Passed);
-        vm.prank(builderAgent);
+        vm.prank(reviewerAgent);
         vm.expectRevert(PodJobsV2.WrongState.selector);
-        jobs.approve(id, PodJobsV2.Role.Builder, keccak256("after the fact"));
+        jobs.approve(id, PodJobsV2.Role.Reviewer, keccak256("after the fact"));
     }
 
     function test_theLockEndsWithTheWindow() public {
         uint256 id = _lockedJob();
         vm.warp(block.timestamp + WINDOW);
-        vm.prank(builderAgent);
+        vm.prank(reviewerAgent);
         vm.expectRevert(PodJobsV2.TooLate.selector);
-        jobs.approve(id, PodJobsV2.Role.Builder, keccak256("after the window"));
+        jobs.approve(id, PodJobsV2.Role.Reviewer, keccak256("after the window"));
     }
 
     function test_aReleaseClearsTheCommitAndEveryApproval_thenANewCommitIsTaken() public {
@@ -997,6 +997,20 @@ contract PodJobsV2Test is PodJobsV2Fixture {
         vm.prank(reviewerAgent); jobs.approve(id, PodJobsV2.Role.Reviewer, COMMIT);
         vm.prank(qaAgent); jobs.approve(id, PodJobsV2.Role.QA, COMMIT);
         assertFalse(jobs.policyMet(id, COMMIT));
+    }
+
+    function test_theBuilderDoesNotApprove_soItNeverLosesItsDepositForApproving() public {
+        uint256 id = _openJob();
+        _fillEverySeat(id);
+        vm.prank(builderAgent);
+        vm.expectRevert(PodJobsV2.BuildersDoNotApprove.selector);
+        jobs.approve(id, PodJobsV2.Role.Builder, COMMIT);
+
+        // the others approve, a check the pod could see fails, and the builder's deposit comes home
+        _approveAll(id, COMMIT);
+        uint256 before = builderAgent.balance;
+        _settle(id, PodJobsV2.Verdict.VisibleFailed);
+        assertEq(builderAgent.balance, before + jobs.seatDeposit(id, PodJobsV2.Role.Builder));
     }
 
     function test_onlyASeatHolderApproves() public {
