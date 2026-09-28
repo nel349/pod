@@ -22,6 +22,7 @@ import type { Broker } from "./broker.ts";
 import { checkout, commitIfChanged, head, type Repository } from "./repo.ts";
 import { textFromTheBox } from "./checkwriting/fromTheBox.ts";
 import { writableByTheBox } from "./sandbox.ts";
+import { DOCKER_COULD_NOT_START, DockerFailed, runDocker } from "./docker/index.ts";
 
 /** What an agent says it did, or decided. A seat that says nothing has not done its job. */
 export interface Said {
@@ -77,15 +78,6 @@ const BRIEF = ".pod/brief.md";
 /** where the socket appears inside the box. Outside /work, so it cannot be committed */
 const MODEL = "/pod-model.sock";
 
-async function docker(args: readonly string[]): Promise<{ code: number; out: string }> {
-  const child = Bun.spawn(["docker", ...args], { stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-  return { code: await child.exited, out: `${stdout}${stderr}`.trim() };
-}
-
 /** One agent program, in a box, on a workspace that is its own. */
 export interface InBox {
   /** what the box is called, so a stray one can be traced to what started it */
@@ -112,31 +104,30 @@ export interface InBox {
 export async function runInBox(run: InBox): Promise<{ readonly code: number; readonly out: string }> {
   const name = `pod-${run.label}-${Math.random().toString(36).slice(2, 10)}`;
   const seconds = run.seconds ?? 600;
-  // the command inside has its own timeout, but a box that stops answering is killed from outside too
-  const killer = setTimeout(() => { void docker(["kill", name]); }, (seconds + OUTER_GRACE_SECONDS) * 1000);
-  try {
-    const ran = await docker([
-      "run", "--rm", "--name", name,
-      ...(run.network ? [] : ["--network", "none"]),
-      "--memory", "2g", "--cpus", "2", "--pids-limit", "512",
-      "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
-      "-v", `${run.workspace}:/work`,
-      // the model, as a file rather than a route: the box still has no network of any kind
-      ...(run.broker ? ["-v", `${run.broker.socket}:${MODEL}`] : []),
-      ...(run.agents ? ["-v", `${run.agents}:/agents:ro`] : []),
-      ...Object.entries(run.env ?? {}).flatMap(([key, value]) => ["-e", `${key}=${value}`]),
-      "-e", `POD_BRIEF=/work/${BRIEF}`,
-      "-e", `POD_SAY=/work/${SAY}`,
-      ...(run.broker ? ["-e", `POD_MODEL=${MODEL}`] : []),
-      "-w", "/work",
-      run.image,
-      "sh", "-c", `timeout ${seconds} ${run.command}; said=$?; ${HAND_THE_WORKSPACE_BACK}; exit $said`,
-    ]);
-    await openWhatIsOurs(run.workspace);
-    return ran;
-  } finally {
-    clearTimeout(killer);
-  }
+  // the command inside has its own timeout; past it and a grace, Docker is what stopped answering,
+  // and the box is taken down by name. Either way, and when Docker will not start the box, it is
+  // Docker failing us, which says nothing about the agent
+  const ran = await runDocker([
+    "run", "--rm", "--name", name,
+    ...(run.network ? [] : ["--network", "none"]),
+    "--memory", "2g", "--cpus", "2", "--pids-limit", "512",
+    "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+    "-v", `${run.workspace}:/work`,
+    // the model, as a file rather than a route: the box still has no network of any kind
+    ...(run.broker ? ["-v", `${run.broker.socket}:${MODEL}`] : []),
+    ...(run.agents ? ["-v", `${run.agents}:/agents:ro`] : []),
+    ...Object.entries(run.env ?? {}).flatMap(([key, value]) => ["-e", `${key}=${value}`]),
+    "-e", `POD_BRIEF=/work/${BRIEF}`,
+    "-e", `POD_SAY=/work/${SAY}`,
+    ...(run.broker ? ["-e", `POD_MODEL=${MODEL}`] : []),
+    "-w", "/work",
+    run.image,
+    "sh", "-c", `timeout ${seconds} ${run.command}; said=$?; ${HAND_THE_WORKSPACE_BACK}; exit $said`,
+  ], seconds + OUTER_GRACE_SECONDS, name);
+  if (ran.isTimedOut) throw new DockerFailed(`Docker did not finish the ${run.label} box within ${seconds + OUTER_GRACE_SECONDS}s`);
+  if (ran.code === DOCKER_COULD_NOT_START) throw new DockerFailed(`Docker could not start the ${run.label} box: ${ran.out}`);
+  await openWhatIsOurs(run.workspace);
+  return ran;
 }
 
 /** how long past its own timeout a box is given before it is killed from outside */

@@ -37,8 +37,8 @@ describe.skipIf(!available)("the new contract, from the server", () => {
     anvil = await startAnvil();
     const validator = privateKeyToAccount(VALIDATOR).address;
     jobs = await anvil.deploy("PodJobsV2", [validator, privateKeyToAccount(WRITER).address, FIRST_JOB, WRITING, 100_000n], DEPLOYER);
-    writer = new WriterKey({ address: jobs, publicClient: anvil.publicClient, wallet: anvil.wallet(WRITER) as WalletClient & { account: Account } });
-    poster = anvil.wallet(POSTER) as WalletClient & { account: Account };
+    writer = new WriterKey({ address: jobs, publicClient: anvil.publicClient, wallet: anvil.wallet(WRITER) });
+    poster = anvil.wallet(POSTER);
   });
   afterAll(() => anvil?.stop());
 

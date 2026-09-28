@@ -20,7 +20,7 @@ import { tokenOfJob } from "../token.ts";
 import { Worker } from "../worker/index.ts";
 import { SEATS } from "../seal.ts";
 import { dockerAvailable } from "./support/tools.ts";
-import { runDocker } from "../runDocker.ts";
+import { runDocker } from "../docker/index.ts";
 
 /**
  * A whole pod of reference agents, through the public doors only, against a real chain, from a
@@ -50,7 +50,7 @@ const LIST_BOXES_SECONDS = 10;
 async function tellWhatWasGoingOn(said: readonly string[], why: string): Promise<void> {
   console.error(`${why}. What was said:\n${said.join("\n")}`);
   const boxes = await runDocker(["ps", "-a", "--format", "{{.Names}} {{.Status}} {{.Command}}"], LIST_BOXES_SECONDS);
-  console.error(boxes.timedOut ? `Docker did not list its boxes within ${LIST_BOXES_SECONDS}s` : `Boxes still up:\n${boxes.out}`);
+  console.error(boxes.isTimedOut ? `Docker did not list its boxes within ${LIST_BOXES_SECONDS}s` : `Boxes still up:\n${boxes.out}`);
 }
 /** Never says take a coat: what the builder's model writes the first time */
 const NEVER_A_COAT = serverSaying("false", "false");

@@ -11,8 +11,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { PORT } from "./job.ts";
-import { DOCKER_COULD_NOT_START, DockerFailed } from "./DockerFailed.ts";
-import { runDocker } from "./runDocker.ts";
+import { DOCKER_COULD_NOT_START, DockerFailed, runDocker } from "./docker/index.ts";
 
 /**
  * What Docker keeps of a box's log on disk. Without a cap, a job that prints without end fills the
@@ -70,6 +69,18 @@ const DOCKER_ANSWER_SECONDS = 60;
 const PROBE_SECONDS = 10;
 /** How long a check that will not stop when its time is up is given before it is killed */
 const CHECK_KILL_GRACE_SECONDS = 5;
+/** How long the work has to start answering, unless the job says otherwise */
+const START_SECONDS = 90;
+/** How long each check has, unless the job says otherwise */
+const CHECK_SECONDS = 60;
+/** How long between one look at whether the work answers and the next */
+const LOOK_AGAIN_MS = 500;
+/** How much of the work's own log goes into a refusal: enough to see why it would not start */
+const LOG_IN_A_REFUSAL = 500;
+/** How long after Docker failed us its boxes are looked for again: one it made late is taken down then */
+const SWEEP_AFTER_MS = 60_000;
+/** The label every box and network of one grading carries, so all of them can be found by it */
+const GRADING_LABEL = "pod.grading";
 
 /**
  * How a check is run in its box.
@@ -96,7 +107,7 @@ async function docker(
   container?: string,
 ): Promise<{ code: number; out: string }> {
   const answer = await runDocker(args, seconds, container);
-  if (answer.timedOut) throw new DockerFailed(`Docker did not answer "docker ${args[0]}" within ${seconds}s`);
+  if (answer.isTimedOut) throw new DockerFailed(`Docker did not answer "docker ${args[0]}" within ${seconds}s`);
   return answer;
 }
 
@@ -111,14 +122,15 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
   const network = `pod-net-${id}`;
   const artefactName = `pod-art-${id}`;
   const started = Date.now();
+  const label = `${GRADING_LABEL}=${id}`;
 
   try {
     // inside, so a network Docker made after it stopped answering is still taken down
-    const made = await docker(["network", "create", "--internal", network]);
+    const made = await docker(["network", "create", "--internal", "--label", label, network]);
     if (made.code !== 0) throw new DockerFailed(`Docker would not make the grading's network: ${made.out}`);
     const launched = await docker([
       "run", "-d",
-      "--name", artefactName,
+      "--name", artefactName, "--label", label,
       "--network", network,
       ...BOUNDED_LOGS,
       "--memory", "512m", "--cpus", "1", "--pids-limit", "128",
@@ -131,9 +143,9 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
     // the work's own command runs after this answers, inside the box: a refusal here is Docker's
     if (launched.code !== 0) throw new DockerFailed(`Docker would not start the artefact's box: ${launched.out}`);
 
-    await waitUntilAnswering(artefactName, request.startSeconds ?? 90);
+    await waitUntilAnswering(artefactName, request.startSeconds ?? START_SECONDS);
 
-    const checkSeconds = request.checkSeconds ?? 60;
+    const checkSeconds = request.checkSeconds ?? CHECK_SECONDS;
     const outcomes: CheckOutcome[] = [];
     for (const [index, check] of request.toRun.entries()) {
       const at = Date.now();
@@ -141,7 +153,7 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
       const checkName = `pod-chk-${id}-${index}`;
       const result = await docker([
         "run", "--rm", "--init",
-        "--name", checkName,
+        "--name", checkName, "--label", label,
         "--network", network,
         ...BOUNDED_LOGS,
         "--memory", "512m", "--cpus", "1", "--pids-limit", "128",
@@ -171,11 +183,38 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
       artefactLog: log.out,
       seconds: (Date.now() - started) / 1000,
     };
+  } catch (error) {
+    // a Docker that failed us may still make a box it was asked for after it is taken down here
+    if (error instanceof DockerFailed) sweepLater(label);
+    throw error;
   } finally {
     // taking down is kept to its limit too, and never hides why the grading ended
     await runDocker(["rm", "-f", artefactName], DOCKER_ANSWER_SECONDS);
     await runDocker(["network", "rm", network], DOCKER_ANSWER_SECONDS);
   }
+}
+
+/**
+ * Take down, a while from now, every box and network of one grading that Docker made after it
+ * stopped answering. Only that grading's, by its label: other gradings run beside it on this machine.
+ * Nothing waits for it, and it keeps nothing running.
+ */
+function sweepLater(label: string): void {
+  const sweep = setTimeout(() => {
+    void takeDownEverythingLabelled(label).catch((error: unknown) => {
+      console.error(`boxes Docker made late for ${label} could not be taken down: ${String(error)}`);
+    });
+  }, SWEEP_AFTER_MS);
+  sweep.unref();
+}
+
+async function takeDownEverythingLabelled(label: string): Promise<void> {
+  const boxes = await runDocker(["ps", "-aq", "--filter", `label=${label}`], DOCKER_ANSWER_SECONDS);
+  const ids = boxes.out.split("\n").filter(Boolean);
+  if (ids.length > 0) await runDocker(["rm", "-f", ...ids], DOCKER_ANSWER_SECONDS);
+  const networks = await runDocker(["network", "ls", "-q", "--filter", `label=${label}`], DOCKER_ANSWER_SECONDS);
+  const networkIds = networks.out.split("\n").filter(Boolean);
+  if (networkIds.length > 0) await runDocker(["network", "rm", ...networkIds], DOCKER_ANSWER_SECONDS);
 }
 
 /**
@@ -192,13 +231,15 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
  */
 async function waitUntilAnswering(target: string, seconds: number): Promise<void> {
   const deadline = Date.now() + seconds * 1000;
+  // whether any look came back in time: if none ever did, it was Docker that did not answer
+  let hasAnyLookAnswered = false;
   while (Date.now() < deadline) {
     const state = await docker(["inspect", "-f", "{{.State.Running}} {{.State.ExitCode}}", target]);
     if (state.code !== 0) throw new DockerFailed(`the artefact's box is gone from Docker: ${state.out}`);
     if (!state.out.startsWith("true")) {
       const log = await docker(["logs", target]);
       const code = state.out.split(" ")[1] ?? "?";
-      throw new Error(`the artefact stopped before it answered, exit ${code}. Its log said: ${log.out.slice(0, 500) || "(nothing)"}`);
+      throw new Error(`the artefact stopped before it answered, exit ${code}. Its log said: ${log.out.slice(0, LOG_IN_A_REFUSAL) || "(nothing)"}`);
     }
     // work that takes the connection and never replies is not answering yet, which is the work's
     // doing: a probe that runs out of time is looked at again, never taken for Docker failing us
@@ -206,9 +247,11 @@ async function waitUntilAnswering(target: string, seconds: number): Promise<void
       "exec", target, "node", "-e",
       `fetch('http://127.0.0.1:${PORT}/',{signal:AbortSignal.timeout(${PROBE_SECONDS * 1000})}).then(()=>process.exit(0)).catch(()=>process.exit(1))`,
     ], PROBE_SECONDS * 2);
-    if (!probe.timedOut && probe.code === 0) return;
-    await Bun.sleep(500);
+    if (!probe.isTimedOut) hasAnyLookAnswered = true;
+    if (!probe.isTimedOut && probe.code === 0) return;
+    await Bun.sleep(LOOK_AGAIN_MS);
   }
+  if (!hasAnyLookAnswered) throw new DockerFailed(`not one look at whether the artefact answers came back from Docker in ${seconds}s`);
   const log = await docker(["logs", target]);
-  throw new Error(`the artefact never answered within ${seconds}s. Its log said: ${log.out.slice(0, 500) || "(nothing)"}`);
+  throw new Error(`the artefact never answered within ${seconds}s. Its log said: ${log.out.slice(0, LOG_IN_A_REFUSAL) || "(nothing)"}`);
 }

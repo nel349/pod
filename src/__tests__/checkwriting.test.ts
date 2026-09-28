@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IMAGE, readableToTheBox } from "../sandbox.ts";
 import {
-  CheckWriting, isStillWriting, ProvenChecks, readyToSeal, refusalOf, writeChecks, WritingFailed, WritingSchema, type Written, type WriteRequest,
+  CheckWriting, isChargedFor, isStillWriting, ProvenChecks, readyToSeal, refusalOf, writeChecks, WritingFailed, WritingSchema, type Written, type WriteRequest,
 } from "../checkwriting/index.ts";
 import { digestOf } from "../job.ts";
 import { handle, type Market } from "../server.ts";
@@ -16,7 +16,7 @@ import {
 import { dockerAvailable } from "./support/tools.ts";
 import { checkout } from "./support/checkout.ts";
 import { prove } from "../checkwriting/prove.ts";
-import { DockerFailed } from "../DockerFailed.ts";
+import { DockerFailed } from "../docker/index.ts";
 import type { Model } from "../broker.ts";
 
 /**
@@ -48,6 +48,12 @@ describe("what a poster may ask for", () => {
 
   test("a proper request is not refused", () => {
     expect(refusalOf(COAT_REQUEST)).toBeUndefined();
+  });
+
+  test("a writing is charged once the model answered, never when Docker failed us, and not before the model answered", () => {
+    expect(isChargedFor(new Error("the writer gave up"), 1)).toBe(true);
+    expect(isChargedFor(new Error("the writer gave up"), 0)).toBe(false);
+    expect(isChargedFor(new DockerFailed("Docker could not start a trial's box"), 2)).toBe(false);
   });
 
 });

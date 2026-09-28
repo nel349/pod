@@ -2,21 +2,21 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseEther, type Account, type Address, type Hex, type WalletClient } from "viem";
+import { createTestClient, http, parseEther, type Account, type Address, type Hex, type WalletClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import type { Model } from "../broker.ts";
 import type { WriteRequest } from "../checkwriting/index.ts";
 import { filesMatchSeal, MODES, sealSpec, type Mode } from "../job.ts";
 import { podJobsV2Abi, readJobV2, readWritingMoney, readWritingPrice, WriterKey } from "../jobsV2.ts";
 import { preparingMessage, setUpMessage } from "../messages.ts";
-import { Preparing, PreparingStore, type PreparingView } from "../preparing/index.ts";
+import { Preparing, PreparingStore, type PreparingChain, type PreparingView, type Writer } from "../preparing/index.ts";
 import { openJob } from "../publish.ts";
 import { specFromTheWire, SpecOnTheWireSchema } from "../specWire.ts";
 import { JobStore } from "../store.ts";
 import { handle } from "../server.ts";
 import { jobNamePath, preparingPath, preparingWritingsPath, ROUTES } from "../routes.ts";
 import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
-import { COAT_REQUEST, GOOD_REPLY, replying, writerWith } from "./support/coat.ts";
+import { COAT_REQUEST, GOOD_REPLY, good, replying, WORKING, writerWith } from "./support/coat.ts";
 import { dockerAvailable } from "./support/tools.ts";
 
 /**
@@ -51,27 +51,44 @@ describe.skipIf(!available)("a paid job, prepared", () => {
     jobs = await anvil.deploy("PodJobsV2", [
       privateKeyToAccount(VALIDATOR).address, privateKeyToAccount(WRITER).address, 10n, WRITING, 100_000n,
     ], DEPLOYER);
-    writer = new WriterKey({ address: jobs, publicClient: anvil.publicClient, wallet: anvil.wallet(WRITER) as Wallet });
+    writer = new WriterKey({ address: jobs, publicClient: anvil.publicClient, wallet: anvil.wallet(WRITER) });
     wall = new JobStore(await mkdtemp(join(tmpdir(), "pod-wall-")));
   });
   afterAll(() => anvil?.stop());
 
   const at = () => ({ address: jobs, publicClient: anvil.publicClient });
-  const wallet = (key: Hex): Wallet => anvil.wallet(key) as Wallet;
+  const wallet = (key: Hex): Wallet => anvil.wallet(key);
 
-  async function service(model: Model = replying(GOOD_REPLY).model, folder?: string, atOnce = 2): Promise<{ preparing: Preparing; folder: string }> {
-    const kept = folder ?? await mkdtemp(join(tmpdir(), "pod-preparing-"));
+  const realChain = (): PreparingChain => ({
+    jobs,
+    job: (id) => readJobV2(at(), id),
+    money: (id) => readWritingMoney(at(), id),
+    writingPrice: () => readWritingPrice(at()),
+  });
+
+  async function serviceWith(options: { model?: Model; folder?: string; atOnce?: number; chain?: PreparingChain; writer?: Writer } = {}) {
+    const kept = options.folder ?? await mkdtemp(join(tmpdir(), "pod-preparing-"));
     const preparing = new Preparing({
-      store: new PreparingStore(kept), wall,
-      chain: {
-        jobs, chainId: 31337,
-        job: (id) => readJobV2(at(), id),
-        money: (id) => readWritingMoney(at(), id),
-        writingPrice: () => readWritingPrice(at()),
-      },
-      writer, checkWriter: writerWith(model), atOnce, say: (what) => said.push(what),
+      store: new PreparingStore(kept), wall, chain: options.chain ?? realChain(),
+      writer: options.writer ?? writer, checkWriter: writerWith(options.model ?? replying(GOOD_REPLY).model),
+      atOnce: options.atOnce ?? 2, tryAgainAfterMs: 200, say: (what) => said.push(what),
     });
     return { preparing, folder: kept };
+  }
+
+  async function service(model: Model = replying(GOOD_REPLY).model, folder?: string, atOnce = 2): Promise<{ preparing: Preparing; folder: string }> {
+    return serviceWith({ model, ...(folder ? { folder } : {}), atOnce });
+  }
+
+  /** Waits until the job's writing is neither waiting nor under way, however many tries that takes. */
+  async function whenWritten(preparing: Preparing, onChainId: bigint): Promise<PreparingView> {
+    for (let i = 0; i < 600; i++) {
+      await preparing.whenIdle();
+      const read = await view(preparing, onChainId);
+      if (read.now.kind === "idle" && read.asked === undefined) return read;
+      await Bun.sleep(100);
+    }
+    throw new Error(`job ${onChainId}'s writing never finished`);
   }
 
   async function aPaidJob(mode: Mode = "flash", by: Hex = POSTER): Promise<bigint> {
@@ -322,6 +339,174 @@ describe.skipIf(!available)("a paid job, prepared", () => {
     expect((await ask(ROUTES.preparing, { method: "POST", body: "not json" })).status).toBe(400);
   }, 180_000);
 
+  test("a chain that fails once before the writing starts holds nothing up: the writing is tried again, and done", async () => {
+    // the real chain, but its first read of the job during the writing fails, as a busy public node's can
+    let failuresLeft = 0;
+    const chain = realChain();
+    const flaky: PreparingChain = { ...chain, job: async (id) => {
+      if (failuresLeft > 0) { failuresLeft--; throw new Error("HTTP 429: too many requests"); }
+      return chain.job(id);
+    } };
+    const { preparing } = await serviceWith({ chain: flaky });
+    const id = await aPaidJob();
+    await preparing.setUp(await asPoster(id, uniqueName()));
+    await preparing.whenIdle();
+    expect(await preparing.write(`${id}`, await statement(id), COAT_REQUEST)).toMatchObject({ ok: true });
+    // the next read of the job is the writing's own, before it sets anything aside
+    failuresLeft = 1;
+
+    const read = await whenWritten(preparing, id);
+    expect(read.writings).toHaveLength(2);
+    expect(read.money.kept).toBe(2);
+    expect(said.some((line) => line.includes("HTTP 429"))).toBe(true);
+  }, 300_000);
+
+  test("money already set aside that no writing owns is used by the next writing, not stranded", async () => {
+    const { preparing } = await service();
+    const id = await aPaidJob();
+    // as if the reservation landed and the answer to it was lost: set aside, and no writing owns it
+    await writer.reserve(id);
+    await preparing.setUp(await asPoster(id, uniqueName()));
+    const read = await whenWritten(preparing, id);
+    expect(read.writings[0]?.isCharged).toBe(true);
+    expect(read.money).toMatchObject({ balance: 2n * WRITING, reserved: 0n, kept: 1 });
+  }, 300_000);
+
+  test("a reservation that reached the chain while its answer was lost is used by the writing, not stranded", async () => {
+    // the real writer key, except that the answer to setting the money aside never comes back
+    const answerLost: Writer = {
+      reserve: async (id) => { await writer.reserve(id); throw new Error("the connection closed before the receipt came back"); },
+      keep: (id) => writer.keep(id), release: (id) => writer.release(id), sign: (id, seal) => writer.sign(id, seal),
+    };
+    const { preparing } = await serviceWith({ writer: answerLost });
+    const id = await aPaidJob();
+    await preparing.setUp(await asPoster(id, uniqueName()));
+    const read = await whenWritten(preparing, id);
+    expect(read.writings[0]).toMatchObject({ isCharged: true, outcome: { kind: "written", ready: true } });
+    expect(read.money).toMatchObject({ balance: 2n * WRITING, reserved: 0n, kept: 1 });
+  }, 300_000);
+
+  test("a job's number is written one way: with a leading zero it is refused, so one payment cannot hold two names", async () => {
+    const { preparing } = await service(UNREACHABLE);
+    const id = await aPaidJob();
+    expect(await preparing.setUp({ ...(await asPoster(id, uniqueName())), onChainId: `0${id}` })).toMatchObject({ ok: false, status: 400 });
+    expect(await preparing.read(`0${id}`, await statement(id))).toMatchObject({ ok: false, status: 400 });
+  }, 120_000);
+
+  test("a set with a line that is not proven is charged, and has nothing the writer signed", async () => {
+    const taste = { checkable: false, why: "Say what you would see, for example the answer is in large type" };
+    const { preparing } = await service(replying({ working: WORKING, checks: [good(0), taste] }).model);
+    const id = await aPaidJob();
+    await preparing.setUp(await asPoster(id, uniqueName(), { request: { ...COAT_REQUEST, statements: [COAT_REQUEST.statements[0]!, { says: "It looks lovely", secret: true }] } }));
+    const [written] = (await whenWritten(preparing, id)).writings;
+    expect(written).toMatchObject({ isCharged: true, outcome: { kind: "written", ready: false } });
+    expect(written?.outcome.kind === "written" && written.outcome.approval).toBeFalsy();
+  }, 300_000);
+
+  test("the price is set aside on the chain before the model is asked a thing", async () => {
+    let reservedWhenAsked: bigint | undefined;
+    let idBeingWritten = 0n;
+    const good = replying(GOOD_REPLY).model;
+    const watching: Model = async (prompt, signal) => {
+      reservedWhenAsked ??= (await readWritingMoney(at(), idBeingWritten)).reserved;
+      return good(prompt, signal);
+    };
+    const { preparing } = await service(watching);
+    idBeingWritten = await aPaidJob();
+    await preparing.setUp(await asPoster(idBeingWritten, uniqueName()));
+    await whenWritten(preparing, idBeingWritten);
+    expect(reservedWhenAsked).toBe(WRITING);
+  }, 300_000);
+
+  test("a writing whose price the chain refuses to set aside never reaches the model, and is not charged", async () => {
+    const { model, asked } = replying(GOOD_REPLY);
+    // a key the contract does not know as its writer: the chain refuses to set anything aside for it
+    const notTheWriter = new WriterKey({ address: jobs, publicClient: anvil.publicClient, wallet: wallet(STRANGER) });
+    const { preparing } = await serviceWith({ model, writer: notTheWriter });
+    const id = await aPaidJob();
+    await preparing.setUp(await asPoster(id, uniqueName()));
+    const read = await whenWritten(preparing, id);
+    expect(read.writings[0]).toMatchObject({ isCharged: false, isSettled: true, outcome: { kind: "failed" } });
+    expect(asked()).toBe(0);
+    expect(read.money).toMatchObject({ balance: 3n * WRITING, kept: 0 });
+  }, 120_000);
+
+  test("checks the model wrote that cannot be signed here are still charged, kept, and say why there is nothing to approve", async () => {
+    // the real writer key, except that it cannot sign
+    const cannotSign: Writer = {
+      reserve: (id) => writer.reserve(id), keep: (id) => writer.keep(id), release: (id) => writer.release(id),
+      sign: async () => { throw new Error("the writer key's wallet names no chain"); },
+    };
+    const { preparing } = await serviceWith({ writer: cannotSign });
+    const id = await aPaidJob();
+    await preparing.setUp(await asPoster(id, uniqueName()));
+    const [written] = (await whenWritten(preparing, id)).writings;
+    expect(written).toMatchObject({ isCharged: true, outcome: { kind: "written", ready: true } });
+    expect(written?.outcome.kind === "written" && written.outcome.whyNoApproval).toContain("could not be sealed and signed");
+    expect(written?.outcome.kind === "written" && written.outcome.approval).toBeFalsy();
+  }, 300_000);
+
+  test("a stranger asking over and over cannot stand in the poster's way", async () => {
+    const { preparing } = await service(UNREACHABLE);
+    const id = await aPaidJob();
+    await preparing.setUp(await asPoster(id, uniqueName()));
+    await preparing.whenIdle();
+    const strangers = Array.from({ length: 20 }, () => preparing.write(`${id}`, null, COAT_REQUEST));
+    const [posters] = await Promise.all([preparing.write(`${id}`, await statement(id), COAT_REQUEST), ...strangers]);
+    expect(posters).toMatchObject({ ok: true });
+    await preparing.whenIdle();
+  }, 120_000);
+
+  test("after a restart, jobs are written in the order they were asked", async () => {
+    const { preparing, folder } = await service(UNREACHABLE);
+    const first = await aPaidJob();
+    const second = await aPaidJob();
+    await preparing.setUp(await asPoster(first, uniqueName()));
+    await preparing.setUp(await asPoster(second, uniqueName()));
+    await preparing.whenIdle();
+    const store = new PreparingStore(folder);
+    await store.ask(`${second}`, { request: COAT_REQUEST, askedAt: "2026-09-27T10:00:00.000Z" });
+    await store.ask(`${first}`, { request: COAT_REQUEST, askedAt: "2026-09-27T10:00:05.000Z" });
+
+    let letGo = (): void => {};
+    const held = new Promise<void>((resolve) => { letGo = resolve; });
+    const { preparing: again } = await serviceWith({ model: async () => { await held; throw new Error("the model would not answer"); }, folder, atOnce: 1 });
+    await again.recover();
+    expect((await view(again, first)).now).toEqual({ kind: "waiting", place: 1 });
+    expect((await view(again, second)).now.kind).not.toBe("waiting");
+    letGo();
+    await again.whenIdle();
+  }, 180_000);
+
+  test("a charged writing whose money the poster released after a day is not charged, and cannot be approved", async () => {
+    const { preparing, folder } = await service();
+    const id = await aPaidJob();
+    await preparing.setUp(await asPoster(id, uniqueName()));
+    await whenWritten(preparing, id);
+    // as if the price was never kept: set aside again, the writing on disk not yet settled
+    const store = new PreparingStore(folder);
+    const [written] = await store.writings(`${id}`);
+    if (!written) throw new Error("the first writing was never kept");
+    await writer.reserve(id);
+    await store.saveWriting(`${id}`, { ...written, number: 2, isSettled: false });
+    // a day passes, and the poster takes the money back from the writing
+    const clock = createTestClient({ mode: "anvil", transport: http(anvil.rpc) });
+    await clock.increaseTime({ seconds: 86_400 });
+    await clock.mine({ blocks: 1 });
+    const poster = wallet(POSTER);
+    const { request } = await anvil.publicClient.simulateContract({
+      address: jobs, abi: podJobsV2Abi, functionName: "releaseWriting", args: [id], account: poster.account,
+    });
+    await anvil.publicClient.waitForTransactionReceipt({ hash: await poster.writeContract(request) });
+
+    const { preparing: again } = await service(UNREACHABLE, folder);
+    await again.recover();
+    const second = (await store.writings(`${id}`)).find((writing) => writing.number === 2);
+    expect(second).toMatchObject({ isCharged: false, isSettled: true });
+    expect(second?.note).toContain("released by the poster");
+    expect(second?.outcome.kind === "written" && second.outcome.approval).toBeFalsy();
+  }, 300_000);
+
   test("a server that stopped after writing, before the price was kept, keeps it when it starts again", async () => {
     const { preparing, folder } = await service(UNREACHABLE);
     const id = await aPaidJob();
@@ -336,6 +521,8 @@ describe.skipIf(!available)("a paid job, prepared", () => {
     await store.saveWriting(`${id}`, { ...written, isCharged: true, isSettled: false });
 
     const { preparing: again } = await service(UNREACHABLE, folder);
+    // a set whose price is not yet settled is not shown
+    expect((await view(again, id)).writings).toEqual([]);
     await again.recover();
     expect(await readWritingMoney(at(), id)).toEqual({ balance: 2n * WRITING, reserved: 0n, kept: 1 });
     expect((await store.writings(`${id}`))[0]?.isSettled).toBe(true);

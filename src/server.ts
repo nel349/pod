@@ -26,7 +26,7 @@ import { renderCard } from "./card.ts";
 import { isPublished, JobStore, publicRecord } from "./store.ts";
 import { cardPath, checkFilePath, isSafeName, isWallName, jobPath, preparingPath, RECEIPT_FILE, ROUTES, WRITINGS, writingPath } from "./routes.ts";
 import { ownersFrom, type Owners } from "./owners.ts";
-import type { Preparing, PreparingView } from "./preparing/index.ts";
+import { preparingToTheWire, type Preparing } from "./preparing/index.ts";
 import { agentFactsFrom, type AgentFactsReader } from "./agentFacts.ts";
 import { MONAD_TESTNET } from "./registry.ts";
 import { agentPage, jobData, receiptData, wallPage, yoursData } from "./sitePages.ts";
@@ -375,15 +375,6 @@ async function answerPreparing(request: Request, pathname: string, preparing: Pr
   }
   const written = await preparing.write(onChainId, request.headers.get("authorization"), asked);
   return written.ok ? Response.json(written.value, { status: 202 }) : Response.json({ why: written.why }, { status: written.status });
-}
-
-/** A preparing job as it travels: its money in wei, as strings, since JSON has no bigint. */
-function preparingToTheWire(view: PreparingView): unknown {
-  const { money, ...rest } = view;
-  return {
-    ...rest,
-    money: { balance: `${money.balance}`, reserved: `${money.reserved}`, kept: money.kept, writingPrice: `${money.writingPrice}` },
-  };
 }
 
 /** For the files programs fetch, checks and cards and histories: a line of text they can print. */

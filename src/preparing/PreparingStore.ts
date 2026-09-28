@@ -10,23 +10,28 @@
  *   <number>/asked.json            the writing waiting its turn or under way, if there is one
  *   <number>/writings/<n>.json     every writing of its checks, finished one way or the other
  *   names/<name>                   which job number holds a name
+ *
+ * Only a file that is not there reads as nothing. Any other failure to read the disk is thrown: read
+ * as nothing, it would make a job vanish from a restart, or a held name look free.
  */
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { z } from "zod";
-import { AskedSchema, FinishedSchema, SetUpSchema, type Asked, type Finished, type SetUp } from "./records.ts";
+import { AskedSchema, FinishedSchema, ON_CHAIN_NUMBER, SetUpSchema, type Asked, type Finished, type SetUp } from "./records.ts";
 
-const WRITINGS = "writings";
-const NAMES = "names";
-const NUMBER = /^[0-9]+$/;
+const SETUP_FILE = "setup.json";
+const ASKED_FILE = "asked.json";
+const WRITINGS_FOLDER = "writings";
+const NAMES_FOLDER = "names";
+const WRITING_FILE = /^([0-9]+)\.json$/;
 
 export class PreparingStore {
   constructor(private readonly folder: string) {}
 
   /** Every job number with something kept here. */
   async all(): Promise<readonly string[]> {
-    const found = await readdir(this.folder).catch(() => []);
-    return found.filter((name) => NUMBER.test(name));
+    const found = await ifThere(readdir(this.folder), []);
+    return found.filter((name) => ON_CHAIN_NUMBER.test(name));
   }
 
   /**
@@ -34,52 +39,59 @@ export class PreparingStore {
    * asking at once cannot both have it, since the file is created only if it is not there.
    */
   async claimName(name: string, onChainId: string): Promise<{ readonly ok: true } | { readonly ok: false; readonly heldBy: string }> {
-    await mkdir(join(this.folder, NAMES), { recursive: true });
+    await mkdir(join(this.folder, NAMES_FOLDER), { recursive: true });
     try {
-      await writeFile(join(this.folder, NAMES, name), onChainId, { flag: "wx" });
+      await writeFile(join(this.folder, NAMES_FOLDER, name), onChainId, { flag: "wx" });
       return { ok: true };
     } catch (error) {
-      if (!isAlreadyThere(error)) throw error;
+      if (!hasCode(error, "EEXIST")) throw error;
       const heldBy = (await this.nameHolder(name)) ?? "";
       return heldBy === onChainId ? { ok: true } : { ok: false, heldBy };
     }
   }
 
   async nameHolder(name: string): Promise<string | undefined> {
-    const held = await readFile(join(this.folder, NAMES, name), "utf8").catch(() => undefined);
-    return held !== undefined && NUMBER.test(held) ? held : undefined;
+    const held = await ifThere(readFile(join(this.folder, NAMES_FOLDER, name), "utf8"), undefined);
+    return held !== undefined && ON_CHAIN_NUMBER.test(held) ? held : undefined;
   }
 
   async saveSetUp(setUp: SetUp): Promise<void> {
-    await this.writeWhole(join(this.folder, setUp.onChainId, "setup.json"), setUp);
+    await this.writeWhole(join(this.folder, setUp.onChainId, SETUP_FILE), setUp);
   }
 
   readSetUp(onChainId: string): Promise<SetUp | undefined> {
-    return this.readThrough(join(this.folder, onChainId, "setup.json"), SetUpSchema);
+    return this.readThrough(join(this.folder, onChainId, SETUP_FILE), SetUpSchema);
   }
 
   async ask(onChainId: string, asked: Asked): Promise<void> {
-    await this.writeWhole(join(this.folder, onChainId, "asked.json"), asked);
+    await this.writeWhole(join(this.folder, onChainId, ASKED_FILE), asked);
   }
 
   readAsked(onChainId: string): Promise<Asked | undefined> {
-    return this.readThrough(join(this.folder, onChainId, "asked.json"), AskedSchema);
+    return this.readThrough(join(this.folder, onChainId, ASKED_FILE), AskedSchema);
   }
 
   async clearAsked(onChainId: string): Promise<void> {
-    await rm(join(this.folder, onChainId, "asked.json"), { force: true });
+    await rm(join(this.folder, onChainId, ASKED_FILE), { force: true });
   }
 
   async saveWriting(onChainId: string, writing: Finished): Promise<void> {
-    await this.writeWhole(join(this.folder, onChainId, WRITINGS, `${writing.number}.json`), writing);
+    await this.writeWhole(join(this.folder, onChainId, WRITINGS_FOLDER, `${writing.number}.json`), writing);
   }
 
   /** Every finished writing of a job's checks, first to last. */
   async writings(onChainId: string): Promise<readonly Finished[]> {
-    const folder = join(this.folder, onChainId, WRITINGS);
-    const names = (await readdir(folder).catch(() => [])).filter((name) => /^[0-9]+\.json$/.test(name));
+    const folder = join(this.folder, onChainId, WRITINGS_FOLDER);
+    const names = (await ifThere(readdir(folder), [])).filter((name) => WRITING_FILE.test(name));
     const read = await Promise.all(names.map((name) => this.readThrough(join(folder, name), FinishedSchema)));
     return read.filter((writing): writing is Finished => writing !== undefined).sort((a, b) => a.number - b.number);
+  }
+
+  /** The number the next writing is kept under: one past the highest, so none is ever written over. */
+  async nextWritingNumber(onChainId: string): Promise<number> {
+    const names = await ifThere(readdir(join(this.folder, onChainId, WRITINGS_FOLDER)), []);
+    const numbers = names.map((name) => Number(WRITING_FILE.exec(name)?.[1] ?? 0));
+    return Math.max(0, ...numbers) + 1;
   }
 
   /** Written to a file beside it and moved into place, so a stop half way leaves the old file or none. */
@@ -91,7 +103,7 @@ export class PreparingStore {
   }
 
   private async readThrough<T>(path: string, schema: z.ZodType<T>): Promise<T | undefined> {
-    const text = await readFile(path, "utf8").catch(() => undefined);
+    const text = await ifThere(readFile(path, "utf8"), undefined);
     if (text === undefined) return undefined;
     let parsed: unknown;
     try {
@@ -105,6 +117,16 @@ export class PreparingStore {
   }
 }
 
-function isAlreadyThere(error: unknown): boolean {
-  return error instanceof Error && "code" in error && error.code === "EEXIST";
+/** What was read, or the fallback when the file or folder is not there; any other failure is thrown. */
+async function ifThere<T, F>(reading: Promise<T>, fallback: F): Promise<T | F> {
+  try {
+    return await reading;
+  } catch (error) {
+    if (hasCode(error, "ENOENT")) return fallback;
+    throw error;
+  }
+}
+
+function hasCode(error: unknown, code: string): boolean {
+  return error instanceof Error && "code" in error && error.code === code;
 }

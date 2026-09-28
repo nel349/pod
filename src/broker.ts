@@ -153,9 +153,10 @@ export async function openBroker(input: {
           new Promise<never>((_, reject) =>
             deadline.addEventListener("abort", () => reject(new Error("the model took too long")), { once: true })),
         ]);
-        // an answer that lands as the deadline passes is still late: the model was told to stop
-        if (deadline.aborted) throw new Error("the model took too long");
+        // the model did answer, so its time was spent, even when the answer lands as the deadline passes
         answeredCount++;
+        // but it is still late: the model was told to stop, and the agent is not handed it
+        if (deadline.aborted) throw new Error("the model took too long");
         transcript.push({
           at: new Date().toISOString(), role: input.role, asked: prompt, answered,
           seconds: (Date.now() - started) / 1000,

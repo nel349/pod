@@ -29,19 +29,45 @@ export type Checked<T> = { readonly ok: true; readonly value: T } | { readonly o
 
 const isRole = (role: string): role is Role => (SEATS as readonly string[]).includes(role);
 
-/** The statement in a request's `Authorization` header, or why there is none that could be read. */
-export function statementFrom(header: string | null): Checked<Statement> {
-  if (!header?.startsWith("Basic ")) return { ok: false, why: "sign in with your seat: your address as the name, your signed statement as the password" };
+const BASIC = "Basic ";
+
+/**
+ * The name and password in a request's `Authorization` header, sent the way git sends them; nothing
+ * when there is no such header, and why when there is one that cannot be read.
+ */
+export function basicCredentials(header: string | null): Checked<{ readonly name: string; readonly password: string }> | undefined {
+  if (!header?.startsWith(BASIC)) return undefined;
   let decoded: string;
   try {
-    decoded = atob(header.slice("Basic ".length));
+    decoded = atob(header.slice(BASIC.length));
   } catch {
     return { ok: false, why: "that name and password could not be read" };
   }
   const colon = decoded.indexOf(":");
-  const agent = decoded.slice(0, colon);
-  const [role = "", until = "", signature = "", ...more] = decoded.slice(colon + 1).split(".");
-  if (colon === -1 || !isAddress(agent)) return { ok: false, why: "the name is the address of the key that holds your seat" };
+  if (colon === -1) return { ok: false, why: "that name and password could not be read" };
+  return { ok: true, value: { name: decoded.slice(0, colon), password: decoded.slice(colon + 1) } };
+}
+
+/**
+ * Whether a statement good until this time is good now: not run out, and not good for longer than a
+ * statement may be. Said without turning the time into a date: a time far enough ahead is no date at all.
+ */
+export function isGoodNow(until: number, nowSeconds: number): Checked<number> {
+  if (until <= nowSeconds) return { ok: false, why: "that statement has run out: sign a new one" };
+  if (until > nowSeconds + MOST_A_STATEMENT_MAY_LAST_SECONDS) {
+    return { ok: false, why: "a statement may be good for an hour at most, and that one is good for longer" };
+  }
+  return { ok: true, value: until };
+}
+
+/** The statement in a request's `Authorization` header, or why there is none that could be read. */
+export function statementFrom(header: string | null): Checked<Statement> {
+  const credentials = basicCredentials(header);
+  if (!credentials) return { ok: false, why: "sign in with your seat: your address as the name, your signed statement as the password" };
+  if (!credentials.ok) return credentials;
+  const agent = credentials.value.name;
+  const [role = "", until = "", signature = "", ...more] = credentials.value.password.split(".");
+  if (!isAddress(agent)) return { ok: false, why: "the name is the address of the key that holds your seat" };
   if (more.length > 0 || !isRole(role) || !/^[0-9]+$/.test(until) || !isHex(signature)) {
     return { ok: false, why: "the password is <role>.<until>.<signature>: your seat, when the statement runs out, and your signature" };
   }
@@ -57,11 +83,8 @@ export async function statementHolds(
   about: { readonly jobId: string; readonly onChainId: string; readonly jobs: Address },
   nowSeconds: number,
 ): Promise<Checked<Statement>> {
-  if (statement.until <= nowSeconds) return { ok: false, why: "that statement has run out: sign a new one" };
-  // said without turning the time into a date: a time far enough ahead is no date at all
-  if (statement.until > nowSeconds + MOST_A_STATEMENT_MAY_LAST_SECONDS) {
-    return { ok: false, why: "a statement may be good for an hour at most, and that one is good for longer" };
-  }
+  const inTime = isGoodNow(statement.until, nowSeconds);
+  if (!inTime.ok) return inTime;
   const message = doorMessage({ ...about, role: statement.role, branch: branchFor(statement.role, statement.agent), until: statement.until });
   let signer: Address;
   try {

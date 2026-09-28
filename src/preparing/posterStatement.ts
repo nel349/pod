@@ -9,7 +9,7 @@
  *   password   <until>.<signature>   until is seconds since 1970
  */
 import { isAddress, isAddressEqual, isHex, recoverMessageAddress, type Address, type Hex } from "viem";
-import { MOST_A_STATEMENT_MAY_LAST_SECONDS, type Checked } from "../door/credentials.ts";
+import { basicCredentials, isGoodNow, type Checked } from "../door/credentials.ts";
 import { preparingMessage } from "../messages.ts";
 
 export interface PosterStatement {
@@ -20,17 +20,12 @@ export interface PosterStatement {
 
 /** The statement in a request's Authorization header, or why there is none that could be read. */
 export function posterStatementFrom(header: string | null): Checked<PosterStatement> {
-  if (!header?.startsWith("Basic ")) return { ok: false, why: "sign in as the poster: your address as the name, your signed statement as the password" };
-  let decoded: string;
-  try {
-    decoded = atob(header.slice("Basic ".length));
-  } catch {
-    return { ok: false, why: "that name and password could not be read" };
-  }
-  const colon = decoded.indexOf(":");
-  const poster = decoded.slice(0, colon);
-  const [until = "", signature = "", ...more] = decoded.slice(colon + 1).split(".");
-  if (colon === -1 || !isAddress(poster)) return { ok: false, why: "the name is the address that paid for the job" };
+  const credentials = basicCredentials(header);
+  if (!credentials) return { ok: false, why: "sign in as the poster: your address as the name, your signed statement as the password" };
+  if (!credentials.ok) return credentials;
+  const poster = credentials.value.name;
+  const [until = "", signature = "", ...more] = credentials.value.password.split(".");
+  if (!isAddress(poster)) return { ok: false, why: "the name is the address that paid for the job" };
   if (more.length > 0 || !/^[0-9]+$/.test(until) || !isHex(signature)) {
     return { ok: false, why: "the password is <until>.<signature>: when the statement runs out, and your signature" };
   }
@@ -46,10 +41,8 @@ export async function posterStatementHolds(
   about: { readonly jobs: Address; readonly onChainId: string; readonly poster: Address },
   nowSeconds: number,
 ): Promise<Checked<PosterStatement>> {
-  if (statement.until <= nowSeconds) return { ok: false, why: "that statement has run out: sign a new one" };
-  if (statement.until > nowSeconds + MOST_A_STATEMENT_MAY_LAST_SECONDS) {
-    return { ok: false, why: "a statement may be good for an hour at most, and that one is good for longer" };
-  }
+  const inTime = isGoodNow(statement.until, nowSeconds);
+  if (!inTime.ok) return inTime;
   if (!isAddressEqual(statement.poster, about.poster)) return { ok: false, why: "only the address that paid for the job may read and write its checks" };
   let signer: Address;
   try {

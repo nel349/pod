@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { BOUNDED_LOGS, grade, type CheckToRun } from "../blackbox.ts";
-import { MOST_KEPT_BYTES } from "../readBounded.ts";
-import { DockerFailed } from "../DockerFailed.ts";
+import { MOST_KEPT_BYTES, DockerFailed, runDocker } from "../docker/index.ts";
 import { checkout } from "./support/checkout.ts";
 import { dockerAvailable } from "./support/tools.ts";
 
@@ -155,6 +154,23 @@ describe.skipIf(!withDocker)("grading from outside the box", () => {
       toRun: [{ says: "it ends with 125", command: "node exits.mjs", hidden: false }],
     });
     expect(outcome.checks[0]?.exitCode).toBe(1);
+  }, 240_000);
+
+  test("the work's box gone from Docker while it starts is Docker failing us, not the work", async () => {
+    const slow = await checkout("pod-slow-", { "server.js": "setInterval(() => {}, 1000);\n" });
+    const listBoxes = async (): Promise<readonly string[]> => (await runDocker(["ps", "-a", "--filter", "name=pod-art-", "--format", "{{.Names}}"], 30)).out.split("\n").filter(Boolean);
+    const before = new Set(await listBoxes());
+    const grading = grade({ artefact: slow, start: "node server.js", checks: CHECKS, toRun, image: IMAGE, startSeconds: 60 })
+      .then(() => undefined, (error: unknown) => error);
+    // the one box that appears for this grading, taken away by its exact name
+    let removed: string | undefined;
+    for (let i = 0; i < 100 && !removed; i++) {
+      removed = (await listBoxes()).find((name) => !before.has(name));
+      if (!removed) await Bun.sleep(200);
+    }
+    if (!removed) throw new Error("the grading's box never appeared");
+    await runDocker(["rm", "-f", removed], 30);
+    expect(await grading).toBeInstanceOf(DockerFailed);
   }, 240_000);
 
   test("nothing is left running afterwards", async () => {

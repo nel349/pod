@@ -101,6 +101,18 @@ describe("what the broker allows", () => {
     expect(broker.answered).toBe(2);
   });
 
+  test("an answer that lands just as the deadline passes is still counted as answered, though it is not handed on", async () => {
+    const socket = join(await mkdtemp(join(tmpdir(), "pod-broker-")), "model.sock");
+    open = await openBroker({
+      socket, role: "checkwriter", limits: { seconds: 1 },
+      // it answers the moment it is told to stop: it did the work, too late to be used
+      model: (_prompt, signal) => new Promise<string>((resolve) => { signal.addEventListener("abort", () => resolve("too late")); }),
+    });
+    const response = await fetch("http://model/", { method: "POST", body: "x", unix: socket } as RequestInit & { unix: string });
+    expect(response.status).toBe(502);
+    expect(open.answered).toBe(1);
+  });
+
   test("a model past its deadline is told to stop, not only stopped waiting for", async () => {
     const socket = join(await mkdtemp(join(tmpdir(), "pod-broker-")), "model.sock");
     let wasTold = false;

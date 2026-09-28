@@ -12,7 +12,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { grade, type CheckToRun } from "../blackbox.ts";
-import { DockerFailed } from "../DockerFailed.ts";
+import { DockerFailed } from "../docker/index.ts";
 import { PORT, START, WORK_FILE } from "../job.ts";
 import { readableToTheBox } from "../sandbox.ts";
 import { firstLine } from "../errors.ts";

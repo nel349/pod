@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { MOST_KEPT_BYTES, readBounded } from "../readBounded.ts";
+import { MOST_KEPT_BYTES, readBounded } from "../docker/index.ts";
 
 /** A real stream of what a box might print, handed over in chunks the way a pipe hands them. */
 function printed(chunks: readonly string[]): ReadableStream<Uint8Array> {

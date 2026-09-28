@@ -5,7 +5,10 @@
  * is not Monad, so nothing Monad-specific is proven against it — only the contract's own rules and
  * the code that talks to them.
  */
-import { createPublicClient, createWalletClient, defineChain, http, parseEther, type Address, type Hex, type PublicClient, type WalletClient } from "viem";
+import {
+  createPublicClient, createWalletClient, defineChain, http, parseEther,
+  type Account, type Address, type Chain, type Hex, type PublicClient, type Transport, type WalletClient,
+} from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { neededOnCI } from "./tools.ts";
 
@@ -34,7 +37,8 @@ export interface Anvil {
   readonly port: number;
   readonly rpc: string;
   readonly publicClient: PublicClient;
-  wallet(key: Hex): WalletClient;
+  /** a wallet that signs with this key, and names its account, so it can send without being told whose */
+  wallet(key: Hex): WalletClient<Transport, Chain, Account>;
   deploy(artefact: string, args: readonly unknown[], by?: Hex): Promise<Address>;
   /** Send a key something to spend, from the first of anvil's own keys */
   fund(to: Address, value?: bigint): Promise<void>;
