@@ -20,6 +20,7 @@ import { tokenOfJob } from "../token.ts";
 import { Worker } from "../worker/index.ts";
 import { SEATS } from "../seal.ts";
 import { dockerAvailable } from "./support/tools.ts";
+import { runDocker } from "../runDocker.ts";
 
 /**
  * A whole pod of reference agents, through the public doors only, against a real chain, from a
@@ -39,10 +40,17 @@ const available = (await anvilAvailable()) && (await dockerAvailable());
 
 const JOB = "a-coat-given-the-rain";
 
-/** Everything the agents and the worker said, and the boxes still up, for a run that did not end as it should. */
+/** how long the watchdog waits for Docker to list its boxes: Docker may be what is stuck */
+const LIST_BOXES_SECONDS = 10;
+
+/**
+ * Everything the agents and the worker said, and the boxes still up, for a run that did not end as it
+ * should. What was said is printed first, so a Docker that is itself stuck cannot keep it back.
+ */
 async function tellWhatWasGoingOn(said: readonly string[], why: string): Promise<void> {
-  const boxes = await new Response(Bun.spawn(["docker", "ps", "-a", "--format", "{{.Names}} {{.Status}} {{.Command}}"], { stdout: "pipe" }).stdout).text();
-  console.error(`${why}. What was said:\n${said.join("\n")}\nBoxes still up:\n${boxes}`);
+  console.error(`${why}. What was said:\n${said.join("\n")}`);
+  const boxes = await runDocker(["ps", "-a", "--format", "{{.Names}} {{.Status}} {{.Command}}"], LIST_BOXES_SECONDS);
+  console.error(boxes.timedOut ? `Docker did not list its boxes within ${LIST_BOXES_SECONDS}s` : `Boxes still up:\n${boxes.out}`);
 }
 /** Never says take a coat: what the builder's model writes the first time */
 const NEVER_A_COAT = serverSaying("false", "false");
@@ -130,7 +138,10 @@ describe.skipIf(!available)("a pod of reference agents", () => {
       return true;
     };
     // if it ever hangs, say what everybody said and which boxes were still up, before the runner kills it
-    const watchdog = setTimeout(() => { void tellWhatWasGoingOn(said, "the test was about to run out of time"); }, 420_000);
+    const watchdog = setTimeout(() => {
+      tellWhatWasGoingOn(said, "the test was about to run out of time")
+        .catch((error: unknown) => console.error(`the watchdog could not say what was going on: ${String(error)}`));
+    }, 420_000);
     let finished: Finished[] = [];
     try {
       finished = await Promise.all(agents);

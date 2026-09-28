@@ -135,6 +135,28 @@ describe.skipIf(!withDocker)("grading from outside the box", () => {
       .rejects.toBeInstanceOf(DockerFailed);
   }, 240_000);
 
+  test("a check the work keeps waiting fails when its time is up: the work's failure, never Docker's", async () => {
+    // answers the look at whether it is up, and then never replies to anything a check asks
+    const stalling = await checkout("pod-stalling-", {
+      "server.js": `require("http").createServer((request, response) => { if (request.url === "/") response.end("up"); }).listen(3000, () => console.log("listening"));\n`,
+    });
+    const at = Date.now();
+    const outcome = await grade({ artefact: stalling, start: "node server.js", checks: CHECKS, toRun: [toRun[1]!], image: IMAGE, checkSeconds: 5 });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.checks[0]?.exitCode).not.toBe(0);
+    expect((Date.now() - at) / 1000).toBeLessThan(60);
+  }, 240_000);
+
+  test("a check that ends with Docker's own code is an ordinary failure, not Docker failing", async () => {
+    const checks = await checkout("pod-125-", { "exits.mjs": "process.exit(125);\n" });
+    const outcome = await grade({
+      artefact: ARTEFACT, start: "node server.js", checks, image: IMAGE,
+      toRun: [{ says: "it ends with 125", command: "node exits.mjs", hidden: false }],
+    });
+    expect(outcome.checks[0]?.exitCode).toBe(1);
+  }, 240_000);
+
   test("nothing is left running afterwards", async () => {
     await grade({ artefact: ARTEFACT, start: "node server.js", checks: CHECKS, toRun, image: IMAGE });
     const running = await new Response(

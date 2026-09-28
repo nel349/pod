@@ -68,6 +68,23 @@ export interface GradeOutcome {
 const DOCKER_ANSWER_SECONDS = 60;
 /** How long one look at whether the artefact answers may take, inside the box and from outside it */
 const PROBE_SECONDS = 10;
+/** How long a check that will not stop when its time is up is given before it is killed */
+const CHECK_KILL_GRACE_SECONDS = 5;
+
+/**
+ * How a check is run in its box.
+ *
+ * `--init` on the box, so the check is not the box's first process: that one ignores the signal to
+ * stop, and a check left waiting by the work would run past its time until Docker was taken to have
+ * failed us, which is our failure and no verdict. With it, a check out of time is stopped, then
+ * killed if it will not stop, and it has failed: the work kept it waiting. A check that itself ends
+ * with Docker's own code is ended with an ordinary failure, so that code only ever means Docker
+ * could not start the box.
+ */
+export function checkScript(command: string, seconds: number): string {
+  return `cd /checks && timeout -k ${CHECK_KILL_GRACE_SECONDS} ${seconds} ${command}; said=$?; `
+    + `if [ "$said" -eq ${DOCKER_COULD_NOT_START} ]; then exit 1; fi; exit $said`;
+}
 
 /**
  * A Docker command the grading cannot go on without. Docker not answering in time is our failure,
@@ -123,7 +140,7 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
       // named, so a box left behind by a Docker that stopped answering can be taken down
       const checkName = `pod-chk-${id}-${index}`;
       const result = await docker([
-        "run", "--rm",
+        "run", "--rm", "--init",
         "--name", checkName,
         "--network", network,
         ...BOUNDED_LOGS,
@@ -133,8 +150,8 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
         "-v", `${request.checks}:/checks:ro`,
         "-e", `TARGET=http://${artefactName}:${PORT}`,
         request.image,
-        "sh", "-c", `cd /checks && timeout ${checkSeconds} ${check.command}`,
-      ], checkSeconds + DOCKER_ANSWER_SECONDS, checkName);
+        "sh", "-c", checkScript(check.command, checkSeconds),
+      ], checkSeconds + CHECK_KILL_GRACE_SECONDS + DOCKER_ANSWER_SECONDS, checkName);
       // a check whose box never started has not been run, so it is no failure of the work's
       if (result.code === DOCKER_COULD_NOT_START) throw new DockerFailed(`Docker could not start the box for "${check.says}": ${result.out}`);
       outcomes.push({
