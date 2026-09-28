@@ -617,6 +617,29 @@ contract PodJobsV2Test is PodJobsV2Fixture {
         jobs.approve(id, PodJobsV2.Role.Builder, COMMIT);
     }
 
+    function test_noSeatIsTakenWhileTheJobIsLocked_oneOpensAgainOnceItIsReleased() public {
+        // a job with a spare reviewer seat, locked on its commit with that seat still free
+        vm.prank(poster);
+        uint256 id = jobs.post{ value: PRICE + 3 * WRITING }(WINDOW, 2);
+        _open(id);
+        _fillEverySeat(id);
+        _approveAll(id, COMMIT);
+        assertTrue(jobs.locked(id));
+
+        uint256 deposit = jobs.seatDeposit(id, PodJobsV2.Role.Reviewer);
+        vm.deal(stranger, deposit);
+        vm.prank(stranger);
+        vm.expectRevert(PodJobsV2.Locked.selector);
+        jobs.takeSeat{ value: deposit }(id, PodJobsV2.Role.Reviewer, stranger);
+
+        vm.prank(validator);
+        jobs.releaseLock(id);
+        vm.prank(stranger);
+        jobs.takeSeat{ value: deposit }(id, PodJobsV2.Role.Reviewer, stranger);
+        assertEq(jobs.seatCount(id, PodJobsV2.Role.Reviewer), 2);
+        _assertConserved();
+    }
+
     function test_theLockEndsWithTheSettlement() public {
         uint256 id = _lockedJob();
         _settle(id, PodJobsV2.Verdict.Passed);

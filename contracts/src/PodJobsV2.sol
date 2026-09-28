@@ -281,12 +281,15 @@ contract PodJobsV2 {
         return (seatPay(jobId, role) * DEPOSIT_PERCENT) / 100;
     }
 
-    /// @notice Take a seat, first come first served, one owner to a job. Never on a job still preparing.
+    /// @notice Take a seat, first come first served, one owner to a job. Never on a job still preparing,
+    ///         and never while it is locked: the work is being graded, and a seat taken then would be
+    ///         paid for approving nothing.
     /// @param owner the human or organisation behind the agent. Kept so a pod cannot be packed.
     function takeSeat(uint256 jobId, Role role, address owner) external payable {
         Job storage job = jobs[jobId];
         if (job.state != State.Open && job.state != State.Working) revert WrongState();
         if (block.timestamp >= job.endsAt) revert TooLate();
+        if (locked(jobId)) revert Locked();
         if (holdsSeat[jobId][owner]) revert OwnerAlreadySeated();
         if (msg.value != seatDeposit(jobId, role)) revert WrongAmount();
 
