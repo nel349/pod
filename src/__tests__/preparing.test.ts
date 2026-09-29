@@ -188,6 +188,72 @@ describe.skipIf(!available)("a paid job, prepared", () => {
     await preparing.whenIdle();
   }, 180_000);
 
+  async function takeBack(id: bigint, by: Hex = POSTER): Promise<void> {
+    const payer = wallet(by);
+    const { request } = await anvil.publicClient.simulateContract({ address: jobs, abi: podJobsV2Abi, functionName: "takeBack", args: [id], account: payer.account });
+    await anvil.publicClient.waitForTransactionReceipt({ hash: await payer.writeContract(request) });
+  }
+
+  test("a name held by a job taken back before approval is free again, for anybody's next job", async () => {
+    const { preparing, folder } = await service(UNREACHABLE);
+    const name = uniqueName();
+    const first = await aPaidJob();
+    expect(await preparing.setUp(await asPoster(first, name))).toMatchObject({ ok: true });
+    await preparing.whenIdle();
+    expect(await preparing.isNameTaken(name)).toBe(true);
+
+    await takeBack(first);
+    expect(await preparing.isNameTaken(name)).toBe(false);
+    expect(await (await handle(new Request(`http://pod.test${jobNamePath(name)}`), wall, { preparing })).json()).toEqual({ taken: false });
+
+    const second = await aPaidJob("flash", STRANGER);
+    expect(await preparing.setUp(await asPoster(second, name, { by: STRANGER }))).toMatchObject({ ok: true });
+    await preparing.whenIdle();
+    expect(await preparing.isNameTaken(name)).toBe(true);
+    // the first job's files are kept under its number, and the name it gave up is kept aside
+    expect((await new PreparingStore(folder).readSetUp(`${first}`))?.name).toBe(name);
+    expect(await new PreparingStore(folder).nameHolder(name)).toBe(`${second}`);
+  }, 180_000);
+
+  test("a job taken back after its checks were approved keeps its name", async () => {
+    const { preparing } = await service();
+    const name = uniqueName();
+    const id = await aPaidJob();
+    await preparing.setUp(await asPoster(id, name));
+    const [written] = (await whenWritten(preparing, id)).writings;
+    const approval = written?.outcome.kind === "written" ? written.outcome.approval : undefined;
+    if (!approval) throw new Error("a ready set came back with nothing to approve");
+    const poster = wallet(POSTER);
+    const { request } = await anvil.publicClient.simulateContract({
+      address: jobs, abi: podJobsV2Abi, functionName: "approveChecks", args: [id, approval.seal, approval.signature], account: poster.account,
+    });
+    await anvil.publicClient.waitForTransactionReceipt({ hash: await poster.writeContract(request) });
+    await takeBack(id);
+
+    expect(await preparing.isNameTaken(name)).toBe(true);
+    expect(await preparing.setUp(await asPoster(await aPaidJob("flash", STRANGER), name, { by: STRANGER }))).toMatchObject({ ok: false, status: 409 });
+  }, 300_000);
+
+  test("two jobs claiming a freed name at the same moment: one has it, the other is told it is taken", async () => {
+    const { preparing } = await service(UNREACHABLE);
+    const name = uniqueName();
+    const first = await aPaidJob();
+    await preparing.setUp(await asPoster(first, name));
+    await preparing.whenIdle();
+    await takeBack(first);
+
+    // paid one after the other: paid at once, both would be told the same next number
+    const a = await aPaidJob();
+    const b = await aPaidJob("flash", STRANGER);
+    const answers = await Promise.all([
+      preparing.setUp(await asPoster(a, name)),
+      preparing.setUp(await asPoster(b, name, { by: STRANGER })),
+    ]);
+    expect(answers.filter((answer) => answer.ok)).toHaveLength(1);
+    expect(answers.find((answer) => !answer.ok)).toMatchObject({ status: 409 });
+    await preparing.whenIdle();
+  }, 180_000);
+
   test("asked again the same way, a set up answers the same; asked differently, it is refused", async () => {
     const { preparing } = await service(UNREACHABLE);
     const id = await aPaidJob();

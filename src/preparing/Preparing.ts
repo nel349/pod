@@ -107,9 +107,13 @@ export class Preparing {
     return this.options.chain.jobs;
   }
 
-  /** Whether a preparing job holds this name. */
+  /**
+   * Whether a preparing job holds this name. A job its poster took back before approving holds it no
+   * longer: the chain says so, and the name is free for another.
+   */
   async isNameTaken(name: string): Promise<boolean> {
-    return (await this.options.store.nameHolder(name)) !== undefined;
+    const holder = await this.options.store.nameHolder(name);
+    return holder !== undefined && !(await this.wasTakenBackBeforeApproval(holder));
   }
 
   /**
@@ -145,8 +149,8 @@ export class Preparing {
     }
 
     if (await this.options.wall.read(name)) return refused(409, `there is already a job called ${name}`);
-    const claimed = await this.options.store.claimName(name, onChainId);
-    if (!claimed.ok) return refused(409, `there is already a job called ${name}`);
+    const claimed = await this.claimName(name, onChainId);
+    if (!claimed) return refused(409, `there is already a job called ${name}`);
 
     await this.options.store.saveSetUp({ onChainId, jobs: this.jobs, name, poster, mode, salt, setUpAt: new Date().toISOString() });
     await this.options.store.ask(onChainId, { request, askedAt: new Date().toISOString() });
@@ -215,6 +219,22 @@ export class Preparing {
   /** Settles once no writing is under way, so a server being stopped can wait for its boxes. */
   async whenIdle(): Promise<void> {
     while (this.underWay.size > 0) await Promise.allSettled([...this.underWay]);
+  }
+
+  /** Hold the name for this job, taking it over from a job taken back before approval if that is who holds it. */
+  private async claimName(name: string, onChainId: string): Promise<boolean> {
+    const { store } = this.options;
+    const claimed = await store.claimName(name, onChainId);
+    if (claimed.ok) return true;
+    if (!(await this.wasTakenBackBeforeApproval(claimed.heldBy))) return false;
+    return (await store.takeOverName(name, claimed.heldBy, onChainId)).ok;
+  }
+
+  /** Whether the chain shows this job taken back by its poster before any checks were approved. */
+  private async wasTakenBackBeforeApproval(onChainId: string): Promise<boolean> {
+    const job = await this.options.chain.job(BigInt(onChainId));
+    // approving fixes the seal: a refunded job with no seal was never approved
+    return job?.state === "refunded" && /^0x0{64}$/.test(job.seal);
   }
 
   private async askForAnother(onChainId: string, asked: unknown): Promise<Answer<{ readonly now: Now }>> {

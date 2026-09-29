@@ -10,6 +10,7 @@
  *   <number>/asked.json            the writing waiting its turn or under way, if there is one
  *   <number>/writings/<n>.json     every writing of its checks, finished one way or the other
  *   names/<name>                   which job number holds a name
+ *   names/.released/<name>.<id>    a name given up by a job taken back before approval, kept, not deleted
  *
  * Only a file that is not there reads as nothing. Any other failure to read the disk is thrown: read
  * as nothing, it would make a job vanish from a restart, or a held name look free.
@@ -23,6 +24,7 @@ const SETUP_FILE = "setup.json";
 const ASKED_FILE = "asked.json";
 const WRITINGS_FOLDER = "writings";
 const NAMES_FOLDER = "names";
+const RELEASED_FOLDER = ".released";
 const WRITING_FILE = /^([0-9]+)\.json$/;
 
 export class PreparingStore {
@@ -48,6 +50,23 @@ export class PreparingStore {
       const heldBy = (await this.nameHolder(name)) ?? "";
       return heldBy === onChainId ? { ok: true } : { ok: false, heldBy };
     }
+  }
+
+  /**
+   * Hand a name held by a job taken back before approval to another job. The old holding is moved
+   * aside, not deleted, and only one move can happen, so of two jobs asking at once only one has it.
+   */
+  async takeOverName(name: string, from: string, to: string): Promise<{ readonly ok: true } | { readonly ok: false; readonly heldBy: string }> {
+    if ((await this.nameHolder(name)) === from) {
+      await mkdir(join(this.folder, NAMES_FOLDER, RELEASED_FOLDER), { recursive: true });
+      try {
+        await rename(join(this.folder, NAMES_FOLDER, name), join(this.folder, NAMES_FOLDER, RELEASED_FOLDER, `${name}.${crypto.randomUUID()}`));
+      } catch (error) {
+        // somebody else moved it first; whoever claims it next has it
+        if (!hasCode(error, "ENOENT")) throw error;
+      }
+    }
+    return this.claimName(name, to);
   }
 
   async nameHolder(name: string): Promise<string | undefined> {
