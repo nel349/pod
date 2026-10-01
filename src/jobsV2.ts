@@ -30,6 +30,8 @@ export const podJobsV2Abi = parseAbi([
   "function settle(uint256 jobId, bytes32 commitHash, uint8 verdict, bytes32 receiptHash)",
   "function releaseLock(uint256 jobId)",
   "function close(uint256 jobId)",
+  "function owed(address) view returns (uint256)",
+  "function withdraw(address to)",
   "function locked(uint256 jobId) view returns (bool)",
   "function reports(uint256) view returns (uint8 verdict, bytes32 receiptHash)",
   "event Created(uint256 indexed jobId, address indexed poster, uint256 price, uint64 window, uint256 forWriting)",

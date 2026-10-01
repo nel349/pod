@@ -119,6 +119,11 @@ export class Preparing {
     return holder !== undefined && !(await this.wasTakenBackBeforeApproval(holder));
   }
 
+  /** Whether a paid job was set up here: a job paid for and never set up is one the poster has still to send (R13). */
+  async isSetUp(onChainId: string): Promise<boolean> {
+    return ON_CHAIN_NUMBER.test(onChainId) && (await this.options.store.readSetUp(onChainId)) !== undefined;
+  }
+
   /**
    * A poster who has paid asks for their job to be prepared, under a name, with its first writing.
    * Asked again the same way, it answers the same: a page that lost the answer can ask again.

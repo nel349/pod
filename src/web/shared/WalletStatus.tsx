@@ -10,7 +10,7 @@ import { CHROME, shortAddress } from "./copy.ts";
 function ConnectedAs({ address }: { readonly address: string }): ReactElement {
   return (
     <>
-      <span className="who" title={address}>{CHROME.wallet.connectedAs(shortAddress(address))}</span>
+      <span className="who" title={address}><span className="as">{CHROME.wallet.connectedAs} </span>{shortAddress(address)}</span>
       <ChooseAccount label={CHROME.wallet.change} className="change" />
     </>
   );

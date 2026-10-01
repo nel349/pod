@@ -1,5 +1,6 @@
-import type { CSSProperties, ReactElement, ReactNode } from "react";
+import { useContext, type CSSProperties, type ReactElement, type ReactNode } from "react";
 import { stepId, stepNumber, type StepName } from "../state/index.ts";
+import { StepOrderContext } from "./StepOrderContext.ts";
 
 interface StepProps {
   /** which step this is: its number, its id and its place on the seal all follow from the name */
@@ -17,7 +18,7 @@ const lean = (number: number): CSSProperties => ({ "--lean": `${number % 2 ? ODD
 
 /** One numbered step of posting a job, as a photocopied sheet taped to the wall. */
 export function Step({ name, title, guide, children }: StepProps): ReactElement {
-  const number = stepNumber(name);
+  const number = stepNumber(name, useContext(StepOrderContext));
   const id = stepId(name);
   return (
     <section className="sheet" id={id} aria-labelledby={`${id}-title`} style={lean(number)}>

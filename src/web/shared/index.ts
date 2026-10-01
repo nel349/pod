@@ -10,5 +10,6 @@ export * from "./Sheet.tsx";
 export * from "./readAnswer.ts";
 export * from "./useConnectedAccount.ts";
 export * from "./useMarket.ts";
+export * from "./useOwed.ts";
 export * from "./useWalletPresent.ts";
 export * from "./wallet/index.ts";

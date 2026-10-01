@@ -1,14 +1,14 @@
 import { useRef, useState, type BaseSyntheticEvent } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { firstLine } from "../../../errors.ts";
-import { NameTakenSchema } from "../../../market.ts";
 import { z } from "zod";
-import { jobNamePath, jobPath, refundApiPath } from "../../../routes.ts";
+import { jobPath, refundApiPath } from "../../../routes.ts";
 import {
   asSentence, canPress, COPY, NoWallet, PostingStopped, whatIsMissing,
   type DraftRequest, type PayStatus, type Payment, type PostForm, type SealedJob, type WrittenFor,
 } from "../state/index.ts";
 import { readAnswer } from "../../shared/index.ts";
+import { isNameTaken } from "./isNameTaken.ts";
 import type { PostJobState } from "./usePostJob.ts";
 
 interface PayAndPost {
@@ -101,12 +101,6 @@ async function isOnTheWallAs(name: string, onChainId: string): Promise<boolean> 
 
 const OnTheWallSchema = z.object({ onChainId: z.string() });
 
-/** Whether the wall already has a job by this name. Asked, not assumed: the wall is the authority. */
-async function isNameTaken(name: string): Promise<boolean> {
-  const response = await fetch(jobNamePath(name), { cache: "no-store" });
-  if (!response.ok) throw new Error(`the server said ${response.status}`);
-  return (await readAnswer(response, NameTakenSchema)).taken;
-}
 
 /** What the page says when posting stopped: nothing sent, or paid, safe, and how to finish. */
 function stoppedBy(error: Error): PayStatus {

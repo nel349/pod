@@ -295,9 +295,10 @@ button.quiet:hover { color: var(--pink); text-decoration: line-through; }
   color: var(--paper);
   border-bottom: 3px solid var(--yellow);
 }
-.site-header .mark { font: 900 30px/1 var(--shout); color: var(--yellow); text-decoration: none; letter-spacing: 0.02em; }
+.site-header .mark { flex: 0 0 auto; font: 900 30px/1 var(--shout); color: var(--yellow); text-decoration: none; letter-spacing: 0.02em; }
 .site-header nav { display: flex; gap: clamp(10px, 2vw, 24px); flex: 1 1 auto; min-width: 0; overflow-x: auto; }
 .site-header nav a {
+  flex: 0 0 auto;
   font: 400 14px/1 var(--type);
   color: var(--paper);
   text-decoration: none;
@@ -324,6 +325,14 @@ button.quiet:hover { color: var(--pink); text-decoration: line-through; }
 .wallet button.change { font: 400 13px/1 var(--type); text-transform: none; letter-spacing: 0; color: var(--paper); background: none; padding: 4px 2px; box-shadow: none; text-decoration: underline; text-underline-offset: 3px; }
 .wallet button.change:hover { color: var(--yellow); transform: none; box-shadow: none; }
 .wallet .who::before { content: "● "; color: #3ddc84; }
+/* on a phone the header holds the mark, the pages and the wallet in one line: the words before the address are read, not drawn */
+@media (max-width: 560px) {
+  .site-header { gap: 10px; }
+  .site-header .mark { font-size: 26px; }
+  .site-header nav { gap: 10px; }
+  .site-header nav a { font-size: 13px; }
+  .wallet .who .as { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
 .wallet .wrong { color: var(--pink); }
 .wallet .none { color: #a8a89f; }
 

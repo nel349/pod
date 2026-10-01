@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { ROUTES } from "../../../routes.ts";
-import { COPY, type Progress, type StepName } from "../state/index.ts";
+import { COPY, isSealed, type Progress, type StepName } from "../state/index.ts";
 import { ShardSeal } from "./ShardSeal.tsx";
 
 interface BillProps {
@@ -25,8 +25,8 @@ export function Bill({ progress, working, flash }: BillProps): ReactElement {
       {progress && (
         <figure className="seal-figure">
           <ShardSeal progress={progress} working={working} flash={flash} />
-          {progress.placed.has("pay") && <p className="sealed-stamp" aria-hidden="true">{COPY.stamp}</p>}
-          <figcaption className="next">{COPY.next[progress.next ?? "done"]}</figcaption>
+          {isSealed(progress) && <p className="sealed-stamp" aria-hidden="true">{COPY.stamp}</p>}
+          <figcaption className="next">{progress.nextSays}</figcaption>
         </figure>
       )}
     </aside>

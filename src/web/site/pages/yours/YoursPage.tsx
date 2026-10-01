@@ -6,6 +6,7 @@ import { SITE } from "../../copy.ts";
 import { useKeptPayment, useSite } from "../../hooks/index.ts";
 import { ConnectSheet } from "./ConnectSheet.tsx";
 import { KeptSheet } from "./KeptSheet.tsx";
+import { OwedSheet } from "./OwedSheet.tsx";
 import { WalletsOwn } from "./WalletsOwn.tsx";
 
 function ForTheWallet({ market }: { readonly market: MarketConfig }): ReactElement {
@@ -14,7 +15,8 @@ function ForTheWallet({ market }: { readonly market: MarketConfig }): ReactEleme
   return (
     <>
       {kept && <KeptSheet kept={kept} />}
-      {account ? <WalletsOwn address={account} keptOnChainId={kept?.payment.onChainId} /> : <ConnectSheet />}
+      {account ? <WalletsOwn address={account} keptOnChainId={kept?.onChainId} /> : <ConnectSheet />}
+      {account && <OwedSheet market={market} address={account} />}
     </>
   );
 }

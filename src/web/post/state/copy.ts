@@ -8,7 +8,7 @@ import type { Mode } from "../../../job.ts";
 import type { Stage } from "../../../checkwriting/written.ts";
 import { MOST_STATEMENTS } from "../../../checkwriting/request.ts";
 import type { StepState } from "./posting.ts";
-import { stepNumber, type StepName } from "./steps.ts";
+import { stepNumber, type PAY_FIRST_STEPS, type STEPS } from "./steps.ts";
 
 export const COPY = {
   masthead: {
@@ -26,7 +26,7 @@ export const COPY = {
     terms: "Next: name your price and the time.",
     pay: "Next: pay, and the seal locks.",
     done: "Sealed. It is on the wall.",
-  } satisfies Record<StepName | "done", string>,
+  } satisfies Record<(typeof STEPS)[number] | "done", string>,
   stamp: "Sealed",
   sealLabel: (placed: number, of: number) => `The seal: ${placed} of ${of} pieces in place`,
   closed: "Posting is not open on this server: it has no contract to post to.",
@@ -151,6 +151,75 @@ export const COPY = {
       notYet: "made once the checks are written",
       each: "Each check",
       contract: "The contract",
+    },
+  },
+
+  /** posting on a contract that prepares jobs: pay first, then the checks are written and approved */
+  payFirst: {
+    next: {
+      idea: "Next: say what you want built.",
+      brief: "Next: write the brief.",
+      exam: "Next: set the exam, or post without one.",
+      terms: "Next: name your price and the time.",
+      pay: "Next: pay, and the checks are written.",
+      approve: "Next: read the checks and approve them.",
+      done: "Approved. It opens to builders now.",
+    } satisfies Record<(typeof PAY_FIRST_STEPS)[number] | "done", string>,
+    title: "Pay, and have the checks written",
+    plain: (paid: { readonly total: string; readonly price: string; readonly writings: string; readonly included: number; readonly window: string }) =>
+      `You pay ${paid.total}: ${paid.price} for the job, and ${paid.writings} to have its checks written up to ${paid.included} times. An agent turns each of your lines into a check and tries each one three ways. You read them, say a line another way and have them written again if you need to, then approve them. Builders can start only once you approve, and from then they have ${paid.window}. Until you approve, you can take it all back, less the writings already done.`,
+    button: (total: string) => `Pay ${total}`,
+    finish: "Send it to be written",
+    steps: {
+      connect: "Connect your wallet",
+      chain: (chain: string) => `Switch to ${chain}`,
+      pay: "Pay into the contract",
+      sign: "Sign that it is yours",
+      send: "Send your lines to be written",
+    },
+    paidAs: (onChainId: string | undefined, hash: string) =>
+      onChainId === undefined ? `Payment sent: ${hash}` : `Paid: job ${onChainId} on the contract`,
+    comeBack: "You paid for this job and it was never sent to be written. Press Send it to be written to finish: you will not be charged again.",
+    failedBeforePaying: "No money left your wallet.",
+    failedAfterPaying: "Your payment is held by the contract, not lost. Press Send it to be written to finish: you will not be charged again.",
+    takeBack: "Or take it all back",
+  },
+
+  /** a job paid for, while its checks are written, read and approved */
+  prepared: {
+    job: (onChainId: string) => `Job ${onChainId}`,
+    noSuchJob: (onChainId: string) => `There is no job ${onChainId} on this contract.`,
+    terms: (price: string, window: string) => `${price}, and the builders have ${window} once you approve.`,
+    signIn: {
+      button: "Show my job",
+      says: "Your wallet signs a note saying this job is yours, good for an hour. Nothing is paid.",
+    },
+    notYours: "Another wallet paid for this job. Switch to the wallet that paid for it.",
+    notSetUp: "Its lines never reached this server. Send them from the posting page, in the browser you paid from, or take the money back.",
+    noWallet: "Connect the wallet that paid for this job to see it.",
+    connect: "Connect wallet",
+    left: (left: number) => `${left === 0 ? "No writings" : left === 1 ? "One writing" : `${left} writings`} left of what you paid.`,
+    waiting: (place: number) => (place === 1 ? "Your checks are next to be written." : `Waiting its turn: ${place - 1} ahead of yours.`),
+    title: "Read the checks, and approve them",
+    guide: "Each line you wrote, as the check it became, tried three ways. Approve them and the job opens to builders; the checks are fixed from then on. If a line came out wrong, say it another way above and have them written again.",
+    none: "No checks yet. They are written in a minute or two.",
+    writeAgain: "Write them again",
+    topUpAndWrite: (price: string) => `Pay ${price} and write them again`,
+    approve: "Approve these checks",
+    failedWriting: (why: string, isCharged: boolean) =>
+      `These checks were not written: ${why.replace(/\.$/, "")}. ${isCharged ? "It counted as a writing." : "It did not count as a writing."}`,
+    stale: "You changed the lines since these were written. Write them again before approving.",
+    mismatch: "These checks do not match the seal they came with, so this page will not approve them. Write them again.",
+    approved: "Approved. The job is open to builders, and on the wall in a moment.",
+    openJob: "Open the job",
+    openYours: "See it in Yours",
+    takeBack: "Take the money back",
+    takeBackSays: "Until you approve, you can take back everything not spent on writing.",
+    takenBack: "You took the money back. The job is closed, and its address is free again.",
+    working: {
+      wallet: "Waiting for your wallet",
+      send: "Sending it to the chain",
+      confirm: "Waiting for the chain to confirm it",
     },
   },
 

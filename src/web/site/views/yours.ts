@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { PaidJob } from "../../../owners.ts";
-import { refundByNumberPath } from "../../../routes.ts";
+import { preparingPagePath, refundByNumberPath } from "../../../routes.ts";
 import type { JobRecord } from "../../../store.ts";
 import { jobView, TitleViewSchema, type ChainSays } from "./job.ts";
 import { MS_IN_A_SECOND, WEI } from "./kinds.ts";
@@ -15,11 +15,18 @@ export const YoursEntrySchema = z.object({
 });
 export type YoursEntry = z.infer<typeof YoursEntrySchema>;
 
-/** A job a wallet paid for that never reached the wall: the contract knows it only by its number. */
+/**
+ * A job paid for on a contract that prepares jobs, still preparing: its checks being written on its
+ * own page, or never sent to be written at all (R13). Either way its page is where to go next.
+ */
+export const PreparingNextSchema = z.object({ kind: z.enum(["preparing", "notSetUp"]), page: z.string() });
+export type PreparingNext = z.infer<typeof PreparingNextSchema>;
+
+/** A job a wallet paid for that is not on the wall: the contract knows it only by its number. */
 export const UnpublishedViewSchema = z.object({
   onChainId: z.string(),
   price: WEI,
-  money: MoneyViewSchema,
+  money: z.union([MoneyViewSchema, PreparingNextSchema]),
 });
 export type UnpublishedView = z.infer<typeof UnpublishedViewSchema>;
 
@@ -38,12 +45,20 @@ export function yoursEntry(record: JobRecord, chainSays: ChainSays): YoursEntry 
   return { tile: tileView(record.tile, record.signed !== undefined), ...(view.money ? { money: view.money } : {}), ...(view.title ? { title: view.title } : {}) };
 }
 
-/** Where the money for a job that never reached the wall is: the contract is the only one who knows. */
-export function unpublishedView(paid: PaidJob): UnpublishedView {
+/**
+ * Where the money for a job that is not on the wall is: the contract is the only one who knows.
+ *
+ * @param isSetUp whether the server has the job's lines, for a job still preparing
+ */
+export function unpublishedView(paid: PaidJob, isSetUp = false): UnpublishedView {
   const { job } = paid;
-  const takeBack = refundByNumberPath(paid.onChainId.toString());
+  const onChainId = paid.onChainId.toString();
+  if (job.state === "preparing") {
+    return { onChainId, price: job.price.toString(), money: { kind: isSetUp ? "preparing" : "notSetUp", page: preparingPagePath(onChainId) } };
+  }
+  const takeBack = refundByNumberPath(onChainId, paid.jobs);
   const money: MoneyView = job.state === "refunded" ? { kind: "refunded" }
     : job.state === "settled" ? { kind: "paid" }
     : { kind: "held", endsAt: new Date(Number(job.endsAt) * MS_IN_A_SECOND).toISOString(), takeBack };
-  return { onChainId: paid.onChainId.toString(), price: job.price.toString(), money };
+  return { onChainId, price: job.price.toString(), money };
 }

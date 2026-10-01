@@ -74,7 +74,7 @@ beforeAll(async () => {
   const opened = await openJob(store, { jobId: "a-coat", seal, spec: TITLED_SPEC, endsAt: new Date(Number(now + 3600n) * 1000), seats: [] });
   await store.save({ ...opened, chain: { network: "monad-testnet", jobId: String(onChainId), jobs }, poster: POSTER });
 
-  const owners = ownersFrom({ jobs, job: reader.job, count: () => readJobCount({ address: jobs, publicClient: anvil.publicClient }) });
+  const owners = ownersFrom({ contracts: [{ jobs, job: reader.job, count: () => readJobCount({ address: jobs, publicClient: anvil.publicClient }) }] });
   const serving = serve(store, 0, { market, owners });
   server = serving;
   if (serving.port === undefined) throw new Error("the server did not say which port it took");

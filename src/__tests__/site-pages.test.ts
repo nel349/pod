@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Tile } from "../gallery.ts";
 import type { JobRecord } from "../store.ts";
 import { recordByRole } from "../agentpage.ts";
-import { claimPath, receiptFilePath, receiptPath, refundByNumberPath, refundPath } from "../routes.ts";
+import { claimPath, preparingPagePath, receiptFilePath, receiptPath, refundByNumberPath, refundPath } from "../routes.ts";
 import {
   jobView, moneyAt, needsTheChainForMoney, receiptView, renderSite, tileView, unpublishedView, type AgentFactsView, type SiteData, type SitePage,
 } from "../web/site/index.ts";
@@ -318,7 +318,8 @@ describe("where the money is", () => {
 });
 
 describe("a job paid for and never published", () => {
-  const paid = (state: "open" | "settled" | "refunded") => ({
+  const paid = (state: "open" | "settled" | "refunded" | "preparing") => ({
+    jobs: "0x00000000000000000000000000000000000000c1",
     onChainId: 7n,
     job: { poster: POSTER, price: 10n ** 18n, seal: `0x${"ab".repeat(32)}`, endsAt: 1_790_000_000n, state, commit: `0x${"00".repeat(32)}`, reviewers: 1 },
   } as const);
@@ -326,10 +327,17 @@ describe("a job paid for and never published", () => {
   test("its money is held until the window closes, then taken back by its number, or said to be back", () => {
     expect(unpublishedView(paid("open"))).toEqual({
       onChainId: "7", price: "1000000000000000000",
-      money: { kind: "held", endsAt: new Date(1_790_000_000_000).toISOString(), takeBack: refundByNumberPath("7") },
+      money: { kind: "held", endsAt: new Date(1_790_000_000_000).toISOString(), takeBack: refundByNumberPath("7", "0x00000000000000000000000000000000000000c1") },
     });
     expect(unpublishedView(paid("refunded")).money).toEqual({ kind: "refunded" });
     expect(unpublishedView(paid("settled")).money).toEqual({ kind: "paid" });
+  });
+
+  test("one still preparing is sent to its own page: to read its checks, or, never set up, to take the money back", () => {
+    expect(unpublishedView(paid("preparing"), true).money).toEqual({ kind: "preparing", page: preparingPagePath("7") });
+    expect(unpublishedView(paid("preparing"), false).money).toEqual({ kind: "notSetUp", page: preparingPagePath("7") });
+    // whether it was set up says nothing about a job that is not preparing
+    expect(unpublishedView(paid("open"), true).money.kind).toBe("held");
   });
 });
 

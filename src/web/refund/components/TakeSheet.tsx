@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 import { isAddressEqual, type Address } from "viem";
 import { explorerTransaction } from "../../../market.ts";
 import { ChooseAccount, CHROME, Sheet } from "../../shared/index.ts";
-import { COPY, REFUND_STEPS, stepStates, type OnChainNow, type RefundStatus, type Standing } from "../state/index.ts";
+import { canTake, COPY, REFUND_STEPS, stepStates, type OnChainNow, type RefundStatus, type Standing } from "../state/index.ts";
 
 interface TakeSheetProps {
   readonly onChain: OnChainNow;
@@ -21,11 +21,13 @@ export function TakeSheet({ onChain, standing, coin, explorer, hasWallet, connec
   const steps = stepStates(status);
   return (
     <Sheet number={2} id="take" title={COPY.take.title}>
+      {standing.kind === "preparing" && <p><a className="primary" href={standing.page}>{COPY.take.openPreparing}</a></p>}
       {connected && !isAddressEqual(connected, onChain.poster) && (
         <p id="not-poster" className="said-status">{COPY.take.notPoster(connected, onChain.poster)} <ChooseAccount label={CHROME.wallet.chooseAnother} /></p>
       )}
       <button type="button" id="refund" className="primary" onClick={onRefund}
-        disabled={!hasWallet || isWorking || status.kind === "sent" || standing.kind !== "ready"} data-busy={isWorking || undefined}>
+        hidden={standing.kind === "preparing"}
+        disabled={!hasWallet || isWorking || status.kind === "sent" || !canTake(standing)} data-busy={isWorking || undefined}>
         {isWorking ? COPY.take.busy : COPY.take.button(onChain.price, coin)}
       </button>
       <p id="said" className={status.kind === "sent" ? "said-status done" : "said-status"} role="status">

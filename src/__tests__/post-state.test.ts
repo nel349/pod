@@ -197,7 +197,7 @@ describe("the words the page uses", () => {
   });
 
   test("steps are numbered from the one list, so the stamps and the seal agree", () => {
-    expect(STEPS.map(stepNumber)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(STEPS.map((step) => stepNumber(step))).toEqual([1, 2, 3, 4, 5, 6]);
     expect(stepId("checks")).toBe("step-checks");
   });
 });

@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { COPY, type Progress, type StepName } from "../state/index.ts";
+import type { Progress, StepName } from "../state/index.ts";
 import { ShardSeal } from "./ShardSeal.tsx";
 
 /**
@@ -12,7 +12,7 @@ export function ProgressStrip({ progress, working }: { readonly progress: Progre
   return (
     <div className="strip" aria-hidden="true">
       <ShardSeal progress={progress} working={working} />
-      <p>{COPY.next[progress.next ?? "done"]}</p>
+      <p>{progress.nextSays}</p>
     </div>
   );
 }

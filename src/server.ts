@@ -11,7 +11,7 @@
 import { acceptPosting, type ChainReader } from "./posting.ts";
 import type { CheckWriting, ProvenChecks } from "./checkwriting/index.ts";
 import type { MarketConfig } from "./market.ts";
-import { isAddress } from "viem";
+import { isAddress, isAddressEqual } from "viem";
 import { bodyWithin, tooLarge } from "./body.ts";
 import { NO_STORE } from "./headers.ts";
 import { firstLine } from "./errors.ts";
@@ -24,7 +24,7 @@ import postPage from "./web/post/index.html";
 import refundPage from "./web/refund/index.html";
 import { renderCard } from "./card.ts";
 import { isPublished, JobStore, publicRecord } from "./store.ts";
-import { cardPath, checkFilePath, isSafeName, isWallName, jobPath, preparingPath, RECEIPT_FILE, ROUTES, WRITINGS, writingPath } from "./routes.ts";
+import { cardPath, checkFilePath, isSafeName, isWallName, jobPath, preparingPath, QUERY, RECEIPT_FILE, ROUTES, WRITINGS, writingPath } from "./routes.ts";
 import type { Owners } from "./owners.ts";
 import { preparingToTheWire, type Preparing } from "./preparing/index.ts";
 import type { AgentFactsReader } from "./agentFacts.ts";
@@ -59,6 +59,8 @@ export const MOST_A_REQUEST_TO_WRITE_MAY_WEIGH = 32_000;
 export interface Market {
   readonly page: MarketConfig;
   readonly chain: ChainReader;
+  /** the contract jobs were posted to before this one, still read for their money (R12) */
+  readonly earlier?: ChainReader;
   readonly writing: CheckWriting;
   /** the checks the writer proved, which every posting's checks must be among */
   readonly proven: ProvenChecks;
@@ -146,16 +148,19 @@ export async function handle(request: Request, store: JobStore, { market, door, 
     const jobId = pathname.slice(ROUTES.refundApi.length);
     const record = isWallName(jobId) ? await store.read(jobId) : undefined;
     if (!record?.chain) return Response.json({ why: "there is no job with money on the chain at that address" }, { status: 404 });
-    return Response.json({ jobId, idea: record.tile.idea, onChainId: record.chain.jobId }, { headers: NO_STORE });
+    return Response.json({ jobId, idea: record.tile.idea, onChainId: record.chain.jobId, jobs: record.chain.jobs }, { headers: NO_STORE });
   }
 
   if (pathname.startsWith(ROUTES.chainJob)) {
     if (!market) return Response.json({ why: "this server answers to no chain" }, { status: 404 });
     const onChainId = pathname.slice(ROUTES.chainJob.length);
     if (!/^[0-9]+$/.test(onChainId)) return Response.json({ why: `${onChainId} is not a job's number on the contract` }, { status: 400 });
-    const [job, now] = await Promise.all([market.chain.job(BigInt(onChainId)), market.chain.now()]);
+    // a job on the contract named, when it is one answered here; otherwise on the one jobs are posted to now
+    const named = new URL(request.url).searchParams.get(QUERY.jobs);
+    const reader = named && market.earlier && isAddress(named) && isAddressEqual(named, market.earlier.jobs) ? market.earlier : market.chain;
+    const [job, now] = await Promise.all([reader.job(BigInt(onChainId)), reader.now()]);
     if (!job) return Response.json({ why: `there is no job ${onChainId} on the contract` }, { status: 404 });
-    return Response.json(chainJobToTheWire(job, now), { headers: NO_STORE });
+    return Response.json(chainJobToTheWire(job, now, reader.jobs), { headers: NO_STORE });
   }
 
   if (pathname.startsWith(`${ROUTES.writeChecks}/`)) {
@@ -172,7 +177,7 @@ export async function handle(request: Request, store: JobStore, { market, door, 
     const address = pathname.slice(ROUTES.yoursApi.length);
     if (!owners) return Response.json({ why: "this server answers to no chain, so nothing here is anybody's" }, { status: 404 });
     if (!isAddress(address, { strict: false })) return Response.json({ why: `${address} is not an address` }, { status: 400 });
-    return Response.json(await yoursData(store, owners, address, new Date()), { headers: NO_STORE });
+    return Response.json(await yoursData(store, owners, address, new Date(), preparing), { headers: NO_STORE });
   }
 
   if (pathname.startsWith(ROUTES.jobApi)) {

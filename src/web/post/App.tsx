@@ -10,8 +10,10 @@ import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 import type { MarketConfig } from "../../market.ts";
 import { Bill } from "./components/index.ts";
+import { PayFirstPage } from "./PayFirstPage.tsx";
 import { PostJobPage } from "./PostJobPage.tsx";
-import { COPY } from "./state/index.ts";
+import { PreparedJobPage } from "./PreparedJobPage.tsx";
+import { COPY, preparedNumberIn } from "./state/index.ts";
 import { SiteHeader, WalletStatus } from "../shared/index.ts";
 import { ErrorBoundary, useMarket, walletConfig } from "../shared/index.ts";
 
@@ -28,13 +30,20 @@ function Notice({ children }: { readonly children: string }): ReactElement {
   );
 }
 
-/** A wallet connected to this one market, around the page that posts to it. */
+/**
+ * A wallet connected to this one market, around the page that posts to it: on a contract that prepares
+ * jobs, the pay-first page, or a paid job's own page at /post/<number>; otherwise the page that has
+ * the checks written before paying.
+ */
 function OpenMarket({ market }: { readonly market: MarketConfig }): ReactElement {
   const config = useMemo(() => walletConfig(market), [market]);
+  const paidJob = preparedNumberIn(window.location.pathname);
+  let page: ReactElement = <PostJobPage market={market} />;
+  if (market.writing) page = paidJob === undefined ? <PayFirstPage market={market} writing={market.writing} /> : <PreparedJobPage market={market} onChainId={paidJob} />;
   return (
     <WagmiProvider config={config}>
       <SiteHeader current="post" wallet={<WalletStatus market={market} />} />
-      <PostJobPage market={market} />
+      {page}
     </WagmiProvider>
   );
 }

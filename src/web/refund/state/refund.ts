@@ -6,14 +6,17 @@
  * settled: nobody finished, a seat stayed empty, or the runs disagreed and the grader held it. Work
  * that failed is refunded by the grader on its own, and work that passed was paid for.
  */
-import { formatEther, type Address } from "viem";
+import { formatEther, isAddress, isAddressEqual, type Address } from "viem";
 import { z } from "zod";
 import type { JobState } from "../../../jobs.ts";
-import { ROUTES } from "../../../routes.ts";
+import type { MarketConfig } from "../../../market.ts";
+import { preparingPagePath, QUERY, ROUTES } from "../../../routes.ts";
 import { shortAddress } from "../../shared/copy.ts";
 
-/** The job, as the server keeps it: enough to find it on the chain */
-export const RefundableSchema = z.object({ jobId: z.string(), idea: z.string(), onChainId: z.string().regex(/^[0-9]+$/) });
+const AddressSchema = z.string().refine((value): value is Address => isAddress(value), "an address");
+
+/** The job, as the server keeps it: enough to find it on the chain, the contract it is on included */
+export const RefundableSchema = z.object({ jobId: z.string(), idea: z.string(), onChainId: z.string().regex(/^[0-9]+$/), jobs: AddressSchema });
 export type Refundable = z.infer<typeof RefundableSchema>;
 export const WhySchema = z.object({ why: z.string() });
 
@@ -26,19 +29,38 @@ export interface OnChainNow {
   readonly now: bigint;
 }
 
+/**
+ * Which way out the job's contract has. The first contract gives the money back once the window has
+ * closed. The one that prepares jobs also lets the poster take it back at once while nobody has taken a
+ * seat, and closes a job anybody asks it to once its window has closed (V9).
+ */
+export type Way = "first" | "prepares";
+
+export function wayOut(jobs: Address, market: Pick<MarketConfig, "jobs" | "writing">): Way {
+  return market.writing !== undefined && isAddressEqual(jobs, market.jobs) ? "prepares" : "first";
+}
+
 /** Where the poster's money is */
 export type Standing =
   | { readonly kind: "too early"; readonly endsAt: bigint }
   | { readonly kind: "settled" }
   | { readonly kind: "refunded" }
-  | { readonly kind: "ready" };
+  | { readonly kind: "ready" }
+  /** open, nobody seated: the poster may take it back now, on a contract that prepares jobs */
+  | { readonly kind: "take back now" }
+  /** still preparing: taken back on its own page, where its checks are */
+  | { readonly kind: "preparing"; readonly page: string };
 
-export function standingOf(job: OnChainNow): Standing {
+export function standingOf(job: OnChainNow, way: Way = "first", onChainId = ""): Standing {
   if (job.state === "settled") return { kind: "settled" };
   if (job.state === "refunded") return { kind: "refunded" };
-  if (job.now < job.endsAt) return { kind: "too early", endsAt: job.endsAt };
+  if (job.state === "preparing") return { kind: "preparing", page: preparingPagePath(onChainId) };
+  if (job.now < job.endsAt) return way === "prepares" && job.state === "open" ? { kind: "take back now" } : { kind: "too early", endsAt: job.endsAt };
   return { kind: "ready" };
 }
+
+/** Whether the button may be pressed: while the money is the poster's to take. */
+export const canTake = (standing: Standing): boolean => standing.kind === "ready" || standing.kind === "take back now";
 
 /**
  * Which job the page's own address names: by its name on the wall, /refund/<job>, or, for a job paid
@@ -46,12 +68,18 @@ export function standingOf(job: OnChainNow): Standing {
  */
 export type RefundTarget =
   | { readonly by: "name"; readonly jobId: string }
-  | { readonly by: "number"; readonly onChainId: string };
+  /** on the contract named, or, when none is, the one jobs are posted to now */
+  | { readonly by: "number"; readonly onChainId: string; readonly jobs?: Address }
+  /** no job at all: the page only offers what a payment could not deliver */
+  | { readonly by: "none" };
 
 export function targetFrom(pathname: string, search: string): RefundTarget {
-  const number = new URLSearchParams(search).get("job");
-  if (number !== null && /^[0-9]+$/.test(number)) return { by: "number", onChainId: number };
-  return { by: "name", jobId: decodeURIComponent(pathname.slice(ROUTES.refund.length).split("/")[0] ?? "") };
+  const query = new URLSearchParams(search);
+  const number = query.get(QUERY.job);
+  const jobs = query.get(QUERY.jobs);
+  if (number !== null && /^[0-9]+$/.test(number)) return { by: "number", onChainId: number, ...(jobs && isAddress(jobs) ? { jobs } : {}) };
+  const jobId = decodeURIComponent(pathname.slice(ROUTES.refund.length).split("/")[0] ?? "");
+  return jobId === "" ? { by: "none" } : { by: "name", jobId };
 }
 
 export type RefundStep = "wallet" | "send" | "confirm";
@@ -97,6 +125,8 @@ export const COPY = {
         case "settled": return "The job was settled: the pod was paid for work that passed, or the money came back on its own when the work failed. There is nothing to take back.";
         case "refunded": return "The money has gone back to the poster already.";
         case "ready": return "The window has closed and the job was never settled. The money is the poster's to take back.";
+        case "take back now": return "Nobody has taken a seat yet, so the poster can take the money back now, without waiting for the window to close.";
+        case "preparing": return "Its checks are still being written and read. The money is taken back on its own page, where the checks are.";
       }
     },
   },
@@ -113,15 +143,32 @@ export const COPY = {
       NotPoster: "The contract gives the money back only to the wallet that posted the job, and this is not it.",
       TooEarly: "The window has not closed yet, so the contract keeps the money with the job.",
       WrongState: "The job was settled or refunded already, so there is nothing left to take.",
+      NoSuchJob: "The contract has no job by that number.",
     },
+    /** on the contract that prepares jobs, a job can also move on by somebody taking a seat */
+    refusedPrepared: {
+      WrongState: "A seat has been taken since, or the job was settled or refunded already, so the money stays with the job until its window closes.",
+    },
+    openPreparing: "Go to its page",
     done: (price: bigint, coin: string) => `${formatEther(price)} ${coin} is on its way back, and every seat's deposit with it.`,
     transaction: "See the transaction",
   },
 } as const;
 
 /** A refusal the contract named, in words, if it is one a refund can meet. */
-export function refusalWords(errorName: string): string | undefined {
-  return REFUSED.get(errorName);
+export function refusalWords(errorName: string, way: Way = "first"): string | undefined {
+  return (way === "prepares" ? REFUSED_PREPARED.get(errorName) : undefined) ?? REFUSED.get(errorName);
 }
 
 const REFUSED: ReadonlyMap<string, string> = new Map(Object.entries(COPY.take.refused));
+const REFUSED_PREPARED: ReadonlyMap<string, string> = new Map(Object.entries(COPY.take.refusedPrepared));
+
+/** What a payment could not deliver, waiting to be withdrawn (V4). */
+export const OWED = {
+  title: "Waiting for you",
+  says: (amount: string) => `${amount} is waiting for this wallet: a payment to it could not be delivered, so the contract kept it. Withdraw it to this wallet.`,
+  button: (amount: string) => `Withdraw ${amount}`,
+  done: "Withdrawn.",
+  none: "Nothing is waiting for this wallet.",
+  noJob: "Open this page from a job to take its money back. Anything a payment could not deliver to your wallet is withdrawn here.",
+} as const;

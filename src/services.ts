@@ -21,8 +21,8 @@ import { holderOf } from "./handover.ts";
 import { readJob, readJobCount, readSeats, readTerms, readValidator } from "./jobs.ts";
 import { readJobV2, readWriter, readWritingMoney, readWritingPrice, readWritingsIncluded, WriterKey } from "./jobsV2.ts";
 import type { MarketConfig } from "./market.ts";
-import { ownersFrom } from "./owners.ts";
-import { readerFor } from "./posting.ts";
+import { ownersFrom, type OwnedContract } from "./owners.ts";
+import { readerFor, type ChainReader } from "./posting.ts";
 import { Preparing, PreparingStore } from "./preparing/index.ts";
 import { OLD_JOBS_SETTING, WRITER_KEY_SETTING } from "./live.ts";
 import type { Registries } from "./registry.ts";
@@ -75,6 +75,7 @@ export async function servicesFor(input: ServicesInput): Promise<Services> {
   const market: Market = {
     page: { ...input.page, jobs, ...(writing ? { writing } : {}) },
     chain: readerFor({ jobs, read: (id) => readJob(contract, id), now: async () => (await publicClient.getBlock()).timestamp }),
+    ...(input.earlier ? { earlier: ownedAt(input.earlier, publicClient).reader } : {}),
     writing: new CheckWriting({ writer: input.checkWriter, proven }),
     proven,
   };
@@ -84,10 +85,9 @@ export async function servicesFor(input: ServicesInput): Promise<Services> {
     notes: new NoteBoard({ keeper, store }),
     jobList: new JobList({ keeper, store }),
     credit: new CreditDoor({ book }),
+    // who paid and who holds, on both contracts: old jobs keep their poster and their title holder (R12)
     owners: ownersFrom({
-      jobs,
-      job: market.chain.job,
-      count: () => readJobCount(contract),
+      contracts: [ownedAt(jobs, publicClient), ...(input.earlier ? [ownedAt(input.earlier, publicClient)] : [])],
       ...(token ? { holder: (tokenId: bigint) => holderOf(token, tokenId) } : {}),
     }),
     agents: agentFactsFrom({ client: publicClient, registries: input.registries, validator: () => readValidator(contract), credit: book }),
@@ -157,6 +157,13 @@ async function preparingOn(input: ServicesInput): Promise<Preparing> {
   });
   await preparing.recover();
   return preparing;
+}
+
+/** A contract, read the way owners need it. */
+function ownedAt(jobs: Address, publicClient: PublicClient): OwnedContract & { readonly reader: ChainReader } {
+  const at = { address: jobs, publicClient };
+  const reader = readerFor({ jobs, read: (id) => readJob(at, id), now: async () => (await publicClient.getBlock()).timestamp });
+  return { jobs, job: reader.job, count: () => readJobCount(at), reader };
 }
 
 /** A contract, read the way the doors need it. */

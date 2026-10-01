@@ -5,7 +5,7 @@
  * shard knows where it belongs and where it lies while its piece is not yet in place, and both are
  * fixed by a seed, so the page draws the same scatter on every load.
  */
-import { STEPS, type StepName } from "./steps.ts";
+import { PAY_FIRST_STEPS, STEPS, type StepName, type StepOrder } from "./steps.ts";
 
 export type Tone = "ink" | "pink" | "paper";
 
@@ -14,6 +14,8 @@ export interface Shard {
   readonly id: number;
   /** the step whose finishing puts this shard in place */
   readonly piece: StepName;
+  /** whether it is part of the centre, which the last step puts in place */
+  readonly isCentre: boolean;
   /** the triangle, where it belongs, in a 200 × 200 box */
   readonly points: string;
   /** where it lies while scattered, relative to where it belongs */
@@ -89,17 +91,18 @@ const centroid = (corners: readonly Point[]): Point => [
   corners.reduce((sum, [, y]) => sum + y, 0) / corners.length,
 ];
 
-export function cutTheSeal(seed = SEAL_SEED): readonly Shard[] {
+export function cutTheSeal(seed = SEAL_SEED, order: StepOrder = STEPS): readonly Shard[] {
   const random = seeded(seed);
   const between = (from: number, range: number): number => from + random() * range;
   const shards: Shard[] = [];
 
-  const add = (piece: StepName, corners: readonly Point[], radius: number): void => {
+  const add = (piece: StepName, corners: readonly Point[], radius: number, isCentre = false): void => {
     // a loose shard lies somewhere inside the seal's own square, never out over the words beside it
     const [cx, cy] = centroid(corners);
     shards.push({
       id: shards.length,
       piece,
+      isCentre,
       points: corners.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" "),
       scatter: {
         x: between(SCATTER_FROM, SCATTER_TO - SCATTER_FROM) - cx,
@@ -116,7 +119,7 @@ export function cutTheSeal(seed = SEAL_SEED): readonly Shard[] {
 
   // five wedges, one per seat, which are the first five steps of posting
   const span = 360 / WEDGES;
-  STEPS.slice(0, WEDGES).forEach((piece, wedge) => {
+  order.slice(0, WEDGES).forEach((piece, wedge) => {
     const from = wedge * span + GAP / 2;
     const step = (span - GAP) / SLICES;
     for (let cell = 0; cell < SLICES * BANDS; cell++) {
@@ -131,14 +134,19 @@ export function cutTheSeal(seed = SEAL_SEED): readonly Shard[] {
     }
   });
 
-  // the centre, which only paying puts in place
+  // the centre, which only the last step puts in place: paying, or approving the checks
+  const last = order[WEDGES] ?? "pay";
   for (let slice = 0; slice < CENTRE_SLICES; slice++) {
     const a1 = (slice * 360) / CENTRE_SLICES;
     const a2 = ((slice + 1) * 360) / CENTRE_SLICES;
-    add("pay", [[CENTRE, CENTRE], at(HUB, a1), at(HUB, a2)], HUB / 2);
+    add(last, [[CENTRE, CENTRE], at(HUB, a1), at(HUB, a2)], HUB / 2, true);
   }
   return shards;
 }
 
 /** The page's seal: cut once, since the seed fixes it, and shared by every copy drawn. */
 export const SHARDS: readonly Shard[] = cutTheSeal();
+const PAY_FIRST_SHARDS: readonly Shard[] = cutTheSeal(SEAL_SEED, PAY_FIRST_STEPS);
+
+/** The seal for an order of steps: the same scatter, its pieces named by that order's steps. */
+export const shardsOf = (order: StepOrder): readonly Shard[] => (order === PAY_FIRST_STEPS ? PAY_FIRST_SHARDS : SHARDS);

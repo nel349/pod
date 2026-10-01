@@ -17,9 +17,11 @@ export const ChainJobSchema = z.object({
   state: z.enum(["open", "working", "settled", "refunded", "preparing"]),
   /** the chain's time when it was read, in seconds, which is what the contract's windows are measured by */
   now: WHOLE,
+  /** the contract it was read from */
+  jobs: z.string().refine((value): value is Address => isAddress(value), "an address"),
 });
 export type ChainJob = z.output<typeof ChainJobSchema>;
 
-export function chainJobToTheWire(job: OnChainJob, now: bigint): z.input<typeof ChainJobSchema> {
-  return { poster: job.poster, price: job.price.toString(), endsAt: job.endsAt.toString(), state: job.state, now: now.toString() };
+export function chainJobToTheWire(job: OnChainJob, now: bigint, jobs: Address): z.input<typeof ChainJobSchema> {
+  return { poster: job.poster, price: job.price.toString(), endsAt: job.endsAt.toString(), state: job.state, now: now.toString(), jobs };
 }

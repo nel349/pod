@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactElement } from "react";
-import { COPY, SEAL_CENTRE, SEAL_RADIUS, SHARDS, STEPS, type Progress, type Shard, type StepName } from "../state/index.ts";
+import { COPY, SEAL_CENTRE, SEAL_RADIUS, shardsOf, type Progress, type Shard, type StepName } from "../state/index.ts";
 
 interface ShardSealProps {
   readonly progress: Progress;
@@ -33,15 +33,15 @@ export function ShardSeal({ progress, working, flash = 0 }: ShardSealProps): Rea
       className={progress.isComplete ? "shard-seal complete" : "shard-seal"}
       viewBox={VIEW_BOX}
       role="img"
-      aria-label={COPY.sealLabel(progress.placed.size, STEPS.length)}
+      aria-label={COPY.sealLabel(progress.placed.size, progress.order.length)}
     >
-      {SHARDS.map((shard) => {
+      {shardsOf(progress.order).map((shard) => {
         const isPlaced = progress.placed.has(shard.piece);
         const trembling = working === shard.piece ? " trembling" : "";
         return (
           <g className="drift" style={styleOf(shard)} key={shard.id}>
             <polygon
-              className={`shard ${isPlaced ? "placed" : "loose"} tone-${shard.loose} piece-${shard.piece}${trembling}`}
+              className={`shard ${isPlaced ? "placed" : "loose"} tone-${shard.loose} piece-${shard.piece}${shard.isCentre ? " centre" : ""}${trembling}`}
               points={shard.points}
             />
           </g>

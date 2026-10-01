@@ -108,9 +108,14 @@ export const claimApiPath = (jobId: string): string => `${ROUTES.claimApi}${jobI
 /** the page where a poster takes the money back, and what it reads */
 export const refundPath = (jobId: string): string => `${ROUTES.refund}${jobId}`;
 export const refundApiPath = (jobId: string): string => `${ROUTES.refundApi}${jobId}`;
-export const chainJobPath = (onChainId: string): string => `${ROUTES.chainJob}${onChainId}`;
-/** the refund page for a job known only by its number on the contract: paid for, never published */
-export const refundByNumberPath = (onChainId: string): string => `${ROUTES.refund}?job=${onChainId}`;
+/** what names a job's number, and the contract it is on, in a refund page's or a chain read's address */
+export const QUERY = { job: "job", jobs: "jobs" } as const;
+/** a job as the chain has it, read from the contract named, or the one jobs are posted to now */
+export const chainJobPath = (onChainId: string, jobs?: string): string =>
+  `${ROUTES.chainJob}${onChainId}${jobs ? `?${QUERY.jobs}=${jobs.toLowerCase()}` : ""}`;
+/** the refund page for a job known only by its number on a contract: paid for, never published */
+export const refundByNumberPath = (onChainId: string, jobs?: string): string =>
+  `${ROUTES.refund}?${QUERY.job}=${onChainId}${jobs ? `&${QUERY.jobs}=${jobs.toLowerCase()}` : ""}`;
 export const yoursApiPath = (address: string): string => `${ROUTES.yoursApi}${address.toLowerCase()}`;
 export const jobApiPath = (jobId: string): string => `${ROUTES.jobApi}${jobId}`;
 /** the GitHub account an agent's work is credited to, if it has one */

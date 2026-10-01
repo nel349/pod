@@ -5,16 +5,19 @@ import { BaseError, ContractFunctionRevertedError } from "viem";
 import { getConnection, simulateContract, switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { firstLine } from "../../../errors.ts";
 import { podJobsAbi } from "../../../jobs.ts";
+import { podJobsV2Abi } from "../../../jobsV2.ts";
 import type { MarketConfig } from "../../../market.ts";
 import { connected } from "../../shared/index.ts";
-import { refusalWords, type Refundable, type RefundStatus, type RefundStep } from "../state/index.ts";
+import { refusalWords, type Refundable, type RefundStatus, type RefundStep, type Standing, type Way } from "../state/index.ts";
 import { REFUND_QUERY_KEYS } from "./queryKeys.ts";
 
 /**
- * Taking the money back: the poster's wallet asks the contract, and the page waits for the chain.
- * The contract checks everything (the poster, the window, the state), and its refusal is said by name.
+ * Taking the money back: the poster's wallet asks the contract the job is on, and the page waits for
+ * the chain. On the first contract that is reclaiming after the window; on the one that prepares jobs,
+ * taking it back while nobody is seated, or closing it once the window has closed. The contract checks
+ * everything (the poster, the window, the state), and its refusal is said by name.
  */
-export function useRefund(job: Refundable, market: MarketConfig): { readonly status: RefundStatus; readonly refund: () => void } {
+export function useRefund(job: Refundable, market: MarketConfig, way: Way, standing: Standing): { readonly status: RefundStatus; readonly refund: () => void } {
   const config = useConfig();
   const client = useQueryClient();
   const [status, setStatus] = useState<RefundStatus>({ kind: "idle" });
@@ -31,10 +34,12 @@ export function useRefund(job: Refundable, market: MarketConfig): { readonly sta
       if (getConnection(config).chainId !== market.chainId) await switchChain(config, { chainId: market.chainId });
       doing("send");
       // asked first without sending, so a refusal comes back with the contract's reason, not a failed transaction
-      const { request } = await simulateContract(config, {
-        account, address: market.jobs, abi: podJobsAbi, functionName: "reclaim", args: [BigInt(job.onChainId)], chainId: market.chainId,
-      });
-      const hash = await writeContract(config, request);
+      const at = { account, address: job.jobs, args: [BigInt(job.onChainId)] as const, chainId: market.chainId };
+      const hash = way === "first"
+        ? await writeContract(config, (await simulateContract(config, { ...at, abi: podJobsAbi, functionName: "reclaim" })).request)
+        : standing.kind === "take back now"
+          ? await writeContract(config, (await simulateContract(config, { ...at, abi: podJobsV2Abi, functionName: "takeBack" })).request)
+          : await writeContract(config, (await simulateContract(config, { ...at, abi: podJobsV2Abi, functionName: "close" })).request);
       doing("confirm");
       const receipt = await waitForTransactionReceipt(config, { hash, chainId: market.chainId });
       if (receipt.status !== "success") throw new Error("the chain refused it, so no money moved");
@@ -44,18 +49,18 @@ export function useRefund(job: Refundable, market: MarketConfig): { readonly sta
       setStatus({ kind: "sent", hash });
       void client.invalidateQueries({ queryKey: REFUND_QUERY_KEYS.onChain(job.jobId) });
     },
-    onError: (error) => setStatus({ kind: "stopped", step: step.current, why: refusalOf(error) }),
+    onError: (error) => setStatus({ kind: "stopped", step: step.current, why: refusalOf(error, way) }),
   });
 
   return { status, refund: () => refunding.mutate() };
 }
 
 /** Why it did not go, in words: the contract's refusal by name when it gave one, otherwise what was said. */
-function refusalOf(error: unknown): string {
+function refusalOf(error: unknown, way: Way): string {
   if (error instanceof BaseError) {
     const reverted = error.walk((cause) => cause instanceof ContractFunctionRevertedError);
     const name = reverted instanceof ContractFunctionRevertedError ? reverted.data?.errorName : undefined;
-    const words = name ? refusalWords(name) : undefined;
+    const words = name ? refusalWords(name, way) : undefined;
     if (words) return words;
   }
   return firstLine(error);

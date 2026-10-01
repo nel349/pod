@@ -4,7 +4,7 @@
  * A chain that cannot be read right now does not take a page down: the page is drawn without what the
  * chain would have added, says so where it matters, and the reason is logged for whoever runs this.
  */
-import { isAddressEqual, type Address } from "viem";
+import type { Address } from "viem";
 import { recordByRole } from "./agentpage.ts";
 import { firstLine } from "./errors.ts";
 import type { AgentFactsReader } from "./agentFacts.ts";
@@ -88,7 +88,13 @@ export async function receiptData(store: JobStore, jobId: string): Promise<Recei
  * Everything a wallet paid for and every title it holds, with the chain's word on each. Who paid and
  * who holds are asked for every job on the chain; where the money is, only for the wallet's own.
  */
-export async function yoursData(store: JobStore, owners: Owners, address: Address, now: Date): Promise<YoursView> {
+/**
+ * @param preparing the jobs this server prepares, which say whether a paid job still preparing was ever
+ *                  sent its lines; left out, none was
+ */
+export async function yoursData(
+  store: JobStore, owners: Owners, address: Address, now: Date, preparing?: { isSetUp(onChainId: string): Promise<boolean> },
+): Promise<YoursView> {
   const wanted = address.toLowerCase();
   const onTheChain = (await store.all()).filter((record) => record.chain);
   const read = await Promise.all(onTheChain.filter(isShown).map(async (record) => ({ record, who: await ownersOf(record, owners) })));
@@ -96,10 +102,13 @@ export async function yoursData(store: JobStore, owners: Owners, address: Addres
     .filter(({ who }) => who.poster?.toLowerCase() === wanted)
     .map(async ({ record, who }) => yoursEntry(publicRecord(record, now), { ...who, ...(await moneyOnTheChain(record, owners, now)) })));
   const runningFirst = (a: YoursEntry, b: YoursEntry): number => Number(b.tile.verdict === "running") - Number(a.tile.verdict === "running");
-  // what it paid for that never reached the wall: on this contract, by a number no record here has
+  // what it paid for that is not on the wall: on a contract answered here, by a number no record here has
   const paid = await quietly(`what ${address} paid for`, () => owners.paidBy(address));
-  const published = new Set(onTheChain.filter((record) => record.chain && isAddressEqual(record.chain.jobs, owners.jobs)).map((record) => record.chain?.jobId));
-  const unpublished = paid?.filter((one) => !published.has(one.onChainId.toString())).map(unpublishedView);
+  const onContract = (jobs: string, onChainId: string): string => `${jobs.toLowerCase()}:${onChainId}`;
+  const published = new Set(onTheChain.filter(owners.isAnswered).map((record) => onContract(record.chain?.jobs ?? "", record.chain?.jobId ?? "")));
+  const unpublished = paid === undefined ? undefined : await Promise.all(paid
+    .filter((one) => !published.has(onContract(one.jobs, one.onChainId.toString())))
+    .map(async (one) => unpublishedView(one, one.job.state === "preparing" && (await preparing?.isSetUp(one.onChainId.toString())) === true)));
   return {
     address,
     posted: posted.sort(runningFirst),

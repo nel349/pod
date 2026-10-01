@@ -64,7 +64,9 @@ beforeAll(async () => {
   await aRunningJob("somebody-elses-coat", STRANGER);
   const reader = readerFor({ jobs: titled.jobs, read: (id) => readJob({ address: titled.jobs, publicClient: anvil.publicClient }, id), now: async () => (await anvil.publicClient.getBlock()).timestamp });
   owners = ownersFrom({
-    jobs: titled.jobs, job: reader.job, count: () => readJobCount({ address: titled.jobs, publicClient: anvil.publicClient }), holder: (tokenId) => holderOf({ address: titled.token, publicClient: anvil.publicClient }, tokenId) });
+    contracts: [{ jobs: titled.jobs, job: reader.job, count: () => readJobCount({ address: titled.jobs, publicClient: anvil.publicClient }) }],
+    holder: (tokenId) => holderOf({ address: titled.token, publicClient: anvil.publicClient }, tokenId),
+  });
 }, 120_000);
 
 afterAll(() => anvil?.stop());
@@ -117,7 +119,7 @@ describe.skipIf(!available)("a wallet's own page", () => {
     const yours = await yoursData(store, owners, POSTER_ADDRESS, new Date());
     expect(yours.unpublished).toEqual([{
       onChainId: neverPublished.toString(), price: TITLED_SPEC.price.toString(),
-      money: { kind: "held", endsAt: new Date(Number(now + 3600n) * 1000).toISOString(), takeBack: refundByNumberPath(neverPublished.toString()) },
+      money: { kind: "held", endsAt: new Date(Number(now + 3600n) * 1000).toISOString(), takeBack: refundByNumberPath(neverPublished.toString(), titled.jobs) },
     }]);
     // somebody else never sees it
     expect((await yoursData(store, owners, STRANGER_ADDRESS, new Date())).unpublished).toEqual([]);
@@ -127,8 +129,7 @@ describe.skipIf(!available)("a wallet's own page", () => {
     const reading = { address: titled.jobs, publicClient: anvil.publicClient };
     const asked: bigint[] = [];
     const counting = ownersFrom({
-      jobs: titled.jobs, count: () => readJobCount(reading),
-      job: async (id) => { asked.push(id); return await readJob(reading, id); },
+      contracts: [{ jobs: titled.jobs, count: () => readJobCount(reading), job: async (id) => { asked.push(id); return await readJob(reading, id); } }],
     });
     const count = await readJobCount(reading);
     const theirs = (await counting.paidBy(POSTER_ADDRESS)).map((paid) => paid.onChainId).sort();

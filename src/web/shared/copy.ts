@@ -13,7 +13,8 @@ export const CHROME = {
     connect: "Connect wallet",
     connecting: "Connecting…",
     wrongChain: (chain: string) => `Switch to ${chain}`,
-    connectedAs: (short: string) => `Connected as ${short}`,
+    /** said before the address; on a phone it is read aloud but not drawn, so the header fits */
+    connectedAs: "Connected as",
     change: "Change",
     chooseAnother: "Choose another account",
     changeLabel: "Choose another account in your wallet",
