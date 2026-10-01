@@ -21,7 +21,9 @@ const SEAL: Hex = "0x11111111111111111111111111111111111111111111111111111111111
 describe("a state number nobody knows", () => {
   test("is an error, on either contract, never read as open", () => {
     expect(stateOf(1)).toBe("working");
-    expect(() => stateOf(4)).toThrow("has no word for");
+    // one reader serves both contracts, and preparing is the newer one's
+    expect(stateOf(4)).toBe("preparing");
+    expect(() => stateOf(5)).toThrow("has no word for");
     expect(stateOfV2(4)).toBe("preparing");
     expect(() => stateOfV2(5)).toThrow("has no word for");
   });

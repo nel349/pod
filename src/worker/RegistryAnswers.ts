@@ -47,6 +47,8 @@ export interface RegistryAnswersOptions {
   readonly store: JobStore;
   /** the jobs contract, with the validator's wallet, which is also the runner every answer comes from */
   readonly jobs: Contract;
+  /** the contract that prepares jobs before a pod can start, whose jobs are answered for the same way */
+  readonly prepared?: Contract;
   readonly registries: Registries;
   readonly runner: Address;
   /** where job pages are served, so an answer points at the receipt it is about */
@@ -109,13 +111,14 @@ export class RegistryAnswers {
       return "ignored";
     }
     const record = await store.read(jobId);
-    if (!record?.chain || !isAddressEqual(record.chain.jobs, jobs.address)) {
+    const contract = record?.chain ? this.contractOf(record.chain.jobs) : undefined;
+    if (!record?.chain || !contract) {
       say(`agent #${request.agentId} asked about ${jobId}, which is not a job on this contract`);
       return "ignored";
     }
     if ((await verdictOnChain(jobs.publicClient, request.key, registries)).responseHash !== zeroHash) return "ignored";
     const onChainId = BigInt(record.chain.jobId);
-    const settled = await this.settledAsGraded(record, onChainId);
+    const settled = await this.settledAsGraded(record, onChainId, contract);
     if (settled.is === "not yet") return "held";
     if (settled.is === "never") {
       say(`agent #${request.agentId} asked about ${jobId}, whose verdict was never settled, so nothing is recorded`);
@@ -124,7 +127,7 @@ export class RegistryAnswers {
     const { signed } = settled;
 
     const agentId = BigInt(request.agentId);
-    const seat = await this.seatOf(agentId, await readSeats(jobs, onChainId));
+    const seat = await this.seatOf(agentId, await readSeats(contract, onChainId));
     if (!seat) {
       say(`agent #${request.agentId} asked about ${jobId}, and is not the key that held a seat on it, so nothing is recorded`);
       return "ignored";
@@ -160,8 +163,8 @@ export class RegistryAnswers {
    * worker, runs that disagreed left to end. "never" when it ended some other way, such as a verdict
    * that came too late and the poster taking the money back.
    */
-  private async settledAsGraded(record: JobRecord, onChainId: bigint): Promise<Settled> {
-    const state = (await readJob(this.options.jobs, onChainId)).state;
+  private async settledAsGraded(record: JobRecord, onChainId: bigint, contract: Contract): Promise<Settled> {
+    const state = (await readJob(contract, onChainId)).state;
     const signed = record.signed;
     if (!signed || record.tile.verdict === "running") return { is: state === "working" ? "not yet" : "never" };
     if (state === "working" || state === "open") return { is: "not yet" };
@@ -169,6 +172,12 @@ export class RegistryAnswers {
     if (verdict === "passed") return state === "settled" ? { is: "yes", signed } : { is: "never" };
     if (verdict === "failed") return state === "refunded" && record.chain?.settled !== undefined ? { is: "yes", signed } : { is: "never" };
     return { is: "yes", signed };
+  }
+
+  /** Which of the contracts this worker answers for a job is on, if either. */
+  private contractOf(address: Address): Contract | undefined {
+    const { jobs, prepared } = this.options;
+    return [jobs, prepared].find((contract): contract is Contract => contract !== undefined && isAddressEqual(contract.address, address));
   }
 
   /** The seat an identity held, if it is that seat's own key: as the identity's owner, or as the wallet it acts with. */

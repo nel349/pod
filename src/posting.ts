@@ -25,6 +25,7 @@ import { openJob } from "./publish.ts";
 import { isSafeName, isWallName } from "./routes.ts";
 import type { JobRecord, JobStore } from "./store.ts";
 import { SEATS } from "./seal.ts";
+import type { JobState } from "./jobs.ts";
 import { postingMessage } from "./messages.ts";
 import { specFromTheWire, SpecOnTheWireSchema, type SpecOnTheWire } from "./specWire.ts";
 
@@ -56,7 +57,7 @@ export interface OnChainJob {
   readonly price: bigint;
   readonly seal: Hex;
   readonly endsAt: bigint;
-  readonly state: "open" | "working" | "settled" | "refunded";
+  readonly state: JobState;
 }
 
 export interface ChainReader {

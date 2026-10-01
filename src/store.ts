@@ -95,6 +95,25 @@ export interface JobRecord {
    * deleted: its page, receipt and checks answer at their addresses as before, and say it is retired.
    */
   readonly retired?: { readonly at: string; readonly why: string };
+  /**
+   * On the contract that prepares jobs first: the worker's own tries at grading the job and its one
+   * release, kept here so a restart remembers them.
+   */
+  readonly tries?: Tries;
+  /** why the job ended with no verdict moving its money, such as its window closing with the pod not done */
+  readonly endedBecause?: string;
+}
+
+/** The worker's tries at grading one job. It lets go of a job once, whatever the reason, and never twice. */
+export interface Tries {
+  /** gradings in a row that failed on our side, which a fourth would not mend */
+  readonly failed: number;
+  /** when the latest grading started: a release waits a full grading's time after it */
+  readonly startedAt?: string;
+  /** the one release: when, and why */
+  readonly released?: { readonly at: string; readonly why: string };
+  /** the receipts of holds that were let go, kept aside rather than written over */
+  readonly heldBefore?: readonly SignedReceipt[];
 }
 
 /** A seat's verdict in ERC-8004: whose seat, which identity asked, and which of its requests was answered. */

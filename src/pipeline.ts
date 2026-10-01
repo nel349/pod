@@ -11,7 +11,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { grade, type CheckToRun, type GradeOutcome } from "./blackbox.ts";
+import { grade, WorkDidNotStart, type CheckToRun, type GradeOutcome } from "./blackbox.ts";
 import { checkout, has, type Repository } from "./repo.ts";
 import { readableToTheBox } from "./sandbox.ts";
 import { fingerprintTree, signReceipt, type Receipt, type SignedReceipt } from "./receipt.ts";
@@ -32,6 +32,8 @@ export interface GradeJob {
   readonly allowedHosts?: readonly string[];
   /** how many times the whole set runs. Two is the minimum that can disagree */
   readonly times?: number;
+  /** how long the work has to start answering in each run */
+  readonly startSeconds?: number;
   readonly runner: Address;
   readonly runnerKey: Hex;
   readonly role?: string;
@@ -55,20 +57,39 @@ export function undeclaredCalls(log: string, allowed: readonly string[]): readon
   return suspicious.filter((line) => !allowed.some((host) => line.includes(host)));
 }
 
+/** The exit code every check is given in a run whose work never started: it failed them all. */
+export const WORK_NEVER_STARTED = 1;
+
+/**
+ * One run of the checks. Work that never starts fails every one of them: it is the pod's work, and its
+ * approvers approved it. Docker failing us, or anything else, is thrown: it decides nothing.
+ */
+async function aRound(job: GradeJob): Promise<GradeOutcome> {
+  const started = Date.now();
+  try {
+    return await grade({
+      artefact: job.artefact, start: job.start, checks: job.checks, toRun: job.toRun, image: job.image,
+      ...(job.allowedHosts ? { allowedHosts: job.allowedHosts } : {}),
+      ...(job.startSeconds === undefined ? {} : { startSeconds: job.startSeconds }),
+    });
+  } catch (error) {
+    if (!(error instanceof WorkDidNotStart)) throw error;
+    return {
+      checks: job.toRun.map((check) => ({ ...check, exitCode: WORK_NEVER_STARTED, output: error.message, seconds: 0 })),
+      passed: false,
+      artefactLog: error.message,
+      seconds: (Date.now() - started) / 1000,
+    };
+  }
+}
+
 export async function gradeJob(job: GradeJob): Promise<GradeReport> {
   const times = job.times ?? 3;
   if (times < 2) throw new Error("a verdict needs at least two runs");
 
   const rounds: GradeOutcome[] = [];
   for (let i = 0; i < times; i++) {
-    rounds.push(await grade({
-      artefact: job.artefact,
-      start: job.start,
-      checks: job.checks,
-      toRun: job.toRun,
-      image: job.image,
-      allowedHosts: job.allowedHosts,
-    }));
+    rounds.push(await aRound(job));
   }
 
   // Two runs are the same run only if every check came back the same way.

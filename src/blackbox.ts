@@ -42,6 +42,23 @@ export interface GradeRequest {
   readonly checkSeconds?: number;
 }
 
+/**
+ * The work never started: it stopped before it answered, or never answered at all. That is the work's
+ * failure, not Docker's: a verdict fails every check for it, while the check writer's trials, which ask
+ * whether a check catches anything, take it as a version that was never tried.
+ */
+export class WorkDidNotStart extends Error {
+  override readonly name = "WorkDidNotStart";
+}
+
+/**
+ * The most one run of a job's checks can take, every box on its full limit: what a release waits for
+ * after a lock, so when it comes says nothing about how the work behaved.
+ */
+export function longestRunSeconds(checks: number, startSeconds: number = START_SECONDS): number {
+  return 2 * DOCKER_ANSWER_SECONDS + startSeconds + checks * (CHECK_SECONDS + CHECK_KILL_GRACE_SECONDS + DOCKER_ANSWER_SECONDS) + DOCKER_ANSWER_SECONDS;
+}
+
 export interface CheckOutcome {
   readonly says: string;
   readonly command: string;
@@ -239,7 +256,7 @@ async function waitUntilAnswering(target: string, seconds: number): Promise<void
     if (!state.out.startsWith("true")) {
       const log = await docker(["logs", target]);
       const code = state.out.split(" ")[1] ?? "?";
-      throw new Error(`the artefact stopped before it answered, exit ${code}. Its log said: ${log.out.slice(0, LOG_IN_A_REFUSAL) || "(nothing)"}`);
+      throw new WorkDidNotStart(`the artefact stopped before it answered, exit ${code}. Its log said: ${log.out.slice(0, LOG_IN_A_REFUSAL) || "(nothing)"}`);
     }
     // work that takes the connection and never replies is not answering yet, which is the work's
     // doing: a probe that runs out of time is looked at again, never taken for Docker failing us
@@ -253,5 +270,5 @@ async function waitUntilAnswering(target: string, seconds: number): Promise<void
   }
   if (!hasAnyLookAnswered) throw new DockerFailed(`not one look at whether the artefact answers came back from Docker in ${seconds}s`);
   const log = await docker(["logs", target]);
-  throw new Error(`the artefact never answered within ${seconds}s. Its log said: ${log.out.slice(0, LOG_IN_A_REFUSAL) || "(nothing)"}`);
+  throw new WorkDidNotStart(`the artefact never answered within ${seconds}s. Its log said: ${log.out.slice(0, LOG_IN_A_REFUSAL) || "(nothing)"}`);
 }

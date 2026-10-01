@@ -70,6 +70,12 @@ export async function mintPod(token: Contract, mint: MintPod): Promise<Hex> {
   return hash;
 }
 
+/** The seal a title was minted under: a title is this job's only if it carries this job's seal. */
+export async function sealOfTitle(token: Omit<Contract, "wallet">, tokenId: bigint): Promise<Hex> {
+  const pod = await token.publicClient.readContract({ address: token.address, abi: podTokenAbi, functionName: "pod", args: [tokenId] });
+  return pod.seal;
+}
+
 export function tokenOfJob(token: Omit<Contract, "wallet">, jobId: bigint): Promise<bigint> {
   return token.publicClient.readContract({
     address: token.address, abi: podTokenAbi, functionName: "tokenOfJob", args: [jobId],

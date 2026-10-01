@@ -52,9 +52,12 @@ export function roleNumber(role: Role): number {
   return ROLE_NUMBER[role];
 }
 
-/** What a job looks like once it is on chain. State is the contract's own enum. */
-export type JobState = "open" | "working" | "settled" | "refunded";
-const STATES: readonly JobState[] = ["open", "working", "settled", "refunded"];
+/**
+ * What a job looks like once it is on chain. State is the contract's own enum. Preparing is the newer
+ * contract's, added last, so one reader serves both: its seats, approvals and policy are the same.
+ */
+export type JobState = "open" | "working" | "settled" | "refunded" | "preparing";
+const STATES: readonly JobState[] = ["open", "working", "settled", "refunded", "preparing"];
 
 /**
  * The contract's state number, in words. A number this contract never gives is an error, never

@@ -29,6 +29,7 @@ import { specToTheWire } from "../specWire.ts";
 import type { JobStore } from "../store.ts";
 import { posterStatementFrom, posterStatementHolds } from "./posterStatement.ts";
 import type { PreparingStore } from "./PreparingStore.ts";
+import type { BoxSlots } from "../docker/index.ts";
 import {
   ApprovalSchema, ON_CHAIN_NUMBER, SetUpRequestSchema,
   type Approval, type Asked, type Finished, type Now, type Outcome, type PreparingView, type SetUp,
@@ -65,6 +66,8 @@ export interface PreparingOptions {
   readonly atOnce?: number;
   /** how long a writing that stopped on our side waits before it is tried again */
   readonly tryAgainAfterMs?: number;
+  /** the limit on box work shared with the worker's grading, kept on disk; left out, no shared limit */
+  readonly boxes?: BoxSlots;
   /** where what happens is said, for whoever runs the server */
   readonly say?: (what: string) => void;
 }
@@ -376,7 +379,8 @@ export class Preparing {
     this.running.set(onChainId, "writing");
     let set: WrittenSet;
     try {
-      set = await writeChecks(asked.request, this.options.checkWriter, (stage) => this.running.set(onChainId, stage));
+      const write = (): Promise<WrittenSet> => writeChecks(asked.request, this.options.checkWriter, (stage) => this.running.set(onChainId, stage));
+      set = this.options.boxes ? await this.options.boxes.inASlot(write) : await write();
     } catch (error) {
       // anything that is not the writing's own failure happened on our side, and is not charged
       const isCharged = error instanceof WritingFailed && error.isCharged;

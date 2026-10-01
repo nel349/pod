@@ -14,7 +14,7 @@ export const ChainJobSchema = z.object({
   poster: z.string().refine((value): value is Address => isAddress(value), "an address"),
   price: WHOLE,
   endsAt: WHOLE,
-  state: z.enum(["open", "working", "settled", "refunded"]),
+  state: z.enum(["open", "working", "settled", "refunded", "preparing"]),
   /** the chain's time when it was read, in seconds, which is what the contract's windows are measured by */
   now: WHOLE,
 });

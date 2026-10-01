@@ -2,3 +2,4 @@
 export * from "./DockerFailed.ts";
 export * from "./readBounded.ts";
 export * from "./runDocker.ts";
+export * from "./BoxSlots.ts";

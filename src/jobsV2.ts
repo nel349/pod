@@ -10,6 +10,7 @@
 import {
   encodeAbiParameters, keccak256, parseAbi, toBytes, type Account, type Address, type Hex, type PublicClient, type WalletClient,
 } from "viem";
+import type { Contract } from "./jobs.ts";
 
 export const podJobsV2Abi = parseAbi([
   "function post(uint64 window, uint8 reviewers) payable returns (uint256)",
@@ -26,6 +27,11 @@ export const podJobsV2Abi = parseAbi([
   "function writer() view returns (address)",
   "function nextJobId() view returns (uint256)",
   "function WRITINGS_INCLUDED() view returns (uint8)",
+  "function settle(uint256 jobId, bytes32 commitHash, uint8 verdict, bytes32 receiptHash)",
+  "function releaseLock(uint256 jobId)",
+  "function close(uint256 jobId)",
+  "function locked(uint256 jobId) view returns (bool)",
+  "function reports(uint256) view returns (uint8 verdict, bytes32 receiptHash)",
   "event Created(uint256 indexed jobId, address indexed poster, uint256 price, uint64 window, uint256 forWriting)",
   "event Opened(uint256 indexed jobId, bytes32 seal, uint64 endsAt, uint256 returnedToPoster)",
   // the contract's refusals, by name, so a reverted call says why rather than showing four bytes
@@ -189,4 +195,55 @@ export class WriterKey {
     this.queue = sending.catch(() => undefined);
     return sending;
   }
+}
+
+/**
+ * What the validator found, as the contract takes it: passed, failed only on a check the pod could not
+ * see, or failed on one it could. The last is the one that costs the seats that approved.
+ */
+export type VerdictOnChain = "passed" | "hidden-failed" | "visible-failed";
+const VERDICT_NUMBER: Record<VerdictOnChain, number> = { passed: 1, "hidden-failed": 2, "visible-failed": 3 };
+
+/** Wait for a transaction and refuse to carry on if the chain reverted it. */
+async function sent(at: Contract, hash: Hex): Promise<Hex> {
+  const receipt = await at.publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") throw new Error(`the chain rejected ${hash}`);
+  return hash;
+}
+
+async function call(at: Contract, functionName: "releaseLock" | "close", jobId: bigint): Promise<Hex> {
+  const { request } = await at.publicClient.simulateContract({
+    address: at.address, abi: podJobsV2Abi, functionName, args: [jobId], account: at.wallet.account!,
+  });
+  return sent(at, await at.wallet.writeContract(request));
+}
+
+/** The verdict reaching the money, with the receipt it rests on, on the job's current commit only. */
+export async function settleV2(at: Contract, jobId: bigint, commit: Hex, verdict: VerdictOnChain, receiptHash: Hex): Promise<Hex> {
+  const { request } = await at.publicClient.simulateContract({
+    address: at.address, abi: podJobsV2Abi, functionName: "settle",
+    args: [jobId, commit, VERDICT_NUMBER[verdict], receiptHash], account: at.wallet.account!,
+  });
+  return sent(at, await at.wallet.writeContract(request));
+}
+
+/** Let go of a locked job the validator held or could not grade: its commit and approvals are cleared. */
+export function releaseLock(at: Contract, jobId: bigint): Promise<Hex> {
+  return call(at, "releaseLock", jobId);
+}
+
+/** Close a job whose window ended with no verdict: the poster's money and every deposit go home. */
+export function closeJob(at: Contract, jobId: bigint): Promise<Hex> {
+  return call(at, "close", jobId);
+}
+
+export function isLocked(at: ContractV2, jobId: bigint): Promise<boolean> {
+  return at.publicClient.readContract({ address: at.address, abi: podJobsV2Abi, functionName: "locked", args: [jobId] });
+}
+
+/** What the validator reported for a job, as the contract recorded it: nothing until it settles. */
+export async function readReport(at: ContractV2, jobId: bigint): Promise<{ readonly verdict: VerdictOnChain | undefined; readonly receiptHash: Hex }> {
+  const [verdict, receiptHash] = await at.publicClient.readContract({ address: at.address, abi: podJobsV2Abi, functionName: "reports", args: [jobId] });
+  const named = (Object.keys(VERDICT_NUMBER) as VerdictOnChain[]).find((name) => VERDICT_NUMBER[name] === verdict);
+  return { verdict: named, receiptHash };
 }
