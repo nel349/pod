@@ -96,10 +96,12 @@ export const FinishedSchema = z.object({
 });
 
 /** Where a job's writing stands right now, for its poster. */
-export type Now =
-  | { readonly kind: "waiting"; readonly place: number }
-  | { readonly kind: "writing" | "trying" }
-  | { readonly kind: "idle" };
+export const NowSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("waiting"), place: z.number().int().positive() }),
+  z.object({ kind: z.enum(["writing", "trying"]) }),
+  z.object({ kind: z.literal("idle") }),
+]);
+export type Now = z.infer<typeof NowSchema>;
 
 export type SetUpRequest = z.infer<typeof SetUpRequestSchema>;
 export type SetUp = z.infer<typeof SetUpSchema>;
@@ -113,6 +115,8 @@ export interface PreparingView {
   readonly onChainId: string;
   readonly name: string;
   readonly mode: SetUp["mode"];
+  /** the poster's own salt, so their page can seal what it shows and refuse an approval that does not match */
+  readonly salt: string;
   readonly now: Now;
   /** the writing waiting or under way, if there is one */
   readonly asked?: WriteRequest;
@@ -131,5 +135,28 @@ export function preparingToTheWire(view: PreparingView): PreparingOnTheWire {
   return {
     ...rest,
     money: { balance: `${money.balance}`, reserved: `${money.reserved}`, kept: money.kept, writingPrice: `${money.writingPrice}` },
+  };
+}
+
+const WeiSchema = z.string().regex(/^[0-9]+$/, "an amount is a whole number of wei");
+
+/** A preparing job as its poster's page reads it from the server: the shape preparingToTheWire makes. */
+export const PreparingOnTheWireSchema = z.object({
+  onChainId: OnChainNumberSchema,
+  name: z.string(),
+  mode: z.enum(MODE_NAMES),
+  salt: SaltSchema,
+  now: NowSchema,
+  asked: WriteRequestSchema.optional(),
+  writings: z.array(FinishedSchema),
+  money: z.object({ balance: WeiSchema, reserved: WeiSchema, kept: z.number().int().nonnegative(), writingPrice: WeiSchema }),
+});
+
+/** Read back from the wire: the money as amounts again. */
+export function preparingFromTheWire(wire: z.infer<typeof PreparingOnTheWireSchema>): PreparingView {
+  const { money, ...rest } = wire;
+  return {
+    ...rest,
+    money: { balance: BigInt(money.balance), reserved: BigInt(money.reserved), kept: money.kept, writingPrice: BigInt(money.writingPrice) },
   };
 }

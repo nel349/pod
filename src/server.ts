@@ -8,26 +8,26 @@
  * What it will not do: invent a tile. An empty wall says it is empty. A job with no receipt says the
  * receipt is missing. A missing source is a sentence, never a placeholder number.
  */
-import { acceptPosting, readerFor, type ChainReader } from "./posting.ts";
-import { CheckWriting, ProvenChecks } from "./checkwriting/index.ts";
+import { acceptPosting, type ChainReader } from "./posting.ts";
+import type { CheckWriting, ProvenChecks } from "./checkwriting/index.ts";
 import type { MarketConfig } from "./market.ts";
 import { isAddress } from "viem";
 import { bodyWithin, tooLarge } from "./body.ts";
 import { NO_STORE } from "./headers.ts";
 import { firstLine } from "./errors.ts";
 import { chainJobToTheWire } from "./chainJob.ts";
-import { CREDIT_FOLDER, JOBS_FOLDER_SETTING, PROVEN_FOLDER, REPOSITORIES_FOLDER } from "./folders.ts";
-import { Claims } from "./claims.ts";
-import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard } from "./door/index.ts";
+import { JOBS_FOLDER_SETTING } from "./folders.ts";
+import type { Claims } from "./claims.ts";
+import type { CreditDoor, GitDoor, JobList, NoteBoard } from "./door/index.ts";
 import claimPage from "./web/claim/index.html";
 import postPage from "./web/post/index.html";
 import refundPage from "./web/refund/index.html";
 import { renderCard } from "./card.ts";
 import { isPublished, JobStore, publicRecord } from "./store.ts";
 import { cardPath, checkFilePath, isSafeName, isWallName, jobPath, preparingPath, RECEIPT_FILE, ROUTES, WRITINGS, writingPath } from "./routes.ts";
-import { ownersFrom, type Owners } from "./owners.ts";
+import type { Owners } from "./owners.ts";
 import { preparingToTheWire, type Preparing } from "./preparing/index.ts";
-import { agentFactsFrom, type AgentFactsReader } from "./agentFacts.ts";
+import type { AgentFactsReader } from "./agentFacts.ts";
 import { MONAD_TESTNET } from "./registry.ts";
 import { agentPage, jobData, receiptData, wallPage, yoursData } from "./sitePages.ts";
 import { renderSite, siteScript, type Head, type SitePage } from "./web/site/index.ts";
@@ -393,95 +393,31 @@ export function serve(store: JobStore, port: number, services: Services = {}): R
   return Bun.serve({
     port,
     development: process.env.NODE_ENV === "production" ? false : { hmr: true, console: true },
-    routes: { [ROUTES.post]: postPage, [`${ROUTES.claim}*`]: claimPage, [`${ROUTES.refund}*`]: refundPage },
+    routes: { [ROUTES.post]: postPage, [`${ROUTES.post}/*`]: postPage, [`${ROUTES.claim}*`]: claimPage, [`${ROUTES.refund}*`]: refundPage },
     fetch: (request) => handle(request, store, services),
   });
 }
-
-/** The market this server takes postings for, and the door its agents push through, from the environment, or neither, and it says which. */
-async function servicesFromTheEnvironment(store: JobStore, jobsDirectory: string): Promise<Services> {
-  const configured = process.env.POD_JOBS_ADDRESS;
-  if (!configured) return {};
-  if (!isAddress(configured)) throw new Error(`POD_JOBS_ADDRESS is not an address: ${configured}`);
-  const jobs = configured;
-  const { readJob, readJobCount, readSeats, readTerms, readValidator } = await import("./jobs.ts");
-  const { monadClient } = await import("./live.ts");
-  const { MONAD_REGISTRIES, MONAD_TESTNET } = await import("./registry.ts");
-  const rpc = process.env.MONAD_TESTNET_RPC ?? MONAD_TESTNET.rpc;
-  const publicClient = monadClient(rpc);
-  const { claudeOnThisMachine } = await import("./broker.ts");
-  const { IMAGE } = await import("./sandbox.ts");
-  const { join } = await import("node:path");
-  // beside the jobs, so a poster who paid can still publish after the server restarts
-  const proven = new ProvenChecks(join(jobsDirectory, PROVEN_FOLDER));
-  const contract = { address: jobs, publicClient: publicClient as never };
-  // one doorkeeper for both of an agent's doors, so a seat is the same seat at each
-  const keeper = new Doorkeeper({
-    store,
-    chain: doorChainFor({
-      jobs,
-      readJob: (id) => readJob(contract, id),
-      readSeats: (id) => readSeats(contract, id),
-      readTerms: (id) => readTerms(contract, id),
-      latestBlockTime: async () => (await publicClient.getBlock()).timestamp,
-    }),
-  });
-  const book = new CreditBook(join(jobsDirectory, CREDIT_FOLDER));
-  const door = new GitDoor({ repositories: join(jobsDirectory, REPOSITORIES_FOLDER), keeper, credit: book });
-  const notes = new NoteBoard({ keeper, store });
-  const jobList = new JobList({ keeper, store });
-  const credit = new CreditDoor({ book });
-  // the title contract, if the server is told where it is: without it nobody can claim anything here
-  const tokenAddress = process.env.POD_TOKEN_ADDRESS;
-  const token = tokenAddress && isAddress(tokenAddress) ? { address: tokenAddress, publicClient: contract.publicClient } : undefined;
-  const claims = token ? new Claims({ store, token }) : undefined;
-  const market: Market = {
-    page: {
-      chainId: MONAD_TESTNET.id, chainName: "Monad testnet", rpc, jobs,
-      explorer: "https://testnet.monadscan.com", coin: MONAD_TESTNET.coin,
-      registries: MONAD_REGISTRIES,
-    },
-    chain: readerFor({
-      jobs,
-      read: (id) => readJob(contract, id),
-      now: async () => (await publicClient.getBlock()).timestamp,
-    }),
-    writing: new CheckWriting({
-      writer: { model: claudeOnThisMachine(), image: IMAGE, agents: new URL("../agents", import.meta.url).pathname },
-      proven,
-    }),
-    proven,
-  };
-  const { holderOf } = await import("./handover.ts");
-  const owners = ownersFrom({
-    jobs,
-    job: market.chain.job,
-    count: () => readJobCount(contract),
-    ...(token ? { holder: (tokenId: bigint) => holderOf(token, tokenId) } : {}),
-  });
-  const agents = agentFactsFrom({ client: publicClient, registries: MONAD_REGISTRIES, validator: () => readValidator(contract), credit: book });
-  return { market, door, notes, jobList, credit, owners, agents, ...(claims ? { claims } : {}) };
-}
-
 
 if (import.meta.main) {
   const directory = process.env[JOBS_FOLDER_SETTING];
   if (!directory) throw new Error(`${JOBS_FOLDER_SETTING} has to name the directory the runner writes jobs to`);
   const port = Number(process.env.PORT ?? 3000);
   const store = new JobStore(directory);
+  const { servicesFromTheEnvironment, JOBS_ADDRESS_SETTING } = await import("./services.ts");
   const services = await servicesFromTheEnvironment(store, directory);
   const { market } = services;
   const server = serve(store, port, services);
   console.log(`the wall is at http://localhost:${port}${ROUTES.wall}, reading ${directory}`);
   console.log(market
     ? `posting is open, against ${market.page.jobs}; checks are written by Claude, through the CLI signed in on this machine`
-    : "posting is closed: no POD_JOBS_ADDRESS");
+    : `posting is closed: no ${JOBS_ADDRESS_SETTING}`);
+  if (services.preparing) console.log(`jobs are prepared on ${services.preparing.jobs}: their checks are written before a pod can start`);
   if (services.door) console.log(`agents push their work to http://localhost:${port}${ROUTES.git}<job>.git, and write notes to ${ROUTES.notes}<job>. Open jobs are listed at ${ROUTES.jobList}, and owners link GitHub accounts at ${ROUTES.credit}`);
 
   // stopping: take no new requests, let any writing under way finish and take its boxes down, then go
   const stop = async (): Promise<void> => {
     await server.stop();
-    await market?.writing.whenIdle();
+    await Promise.all([market?.writing.whenIdle(), services.preparing?.whenIdle()]);
     process.exit(0);
   };
   process.once("SIGINT", () => void stop());

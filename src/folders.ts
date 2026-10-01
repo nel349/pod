@@ -26,3 +26,9 @@ export const WORKER_FOLDER = ".worker";
  * the chain shows its poster approved
  */
 export const PREPARING_FOLDER = ".preparing";
+
+/**
+ * The slots box work runs in, one file per slot taken: the server writing checks and the worker
+ * grading share them, so together they never run more boxes than the machine has
+ */
+export const BOX_SLOTS_FOLDER = ".boxes";

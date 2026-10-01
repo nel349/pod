@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { privateKeyToAccount } from "viem/accounts";
-import { deployment, live, monadTestnet } from "../live.ts";
+import { deployment, live, monadTestnet, writerWallet } from "../live.ts";
 
 const KEY = `0x${"7".repeat(64)}` as const;
 const VALIDATOR = privateKeyToAccount(KEY).address;
@@ -39,5 +39,24 @@ describe("reading the deployment", () => {
     expect(contracts.jobs.address).toBe(SOMEWHERE);
     expect(contracts.validator).toBe(VALIDATOR);
     expect(contracts.jobs.wallet.account?.address).toBe(VALIDATOR);
+  });
+
+  test("after the switch-over the contract new jobs go to and the one before are both handed back, with the same key", () => {
+    const EARLIER = "0x3333333333333333333333333333333333333333";
+    const contracts = live({ ...good, POD_OLD_JOBS_ADDRESS: EARLIER });
+    expect(contracts.jobs.address).toBe(SOMEWHERE);
+    expect(contracts.earlier?.address).toBe(EARLIER);
+    expect(contracts.earlier?.wallet.account?.address).toBe(VALIDATOR);
+    expect(live(good).earlier).toBeUndefined();
+  });
+
+  test("an earlier contract that is not an address is named", () => {
+    expect(() => deployment({ ...good, POD_OLD_JOBS_ADDRESS: "the old one" })).toThrow("POD_OLD_JOBS_ADDRESS does not look like");
+  });
+
+  test("the writer's wallet signs with the writer's key, and a missing key is named", () => {
+    const WRITER_KEY = `0x${"5".repeat(64)}` as const;
+    expect(writerWallet({ POD_WRITER_KEY: WRITER_KEY }).account.address).toBe(privateKeyToAccount(WRITER_KEY).address);
+    expect(() => writerWallet({})).toThrow("POD_WRITER_KEY is not set");
   });
 });

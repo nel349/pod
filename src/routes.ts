@@ -119,6 +119,9 @@ export const creditPath = (agent: string): string => `${ROUTES.credit}/${agent.t
 export const gitPath = (jobId: string): string => `${ROUTES.git}${jobId}.git`;
 /** a job being prepared, as its poster reads it, by its number on the contract */
 export const preparingPath = (onChainId: string): string => `${ROUTES.preparing}/${onChainId}`;
+
+/** the page where a poster follows a job they paid for while its checks are written, and approves them */
+export const preparingPagePath = (onChainId: string): string => `${ROUTES.post}/${onChainId}`;
 /** where its poster asks for its checks to be written again */
 export const preparingWritingsPath = (onChainId: string): string => `${ROUTES.preparing}/${onChainId}/${WRITINGS}`;
 /** whether a job by this name exists, asked before anybody pays for a name that is already taken */

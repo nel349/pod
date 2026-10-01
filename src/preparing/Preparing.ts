@@ -192,7 +192,7 @@ export class Preparing {
     return {
       ok: true,
       value: {
-        onChainId, name: setUp.name, mode: setUp.mode, now: this.nowFor(onChainId),
+        onChainId, name: setUp.name, mode: setUp.mode, salt: setUp.salt, now: this.nowFor(onChainId),
         ...(asked ? { asked: asked.request } : {}),
         writings: writings.filter((writing) => writing.isSettled),
         money: { ...money, writingPrice },

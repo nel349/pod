@@ -123,6 +123,16 @@ export function readWritingPrice(at: ContractV2): Promise<bigint> {
   return at.publicClient.readContract({ address: at.address, abi: podJobsV2Abi, functionName: "writingPrice" });
 }
 
+/** How many writings the payment for a job covers. */
+export function readWritingsIncluded(at: ContractV2): Promise<number> {
+  return at.publicClient.readContract({ address: at.address, abi: podJobsV2Abi, functionName: "WRITINGS_INCLUDED" });
+}
+
+/** The one address whose word on written checks the contract takes. */
+export function readWriter(at: ContractV2): Promise<Address> {
+  return at.publicClient.readContract({ address: at.address, abi: podJobsV2Abi, functionName: "writer" });
+}
+
 /** What the writer's signature over an approval is for, exactly as the contract names it. */
 const CHECKS_WRITTEN = keccak256(toBytes("pod.checks-written.v1"));
 
