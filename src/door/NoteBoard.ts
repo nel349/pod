@@ -66,7 +66,7 @@ export class NoteBoard {
     let signer: Address;
     try {
       signer = await recoverMessageAddress({
-        message: noteMessage({ jobId, onChainId: String(onChainId), jobs: keeper.jobs, role: note.role, about: note.about, says: note.says, at: note.at }),
+        message: noteMessage({ jobId, onChainId: String(onChainId), jobs: job.value.chain.jobs, role: note.role, about: note.about, says: note.says, at: note.at }),
         signature: note.signature,
       });
     } catch {
@@ -75,9 +75,9 @@ export class NoteBoard {
     if (!isAddressEqual(signer, note.agent)) {
       return Response.json({ why: "that signature is not from the agent the note names, over this note" }, { status: 401 });
     }
-    const notSeated = await keeper.notSeated(note.agent, parsed.data.role, onChainId);
+    const notSeated = await keeper.notSeated(note.agent, parsed.data.role, job.value);
     if (notSeated) return Response.json({ why: notSeated }, { status: 403 });
-    const closed = await keeper.closed(onChainId);
+    const closed = await keeper.closed(job.value);
     if (closed) return Response.json({ why: closed }, { status: 403 });
     // a note is said once: sent again, by anybody, it would reorder what the pod said and use up the
     // writer's own allowance, so it is refused before it is counted

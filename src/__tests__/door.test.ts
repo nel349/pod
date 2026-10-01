@@ -204,6 +204,21 @@ async function onTheServer(args: readonly string[]): Promise<Ran> {
   return git(repositories, ["--git-dir", join(repositories, `${FIRST.jobId}.git`), ...args]);
 }
 
+describe.skipIf(!available)("a door that has moved to a newer contract", () => {
+  test("still answers for jobs on the earlier one, each read from its own contract, and for no other", async () => {
+    // a newer contract this test never posts on: only which contract each job is on matters here
+    const newer = privateKeyToAccount(ANVIL_KEYS[5]).address;
+    const moved = new Doorkeeper({ store, chain: doorChainOn(anvil, newer), earlier: [doorChainOn(anvil, jobs)] });
+    const found = await moved.job(FIRST.jobId);
+    expect(found.ok).toBe(true);
+    expect(found.ok && found.value.chain.jobs).toBe(jobs);
+    expect(found.ok && (await moved.notSeated(lead.address, "lead", found.value))).toBeUndefined();
+
+    const forgetful = new Doorkeeper({ store, chain: doorChainOn(anvil, newer) });
+    expect(await forgetful.job(FIRST.jobId)).toMatchObject({ ok: false, status: 404 });
+  }, 60_000);
+});
+
 describe.skipIf(!available)("the git door", () => {
   test("a seat pushes to its own branch, and the commit there is written as that seat", async () => {
     const work = await aCommit(asSeat(builder));

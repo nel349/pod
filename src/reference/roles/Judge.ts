@@ -15,6 +15,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { APPROVED, REFUSED, type Verdict } from "../protocol.ts";
+import { isAddressEqual } from "viem";
 import { candidateOf, leadBranchOf, tellThePod, type Seated, type SeatWork } from "../Seated.ts";
 import { shortCommit } from "../../repo.ts";
 
@@ -26,15 +27,21 @@ export class Judge implements SeatWork {
   private readonly verdicts = new Map<string, Verdict>();
   /** candidates whose note is sent */
   private readonly told = new Set<string>();
-  /** candidates this seat has finished with: refused, or approved on the contract */
-  private readonly done = new Set<string>();
+  /** candidates this seat refused, which it does not look at again */
+  private readonly refused = new Set<string>();
+  /**
+   * Candidates this seat approved on the contract. Done with only while the contract still has the
+   * approval: a release clears it, and the same candidate named again is approved again.
+   */
+  private readonly approved = new Set<string>();
 
   constructor(private readonly seated: Seated, private readonly judgement: Judgement) {}
 
   async step(): Promise<void> {
     const { seated } = this;
     const candidate = await candidateOf(seated);
-    if (!candidate || this.done.has(candidate)) return;
+    if (!candidate || this.refused.has(candidate)) return;
+    if (this.approved.has(candidate) && (await this.myApprovalStands())) return;
     const verdict = this.verdicts.get(candidate) ?? await this.judge(candidate);
     if (!verdict) return;
     this.verdicts.set(candidate, verdict);
@@ -46,7 +53,7 @@ export class Judge implements SeatWork {
       this.told.add(candidate);
     }
     if (!verdict.approve) {
-      this.done.add(candidate);
+      this.refused.add(candidate);
       seated.say(`refused ${shortCommit(candidate)}: ${verdict.why}`);
       return;
     }
@@ -56,8 +63,15 @@ export class Judge implements SeatWork {
     }
     // counted done only once the chain has it: a transaction that failed is sent again on the next look
     await seated.identity.approve(seated.job, seated.role, candidate);
-    this.done.add(candidate);
-    seated.say(`approved ${shortCommit(candidate)}: ${verdict.why}`);
+    seated.say(`${this.approved.has(candidate) ? "approved again, once its approval was cleared," : "approved"} ${shortCommit(candidate)}: ${verdict.why}`);
+    this.approved.add(candidate);
+  }
+
+  /** Whether the contract still has this seat's approval of the candidate. */
+  private async myApprovalStands(): Promise<boolean> {
+    const { seated } = this;
+    const seats = await seated.identity.readSeats(seated.job);
+    return seats.some((seat) => seat.role === seated.role && isAddressEqual(seat.agent, seated.identity.address) && seat.approved);
   }
 
   /** The seat's judgement of one candidate, or nothing if the lead's branch does not have it yet. */

@@ -88,12 +88,12 @@ export class GitDoor {
     if (!job.ok) return refusal(job);
     const admitted = await keeper.admit(request, job.value);
     if (!admitted.ok) return refusal(admitted);
-    const { jobId, onChainId, statement } = admitted.value;
+    const { jobId, statement } = admitted.value;
 
     const repo = await this.repositoryFor(jobId);
     const linked = await this.options.credit?.of(statement.agent);
     if (service === "git-receive-pack") {
-      const closed = await keeper.closed(onChainId);
+      const closed = await keeper.closed(admitted.value);
       if (closed) return said(403, closed);
       // a push is counted when it is sent, which is the second of its two requests: the first only
       // asks what is there, and a sender can skip it. The first is still refused when the next push

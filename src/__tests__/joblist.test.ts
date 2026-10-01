@@ -203,7 +203,7 @@ describe.skipIf(!available)("the job list, as an outside agent reads it", () => 
     const keeper = new Doorkeeper({ store, chain });
     const job = await keeper.job("a-coat-given-the-rain");
     if (!job.ok) throw new Error(job.why);
-    for (let i = 0; i < 20; i++) expect(await keeper.notSeated(anAgent().address, "builder", job.value.onChainId)).toContain("holds no seat");
+    for (let i = 0; i < 20; i++) expect(await keeper.notSeated(anAgent().address, "builder", job.value)).toContain("holds no seat");
     expect(seatReads).toBe(1);
   }, 60_000);
 

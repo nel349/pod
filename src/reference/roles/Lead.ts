@@ -17,11 +17,20 @@ import { shortCommit } from "../../repo.ts";
 export class Lead implements SeatWork {
   /** clashes already told to the pod, so each is said once */
   private readonly reported = new Set<string>();
+  /** whether the lock has been said, so it is said once each time it holds */
+  private isLockSaid = false;
 
   constructor(private readonly seated: Seated) {}
 
   async step(): Promise<void> {
     const { seated } = this;
+    // while the candidate is being graded the contract takes no other commit: nothing new is brought in
+    if (await seated.identity.isLocked(seated.job)) {
+      if (!this.isLockSaid) seated.say("the candidate is being graded, so nothing new is brought in until it is settled or let go");
+      this.isLockSaid = true;
+      return;
+    }
+    this.isLockSaid = false;
     const mine = branchFor("lead", seated.identity.address);
     const seats = await seated.identity.readSeats(seated.job);
     const onTheDoor = await seated.copy.fetch(mine);

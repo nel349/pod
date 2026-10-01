@@ -33,11 +33,13 @@ export interface ChainJob {
   readonly reviewers: number;
 }
 
-/** A job the doors answer for: on the wall, and with its money on this contract. */
+/** A job the doors answer for: on the wall, and with its money on one of the contracts the doors read. */
 export interface DoorJob {
   readonly jobId: string;
   readonly onChainId: bigint;
   readonly record: JobRecord;
+  /** the contract its money is on, read the way the doors need it */
+  readonly chain: DoorChain;
 }
 
 /** A seat that proved itself at the door, on the job it asked about. */
@@ -56,7 +58,11 @@ export type Answer<T> =
 const refused = (status: number, why: string, challenge = false): Answer<never> => ({ ok: false, status, why, challenge });
 
 export class Doorkeeper {
-  constructor(private readonly options: { readonly store: JobStore; readonly chain: DoorChain }) {}
+  /**
+   * `chain` is the contract jobs are taken on now; `earlier` are contracts whose jobs are still on the
+   * wall, so their seats keep their notes and their repositories after the switch to a newer one.
+   */
+  constructor(private readonly options: { readonly store: JobStore; readonly chain: DoorChain; readonly earlier?: readonly DoorChain[] }) {}
 
   get jobs(): Address {
     return this.options.chain.jobs;
@@ -72,38 +78,40 @@ export class Doorkeeper {
     if (!isWallName(jobId)) return refused(404, "there is no job at that address");
     const record = await this.options.store.read(jobId);
     if (!record?.chain) return refused(404, `there is no job called ${jobId} with money on the chain`);
-    if (!isAddressEqual(record.chain.jobs, this.jobs)) {
-      return refused(404, `${jobId} is on another contract than the one this door answers to`);
-    }
-    return { ok: true, value: { jobId, onChainId: BigInt(record.chain.jobId), record } };
+    const on = record.chain.jobs;
+    const chain = [this.options.chain, ...(this.options.earlier ?? [])].find((known) => isAddressEqual(known.jobs, on));
+    if (!chain) return refused(404, `${jobId} is on another contract than the ones this door answers to`);
+    return { ok: true, value: { jobId, onChainId: BigInt(record.chain.jobId), record, chain } };
   }
 
   /** The seat asking, from the signed statement in its request, if it holds that seat on this job. */
   async admit(request: Request, job: DoorJob): Promise<Answer<Admitted>> {
     const read = statementFrom(request.headers.get("authorization"));
     if (!read.ok) return refused(401, read.why, true);
-    const about = { jobId: job.jobId, onChainId: String(job.onChainId), jobs: this.jobs };
+    const about = { jobId: job.jobId, onChainId: String(job.onChainId), jobs: job.chain.jobs };
     const held = await statementHolds(read.value, about, secondsNow());
     if (!held.ok) return refused(403, held.why);
-    const notSeated = await this.notSeated(held.value.agent, held.value.role, job.onChainId);
+    const notSeated = await this.notSeated(held.value.agent, held.value.role, job);
     if (notSeated) return refused(403, notSeated);
     return { ok: true, value: { ...job, statement: held.value } };
   }
 
   /** Why this key cannot act as this seat on this job, or nothing if it holds it. */
-  async notSeated(agent: Address, role: Role, onChainId: bigint): Promise<string | undefined> {
-    const mine = (await this.options.chain.seats(onChainId)).filter((seat) => isAddressEqual(seat.agent, agent));
+  async notSeated(agent: Address, role: Role, job: DoorJob): Promise<string | undefined> {
+    const { onChainId } = job;
+    const mine = (await job.chain.seats(onChainId)).filter((seat) => isAddressEqual(seat.agent, agent));
     if (mine.some((seat) => seat.role === role)) return undefined;
     if (mine.length > 0) return `that key holds the ${mine.map((seat) => seat.role).join(" and ")} seat on job ${onChainId}, not the ${role} seat`;
     return `that key holds no seat on job ${onChainId}. Take one on the contract first`;
   }
 
   /** Why nothing more may be added to this job, or nothing if its window is open. */
-  async closed(onChainId: bigint): Promise<string | undefined> {
-    const job = await this.options.chain.job(onChainId);
+  async closed(doorJob: DoorJob): Promise<string | undefined> {
+    const { onChainId } = doorJob;
+    const job = await doorJob.chain.job(onChainId);
     if (!job) return `there is no job ${onChainId} on the contract`;
     if (job.state === "settled" || job.state === "refunded") return `job ${onChainId} is ${job.state}: nothing more can be added to it`;
-    if ((await this.options.chain.now()) >= job.endsAt) {
+    if ((await doorJob.chain.now()) >= job.endsAt) {
       return `job ${onChainId}'s window closed at ${new Date(Number(job.endsAt) * 1000).toISOString()}: nothing more can be added to it`;
     }
     return undefined;

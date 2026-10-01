@@ -118,13 +118,13 @@ export class JobList {
     for (const record of await store.all()) {
       const known = await keeper.job(record.jobId);
       if (!known.ok) continue;
-      const { jobId, onChainId } = known.value;
-      const onChain = await keeper.chain.job(onChainId);
+      const { jobId, onChainId, chain } = known.value;
+      const onChain = await chain.job(onChainId);
       if (!onChain || (onChain.state !== "open" && onChain.state !== "working") || now >= onChain.endsAt) continue;
       const spec = await store.spec(jobId);
       if (!spec) continue;
 
-      const [held, terms] = await Promise.all([keeper.chain.seats(onChainId), keeper.chain.terms(onChainId)]);
+      const [held, terms] = await Promise.all([chain.seats(onChainId), chain.terms(onChainId)]);
       const seats = SEATS.flatMap((role): ListedSeat[] => {
         const capacity = role === "reviewer" ? onChain.reviewers : 1;
         const holders = held.filter((seat) => seat.role === role);
@@ -140,7 +140,7 @@ export class JobList {
       listed.push({
         jobId,
         at: { page: jobPath(jobId), git: gitPath(jobId), notes: notesPath(jobId) },
-        contract: { address: keeper.jobs, jobId: onChainId.toString() },
+        contract: { address: chain.jobs, jobId: onChainId.toString() },
         price: onChain.price.toString(),
         endsAt: new Date(Number(onChain.endsAt) * 1000).toISOString(),
         idea: shown.idea,

@@ -5,12 +5,13 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type Address, type Hex, type PublicClient } from "viem";
+import { parseEther, type Address, type Hex, type PublicClient } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { CheckWriting, ProvenChecks } from "../../checkwriting/index.ts";
 import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard, type DoorChain } from "../../door/index.ts";
 import { sealSpec, type Role, type Spec } from "../../job.ts";
 import { policyMet, post, readJob, readSeats, readTerms } from "../../jobs.ts";
+import { checksDigest, podJobsV2Abi } from "../../jobsV2.ts";
 import { openJob } from "../../publish.ts";
 import type { Registries } from "../../registry.ts";
 import { PLAIN_GIT } from "../../plainGit.ts";
@@ -23,6 +24,28 @@ import { deployRegistries } from "./registries.ts";
 
 /** The key the contracts answer to: it settles, mints, and signs every receipt */
 export const VALIDATOR = ANVIL_KEYS[6];
+/** The key that writes checks and signs what a poster approves, on the contract that prepares jobs */
+export const WRITER = ANVIL_KEYS[4];
+const WRITING_PRICE = parseEther("0.05");
+const PAYOUT_GAS = 100_000n;
+const POSTER = ANVIL_KEYS[1];
+
+/** A job paid for on the contract that prepares jobs, its checks signed by the writer and approved by its poster. */
+async function postPrepared(anvil: Anvil, jobs: Address, seal: Hex, window: bigint, price: bigint): Promise<{ readonly onChainId: bigint; readonly endsAt: bigint }> {
+  const poster = anvil.wallet(POSTER);
+  const posted = await anvil.publicClient.simulateContract({
+    address: jobs, abi: podJobsV2Abi, functionName: "post", args: [window, 1], value: price + 3n * WRITING_PRICE, account: poster.account,
+  });
+  await anvil.publicClient.waitForTransactionReceipt({ hash: await poster.writeContract(posted.request) });
+  const onChainId = posted.result;
+  const writer = anvil.wallet(WRITER);
+  const signature = await writer.signMessage({ account: writer.account, message: { raw: checksDigest({ jobs, chainId: 31337, jobId: onChainId, seal }) } });
+  const approving = await anvil.publicClient.simulateContract({
+    address: jobs, abi: podJobsV2Abi, functionName: "approveChecks", args: [onChainId, seal, signature], account: poster.account,
+  });
+  await anvil.publicClient.waitForTransactionReceipt({ hash: await poster.writeContract(approving.request) });
+  return { onChainId, endsAt: (await readJob({ address: jobs, publicClient: anvil.publicClient }, onChainId)).endsAt };
+}
 
 export interface Agent {
   readonly key: Hex;
@@ -56,6 +79,8 @@ export function aPod(): Readonly<Record<Role, Agent>> {
 export interface RunningPodServer {
   readonly anvil: Anvil;
   readonly jobs: Address;
+  /** the contract jobs were posted on first: the same as `jobs` unless the job was prepared */
+  readonly earlierJobs: Address;
   /** the title contract, minted on by the validator */
   readonly token: Address;
   /** the ERC-8004 team's registries, deployed here and named in the market so agents know where to ask */
@@ -78,9 +103,19 @@ export async function aPodServer(input: {
   readonly files: Readonly<Record<string, string>>;
   readonly fund: readonly Agent[];
   readonly hours?: number;
+  /**
+   * Post on the contract that prepares jobs: paid with its writings, the checks signed by the writer
+   * and approved by the poster, as the server and the page leave it. The first contract is deployed
+   * beside it as the earlier one, as on Monad after the switch.
+   */
+  readonly prepared?: boolean;
 }): Promise<RunningPodServer> {
   const anvil = await startAnvil();
-  const jobs = await anvil.deploy("PodJobs", [privateKeyToAccount(VALIDATOR).address]);
+  const validator = privateKeyToAccount(VALIDATOR).address;
+  const earlierJobs = await anvil.deploy("PodJobs", [validator]);
+  const jobs = input.prepared
+    ? await anvil.deploy("PodJobsV2", [validator, privateKeyToAccount(WRITER).address, 1n, WRITING_PRICE, PAYOUT_GAS])
+    : earlierJobs;
   const token = await anvil.deploy("PodToken", [privateKeyToAccount(VALIDATOR).address]);
   const registries = await deployRegistries(anvil);
   for (const agent of input.fund) await anvil.fund(agent.address);
@@ -89,9 +124,11 @@ export async function aPodServer(input: {
   const reading = { address: jobs, publicClient: anvil.publicClient };
 
   const now = (await anvil.publicClient.getBlock()).timestamp;
-  const endsAt = now + BigInt(Math.round((input.hours ?? 1) * 3600));
+  const seconds = BigInt(Math.round((input.hours ?? 1) * 3600));
   const seal = await sealSpec(input.spec);
-  const onChainId = await post({ ...reading, wallet: anvil.wallet(ANVIL_KEYS[1]) }, { seal, endsAt, reviewers: 1, price: input.spec.price });
+  const { onChainId, endsAt } = input.prepared
+    ? await postPrepared(anvil, jobs, seal, seconds, input.spec.price)
+    : { onChainId: await post({ ...reading, wallet: anvil.wallet(ANVIL_KEYS[1]) }, { seal, endsAt: now + seconds, reviewers: 1, price: input.spec.price }), endsAt: now + seconds };
   const opened = await openJob(store, { jobId: input.jobId, seal, spec: input.spec, endsAt: new Date(Number(endsAt) * 1000), seats: [] });
   await store.save({ ...opened, chain: { network: "monad-testnet", jobId: String(onChainId), jobs } }, input.files);
   await store.saveSpec(input.jobId, input.spec);
@@ -114,7 +151,7 @@ export async function aPodServer(input: {
   });
 
   return {
-    anvil, jobs, token, registries, store, repositories, reading, onChainId, credit,
+    anvil, jobs, earlierJobs, token, registries, store, repositories, reading, onChainId, credit,
     base: `http://127.0.0.1:${server.port}`,
     async git(args) {
       const child = Bun.spawn(["git", "--git-dir", join(repositories, `${input.jobId}.git`), ...args], {

@@ -5,12 +5,12 @@
  * the notes and approves on the contract, so nothing can be claimed as one agent and done as another.
  * The key stays in this process. Nothing it signs contains it, and nothing here ever prints it.
  */
-import { createPublicClient, createWalletClient, defineChain, toHex, type Address, type Hex, type PublicClient, type WalletClient } from "viem";
+import { createPublicClient, createWalletClient, defineChain, toHex, zeroHash, type Address, type Hex, type PublicClient, type WalletClient } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { branchFor } from "../door/seat.ts";
 import { MOST_A_STATEMENT_MAY_LAST_SECONDS } from "../door/credentials.ts";
 import type { Role } from "../job.ts";
-import { approve, podJobsAbi, readJob, readSeats, takeSeat, type HeldSeat, type OnChainJob } from "../jobs.ts";
+import { approve, podJobsAbi, policyMet, readJob, readSeats, takeSeat, type HeldSeat, type OnChainJob } from "../jobs.ts";
 import type { MarketConfig } from "../market.ts";
 import { doorMessage, noteMessage } from "../messages.ts";
 import { requestValidation, type Registries } from "../registry.ts";
@@ -99,6 +99,16 @@ export class Identity {
 
   readSeats(job: JobRef): Promise<readonly HeldSeat[]> {
     return readSeats(this.contract, job.onChainId);
+  }
+
+  /**
+   * Whether the job is locked on its candidate: every approval the policy asks for is in place, so
+   * the work is being graded and the contract takes no other commit until it settles, the window
+   * closes, or the grader lets it go.
+   */
+  async isLocked(job: JobRef): Promise<boolean> {
+    const { commit } = await this.readJob(job);
+    return commit !== zeroHash && policyMet(this.contract, job.onChainId, commit);
   }
 
   /**
