@@ -51,7 +51,7 @@ Once, after the server and the worker that know it are running from this code:
 1. A writer key, generated like the others, never the validator's: `POD_WRITER_ADDRESS` and
    `POD_WRITER_KEY` in `.env`, and some testnet MON on it. It sends every writing's reservation, keep
    and release.
-2. `POD_WRITING_PRICE_WEI` (one writing, 0.05 MON on testnet) and `POD_PAYOUT_GAS` (the gas each
+2. `POD_WRITING_PRICE_WEI` (one writing, 0.01 MON on testnet) and `POD_PAYOUT_GAS` (the gas each
    payment carries, 100,000, tried first with a proxy wallet on a throwaway deployment) in `.env`.
 3. Every job on the first contract finished: settled or refunded. The script refuses otherwise.
 4. `./scripts/deploy-jobs-v2.sh`. It deploys the new contract only, numbered on from the first one's

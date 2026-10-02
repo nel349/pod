@@ -54,7 +54,7 @@ export const BLANK_FORM: DefaultValues<PostForm> = {
   idea: "",
   brief: [{ says: "" }],
   exam: [{ says: "" }],
-  price: "0.1",
+  price: "1",
   mode: DEFAULT_MODE,
   name: "",
 };
