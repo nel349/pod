@@ -74,7 +74,9 @@ describe.skipIf(!withDocker)("grading from outside the box", () => {
 
     const outcome = await grade({ artefact: flooding, start: "node server.js", checks: CHECKS, toRun, image: IMAGE });
     expect(outcome.passed).toBe(true);
-    expect(outcome.artefactLog).toContain("bytes not kept");
+    // what was read is the flood, and only so much of it: cut by our reading, or before it by Docker's
+    // own cap on the log, which starts the file over when it fills (readBounded's test covers our note)
+    expect(outcome.artefactLog).toContain("x".repeat(1023));
     expect(outcome.artefactLog.length).toBeLessThan(MOST_READ);
   }, 240_000);
 
