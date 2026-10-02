@@ -84,10 +84,11 @@ describe.skipIf(!available)("a pod of reference agents, on the contract that pre
     await releaseLock({ ...reading, wallet: pod$.anvil.wallet(VALIDATOR) }, pod$.onChainId);
     expect(await isLocked()).toBe(false);
 
-    // the pod approves the same candidate again, the judges too, rather than taking it as judged
+    // the pod approves the same candidate again, the judges too, rather than taking it as judged. Each
+    // says so once its approval is confirmed, which can be a moment after the chain shows the lock
     await until("locked again", said, isLocked);
     expect((await readJob(reading, pod$.onChainId)).commit).toBe(candidate);
-    expect(said.filter((line) => line.includes("approved again")).length).toBeGreaterThanOrEqual(3);
+    await until("the three judges saying they approved again", said, async () => said.filter((line) => line.includes("approved again")).length >= 3, 60);
 
     // now it is graded and settled, and the pod is paid
     const stop = new AbortController();
