@@ -3,6 +3,7 @@ import { AnswerSchema } from "../../../market.ts";
 import { PreparingOnTheWireSchema, preparingFromTheWire, type PreparingView } from "../../../preparing/records.ts";
 import { preparingPath } from "../../../routes.ts";
 import { readAnswer } from "../../shared/index.ts";
+import { isWritingAsked } from "../state/index.ts";
 import { QUERY_KEYS } from "./queryKeys.ts";
 
 /** how often the page asks how the writing is going while it happens */
@@ -26,7 +27,7 @@ export function usePreparedView(onChainId: string, authorization: string | undef
       }
       return preparingFromTheWire(await readAnswer(response, PreparingOnTheWireSchema));
     },
-    refetchInterval: (query) => (query.state.data && query.state.data.now.kind !== "idle" ? ASK_EVERY_MS : false),
+    refetchInterval: (query) => (query.state.data && isWritingAsked(query.state.data) ? ASK_EVERY_MS : false),
   });
 }
 

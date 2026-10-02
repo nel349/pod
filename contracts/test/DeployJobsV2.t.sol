@@ -34,6 +34,7 @@ contract DeployJobsV2Test is Test {
         vm.setEnv("POD_WRITER_ADDRESS", vm.toString(writer));
         vm.setEnv("POD_OLD_JOBS_ADDRESS", vm.toString(address(old)));
         vm.setEnv("POD_WRITING_PRICE_WEI", "50000000000000000");
+        vm.setEnv("POD_PAYOUT_GAS", "100000");
 
         PodJobsV2 jobs = new DeployJobsV2().run();
         assertEq(jobs.nextJobId(), 3, "the old contract's next number");
@@ -46,12 +47,12 @@ contract DeployJobsV2Test is Test {
     function test_aDifferentValidatorIsRefused() public {
         DeployJobsV2 script = new DeployJobsV2();
         vm.expectRevert("the new contract must answer to the old one's validator");
-        script.deploy(deployerKey, makeAddr("somebody else"), writer, old, 0.05 ether);
+        script.deploy(deployerKey, makeAddr("somebody else"), writer, old, 0.05 ether, 100_000);
     }
 
     function test_theWriterCannotBeTheValidator() public {
         DeployJobsV2 script = new DeployJobsV2();
         vm.expectRevert("the writer is its own key, so the validator's never lives on the web server");
-        script.deploy(deployerKey, validator, validator, old, 0.05 ether);
+        script.deploy(deployerKey, validator, validator, old, 0.05 ether, 100_000);
     }
 }

@@ -45,7 +45,7 @@ async function moneyOnTheChain(record: JobRecord, owners: Owners, now: Date): Pr
 async function chainSaysOf(record: JobRecord, owners: Owners | undefined, now: Date): Promise<ChainSays> {
   if (!owners) return {};
   const [who, money] = await Promise.all([ownersOf(record, owners), moneyOnTheChain(record, owners, now)]);
-  return { ...who, ...money };
+  return { ...who, ...money, ...(owners.isPreparedFirst(record) ? { takesBackBeforeASeat: true } : {}) };
 }
 
 /** A record as a tile, linking its receipt only when a signed one is kept. */
@@ -100,7 +100,9 @@ export async function yoursData(
   const read = await Promise.all(onTheChain.filter(isShown).map(async (record) => ({ record, who: await ownersOf(record, owners) })));
   const posted = await Promise.all(read
     .filter(({ who }) => who.poster?.toLowerCase() === wanted)
-    .map(async ({ record, who }) => yoursEntry(publicRecord(record, now), { ...who, ...(await moneyOnTheChain(record, owners, now)) })));
+    .map(async ({ record, who }) => yoursEntry(publicRecord(record, now), {
+      ...who, ...(await moneyOnTheChain(record, owners, now)), ...(owners.isPreparedFirst(record) ? { takesBackBeforeASeat: true } : {}),
+    })));
   const runningFirst = (a: YoursEntry, b: YoursEntry): number => Number(b.tile.verdict === "running") - Number(a.tile.verdict === "running");
   // what it paid for that is not on the wall: on a contract answered here, by a number no record here has
   const paid = await quietly(`what ${address} paid for`, () => owners.paidBy(address));

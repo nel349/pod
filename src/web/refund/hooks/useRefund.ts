@@ -7,7 +7,7 @@ import { firstLine } from "../../../errors.ts";
 import { podJobsAbi } from "../../../jobs.ts";
 import { podJobsV2Abi } from "../../../jobsV2.ts";
 import type { MarketConfig } from "../../../market.ts";
-import { connected } from "../../shared/index.ts";
+import { connected, SHARED_QUERY_KEYS } from "../../shared/index.ts";
 import { refusalWords, type Refundable, type RefundStatus, type RefundStep, type Standing, type Way } from "../state/index.ts";
 import { REFUND_QUERY_KEYS } from "./queryKeys.ts";
 
@@ -48,6 +48,8 @@ export function useRefund(job: Refundable, market: MarketConfig, way: Way, stand
     onSuccess: (hash) => {
       setStatus({ kind: "sent", hash });
       void client.invalidateQueries({ queryKey: REFUND_QUERY_KEYS.onChain(job.jobId) });
+      // a payment the poster's wallet could not take is kept for it, which the page then offers to withdraw
+      void client.invalidateQueries({ queryKey: SHARED_QUERY_KEYS.owed(market.jobs, getConnection(config).address ?? "") });
     },
     onError: (error) => setStatus({ kind: "stopped", step: step.current, why: refusalOf(error, way) }),
   });

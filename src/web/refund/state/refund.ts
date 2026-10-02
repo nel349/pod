@@ -27,6 +27,8 @@ export interface OnChainNow {
   readonly endsAt: bigint;
   readonly state: JobState;
   readonly now: bigint;
+  /** the contract the job was read from, which is the one the poster's wallet is asked to call */
+  readonly jobs: Address;
 }
 
 /**
@@ -114,6 +116,7 @@ export const COPY = {
   /** what a job known only by its number is called, having no idea published for it */
   unpublished: (onChainId: string) => `Job ${onChainId} on the contract, paid for and never published`,
   closed: "This server answers to no chain, so there is nothing to take back here.",
+  notThisContract: (jobs: string) => `This job is not on the contract this link names (${jobs}), so nothing is sent from here.`,
   noWallet: "This browser has no wallet in it. Open this page where the wallet that posted the job lives.",
   stands: {
     title: "Where the job stands",
@@ -150,7 +153,7 @@ export const COPY = {
       WrongState: "A seat has been taken since, or the job was settled or refunded already, so the money stays with the job until its window closes.",
     },
     openPreparing: "Go to its page",
-    done: (price: bigint, coin: string) => `${formatEther(price)} ${coin} is on its way back, and every seat's deposit with it.`,
+    done: (price: bigint, coin: string) => `The contract has paid ${formatEther(price)} ${coin} back to the poster, and every seat's deposit home. A payment a wallet could not take is kept for it, to withdraw on this page.`,
     transaction: "See the transaction",
   },
 } as const;
@@ -169,6 +172,5 @@ export const OWED = {
   says: (amount: string) => `${amount} is waiting for this wallet: a payment to it could not be delivered, so the contract kept it. Withdraw it to this wallet.`,
   button: (amount: string) => `Withdraw ${amount}`,
   done: "Withdrawn.",
-  none: "Nothing is waiting for this wallet.",
   noJob: "Open this page from a job to take its money back. Anything a payment could not deliver to your wallet is withdrawn here.",
 } as const;

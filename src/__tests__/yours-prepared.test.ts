@@ -95,10 +95,13 @@ describe.skipIf(!available)("your own page, with jobs on both contracts", () => 
     // the old job is on the wall, so it is not listed again among those that are not
     expect(yours.unpublished?.some((job) => job.onChainId === `${oldId}`)).toBe(false);
 
-    // the old job's money is read from the contract it is on, when the page names it; the new contract has no such number
-    const onTheFirst = await handle(new Request(`http://pod.test${chainJobPath(`${oldId}`, old)}`), store, services);
-    expect(ChainJobSchema.parse(await onTheFirst.json())).toMatchObject({ jobs: old, poster: POSTER_ADDRESS, state: "open" });
-    expect((await handle(new Request(`http://pod.test${chainJobPath(`${oldId}`)}`), store, services)).status).toBe(404);
+    // the old job's money is read from the contract it is on: named, or found there when the new one has no such number
+    const read = async (path: string) => handle(new Request(`http://pod.test${path}`), store, services);
+    expect(ChainJobSchema.parse(await (await read(chainJobPath(`${oldId}`, old))).json())).toMatchObject({ jobs: old, poster: POSTER_ADDRESS, state: "open" });
+    expect(ChainJobSchema.parse(await (await read(chainJobPath(`${oldId}`))).json())).toMatchObject({ jobs: old });
+    // named on the new contract, it is not there; named on a contract this server does not answer to, it is not read at all
+    expect((await read(chainJobPath(`${oldId}`, prepares))).status).toBe(404);
+    expect((await read(chainJobPath(`${oldId}`, "0x00000000000000000000000000000000000000e1"))).status).toBe(400);
 
     // and the server answers the same at the wallet's own address
     const answer = await handle(new Request(`http://pod.test${yoursApiPath(POSTER_ADDRESS)}`), store, services);

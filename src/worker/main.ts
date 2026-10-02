@@ -13,8 +13,8 @@ import { isHex } from "viem";
 import { BoxSlots } from "../docker/index.ts";
 import { BOX_SLOTS_FOLDER, JOBS_FOLDER_SETTING, PREPARING_FOLDER, REPOSITORIES_FOLDER, WORKER_FOLDER } from "../folders.ts";
 import { GITHUB_OWNER_SETTING } from "../github.ts";
-import { readWriter } from "../jobsV2.ts";
-import { live, OLD_JOBS_SETTING } from "../live.ts";
+import { confirmTheContracts } from "../contracts.ts";
+import { live } from "../live.ts";
 import { PreparingStore } from "../preparing/index.ts";
 import { MONAD_REGISTRIES } from "../registry.ts";
 import { IMAGE } from "../sandbox.ts";
@@ -28,12 +28,11 @@ const key = process.env.POD_VALIDATOR_KEY;
 if (!key || !isHex(key)) throw new Error("POD_VALIDATOR_KEY is not set. It is the key verdicts are signed and settled with");
 // live() checks the key against the validator the contracts were deployed with, and says so if not
 const contracts = live();
-if (contracts.earlier) {
-  // only a contract that prepares jobs has a writer: anything else is found now, not at its first job
-  await readWriter(contracts.jobs).catch(() => {
-    throw new Error(`POD_JOBS_ADDRESS names ${contracts.jobs.address}, which does not prepare jobs; with ${OLD_JOBS_SETTING} set it has to be the contract that replaced ${contracts.earlier?.address}`);
-  });
-}
+// a contract named in the wrong place is found now, not at its first job
+await confirmTheContracts({
+  publicClient: contracts.publicClient, jobs: contracts.jobs.address,
+  ...(contracts.earlier ? { earlier: contracts.earlier.address } : {}),
+});
 const publishTo = process.env[GITHUB_OWNER_SETTING];
 
 const worker = new Worker({

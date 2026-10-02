@@ -19,7 +19,8 @@ function Money({ money, poster }: { readonly money: MoneyView; readonly poster: 
     case "held":
       return (
         <p className="money">
-          {SITE.job.money.heldUntil} <When iso={standing.endsAt} />, {timeLeft(standing.endsAt, now)}. {SITE.job.money.onlyTheVerdict}
+          {SITE.job.money.heldUntil} <When iso={standing.endsAt} />, {timeLeft(standing.endsAt, now)}.{" "}
+          {standing.isOpenToTakeBack ? SITE.job.money.beforeASeat : SITE.job.money.onlyTheVerdict}
           <InTheBrowser><IfYours poster={poster} /></InTheBrowser>
           {" "}<a href={standing.takeBack}>{SITE.job.money.whereToTakeBack}</a>.
         </p>

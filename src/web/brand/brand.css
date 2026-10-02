@@ -331,6 +331,9 @@ button.quiet:hover { color: var(--pink); text-decoration: line-through; }
   .site-header .mark { font-size: 26px; }
   .site-header nav { gap: 10px; }
   .site-header nav a { font-size: 13px; }
+  /* what the wallet asks for, switching chain or connecting, fits beside the pages rather than pushing them out */
+  .wallet { min-width: 0; flex-shrink: 1; }
+  .wallet button { font-size: 13px; padding: 7px 8px 5px; white-space: normal; text-align: left; }
   .wallet .who .as { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
 .wallet .wrong { color: var(--pink); }

@@ -26,14 +26,19 @@ export function preparedNumberIn(pathname: string): string | undefined {
 }
 
 /** Where a paid job stands, as its poster's page sees it. */
-export type Standing = "preparing" | "approved" | "takenBack";
+export type Standing = "preparing" | "approved" | "takenBack" | "closed";
 
 const NO_SEAL = /^0x0{64}$/i;
 
-/** Approving fixes the seal; a job taken back with no seal was never approved. */
+/**
+ * Approving fixes the seal: a job taken back with no seal was never approved. One refunded with a seal
+ * was approved and then closed with its money gone back: taken back with nobody seated, closed after its
+ * window, or refunded by a failing verdict.
+ */
 export function standingOf(job: Pick<JobV2, "state" | "seal">): Standing {
   if (job.state === "preparing") return "preparing";
-  return job.state === "refunded" && NO_SEAL.test(job.seal) ? "takenBack" : "approved";
+  if (job.state === "refunded") return NO_SEAL.test(job.seal) ? "takenBack" : "closed";
+  return "approved";
 }
 
 /** How long builders have once it opens, from the window the poster paid for, as a mode. */
@@ -51,6 +56,12 @@ export const writingsLeft = (money: WritingMoney & { readonly writingPrice: bigi
 /** Whether another writing needs paying for first: what is left, the one under way included, is less than one. */
 export const needsTopUp = (money: WritingMoney & { readonly writingPrice: bigint }): boolean =>
   money.balance + money.reserved < money.writingPrice;
+
+/**
+ * Whether a writing is waiting, under way, or still asked for between tries: the page asks again until
+ * none is, and nothing can be approved or written again meanwhile.
+ */
+export const isWritingAsked = (view: Pick<PreparingView, "now" | "asked">): boolean => view.now.kind !== "idle" || view.asked !== undefined;
 
 /** The last writing that finished, which is the set the poster reads. */
 export const latestWriting = (view: PreparingView): Finished | undefined => view.writings[view.writings.length - 1];
@@ -111,6 +122,8 @@ export async function sealToApprove(input: {
 /** How far along: everything up to paying is done; approving puts the centre in place. */
 export function preparedProgressOf(standing: Standing): Progress {
   const placed = new Set<StepName>(["idea", "brief", "exam", "terms", "pay"]);
-  if (standing === "approved") placed.add("approve");
-  return progressIn(PAY_FIRST_STEPS, placed, COPY.payFirst.next);
+  if (standing === "approved" || standing === "closed") placed.add("approve");
+  const progress = progressIn(PAY_FIRST_STEPS, placed, COPY.payFirst.next);
+  // a job taken back or closed is not waiting for anything: the line under the seal says what became of it
+  return standing === "takenBack" || standing === "closed" ? { ...progress, nextSays: COPY.payFirst.ended[standing] } : progress;
 }

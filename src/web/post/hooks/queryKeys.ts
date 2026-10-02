@@ -6,7 +6,9 @@ export const QUERY_KEYS = {
   checkWriting: (url: string | undefined) => ["check-writing", url] as const,
   sealed: (parts: readonly unknown[]) => ["sealed", ...parts] as const,
   /** a paid job as the server shows it to its poster, keyed by the note it is shown on */
-  prepared: (onChainId: string, authorization: string | undefined) => ["prepared", onChainId, authorization] as const,
+  prepared: (onChainId: string, authorization: string | undefined) => [...QUERY_KEYS.preparedJob(onChainId), authorization] as const,
+  /** every reading of a paid job by the server, whatever note it was read with */
+  preparedJob: (onChainId: string) => ["prepared", onChainId] as const,
   /** a paid job as the chain has it */
   chainJob: (jobs: string, onChainId: string) => ["chain-job", jobs.toLowerCase(), onChainId] as const,
 };

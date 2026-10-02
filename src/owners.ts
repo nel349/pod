@@ -29,11 +29,15 @@ export interface OwnedContract {
   readonly job: (onChainId: bigint) => Promise<OnChainJob | undefined>;
   /** the highest number the contract has given out */
   readonly count: () => Promise<bigint>;
+  /** whether it prepares jobs, which lets a poster take the money back at once while nobody is seated */
+  readonly prepares?: boolean;
 }
 
 export interface Owners {
   /** whether a record is of a job on a contract these answers come from */
   isAnswered(record: JobRecord): boolean;
+  /** whether a record is of a job on the contract that prepares jobs */
+  isPreparedFirst(record: JobRecord): boolean;
   /** who paid for the job, or undefined when it is not on a contract answered here */
   posterOf(record: JobRecord): Promise<Address | undefined>;
   /** who holds the job's title now, or undefined when no title was minted */
@@ -61,26 +65,38 @@ export function ownersFrom(read: {
     const contract = contractOf(record);
     return contract && record.chain ? await contract.job(BigInt(record.chain.jobId)) : undefined;
   };
-  /** who paid for each number on each contract read so far, or that nobody did, which never changes either */
-  const payers = new Map<string, Address | null>();
+  /**
+   * Who paid for each number on each contract, or that nobody did, which never changes either: kept as
+   * the reading itself, so requests that arrive together share one reading of each number rather than
+   * each reading every number. A reading that failed is not kept.
+   */
+  const payers = new Map<string, Promise<Address | null>>();
   const key = (jobs: Address, id: bigint): string => `${jobs.toLowerCase()}:${id}`;
+  /** The payer of a number, and, when this call is the one that read it, the job as it was read just now. */
+  const payerOf = (contract: OwnedContract, id: bigint): { readonly poster: Promise<Address | null>; readonly readNow?: Promise<OnChainJob | undefined> } => {
+    const at = key(contract.jobs, id);
+    const known = payers.get(at);
+    if (known) return { poster: known };
+    const readNow = contract.job(id);
+    // a number below the count with no job is one this contract never gave out, as when it began after another
+    const poster = readNow.then((job) => (job ? job.poster : null));
+    payers.set(at, poster);
+    poster.catch(() => payers.delete(at));
+    return { poster, readNow };
+  };
 
   async function paidOn(contract: OwnedContract, wallet: Address): Promise<readonly PaidJob[]> {
     const count = await contract.count();
-    const unread = Array.from({ length: Number(count) }, (_, index) => BigInt(index + 1)).filter((id) => !payers.has(key(contract.jobs, id)));
-    const readNow = new Map<bigint, OnChainJob>();
-    await Promise.all(unread.map(async (id) => {
-      const job = await contract.job(id);
-      // a number below the count with no job is one this contract never gave out, as when it began after another
-      payers.set(key(contract.jobs, id), job ? job.poster : null);
-      if (job) readNow.set(id, job);
-    }));
-    const theirs = Array.from({ length: Number(count) }, (_, index) => BigInt(index + 1)).filter((id) => {
-      const poster = payers.get(key(contract.jobs, id));
-      return poster !== undefined && poster !== null && isAddressEqual(poster, wallet);
+    const numbers = Array.from({ length: Number(count) }, (_, index) => BigInt(index + 1));
+    const readings = numbers.map((id) => payerOf(contract, id));
+    const posters = await Promise.all(readings.map((reading) => reading.poster));
+    const theirs = numbers.flatMap((id, index) => {
+      const poster = posters[index];
+      return poster !== undefined && poster !== null && isAddressEqual(poster, wallet) ? [{ id, readNow: readings[index]?.readNow }] : [];
     });
-    const found = await Promise.all(theirs.map(async (id): Promise<PaidJob | undefined> => {
-      const job = readNow.get(id) ?? (await contract.job(id));
+    // a job read just now is not read again; one known from before is, for where its money is now
+    const found = await Promise.all(theirs.map(async ({ id, readNow }): Promise<PaidJob | undefined> => {
+      const job = await (readNow ?? contract.job(id));
       return job ? { jobs: contract.jobs, onChainId: id, job } : undefined;
     }));
     return found.filter((paid): paid is PaidJob => paid !== undefined);
@@ -88,6 +104,7 @@ export function ownersFrom(read: {
 
   return {
     isAnswered: (record) => contractOf(record) !== undefined,
+    isPreparedFirst: (record) => contractOf(record)?.prepares === true,
     onChain,
     async posterOf(record) {
       return record.poster ?? (await onChain(record))?.poster;

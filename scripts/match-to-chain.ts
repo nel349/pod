@@ -8,9 +8,9 @@
  *
  *   bun run scripts/match-to-chain.ts
  */
-import { createPublicClient, http, type Address, type Hex, type PublicClient } from "viem";
+import { createPublicClient, http, type Address, type PublicClient } from "viem";
 import { podJobsAbi } from "../src/jobs.ts";
-import { monadTestnet } from "../src/live.ts";
+import { monadTestnet, OLD_JOBS_SETTING } from "../src/live.ts";
 import { JobStore } from "../src/store.ts";
 import { podTokenAbi } from "../src/token.ts";
 
@@ -24,7 +24,8 @@ const publicClient = createPublicClient({
   chain: monadTestnet, transport: http(need("MONAD_TESTNET_RPC")),
 }) as PublicClient;
 
-const jobs = need("POD_JOBS_ADDRESS") as Address;
+// the jobs this matches ran on the first contract: after the switch-over, that is the old setting's
+const jobs = (process.env[OLD_JOBS_SETTING] ?? need("POD_JOBS_ADDRESS")) as Address;
 const tokenAt = need("POD_TOKEN_ADDRESS") as Address;
 const store = new JobStore(need("POD_JOBS"));
 

@@ -12,7 +12,7 @@ const PREPARES = "0x00000000000000000000000000000000000000b2";
 const MARKET = { jobs: PREPARES, writing: { price: "50000000000000000", included: 3 } } as const;
 
 const job = (state: OnChainNow["state"], now: bigint, endsAt = 100n): OnChainNow =>
-  ({ poster: "0x00000000000000000000000000000000000000c3", price: 10n, endsAt, state, now });
+  ({ poster: "0x00000000000000000000000000000000000000c3", price: 10n, endsAt, state, now, jobs: PREPARES });
 
 describe("taking the money back on the contract that prepares jobs", () => {
   test("a job's way out is its own contract's: the one that prepares jobs only when the market says it does", () => {

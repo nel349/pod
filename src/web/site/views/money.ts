@@ -9,7 +9,11 @@ import { MS_IN_A_SECOND, WHEN } from "./kinds.ts";
  * or gives it back; and money nobody settled is the poster's to take back once the window closes.
  */
 export const MoneyViewSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("held"), endsAt: WHEN, takeBack: z.string() }),
+  z.object({
+    kind: z.literal("held"), endsAt: WHEN, takeBack: z.string(),
+    /** nobody is seated yet, on a contract that lets the poster take the money back at once until somebody is */
+    isOpenToTakeBack: z.boolean().optional(),
+  }),
   z.object({ kind: z.literal("returnable"), takeBack: z.string() }),
   z.object({ kind: z.literal("paid") }),
   z.object({ kind: z.literal("refunded") }),
@@ -32,8 +36,13 @@ export function needsTheChainForMoney(record: JobRecord, now: Date): boolean {
   return record.tile.verdict === "running" && (!record.brief || new Date(record.brief.endsAt) <= now);
 }
 
-/** Where the money for a job is, from its record and, when it had to be asked, the chain. */
-export function moneyOf(record: JobRecord, onChain: ChainSays["onChain"]): MoneyView | undefined {
+/**
+ * Where the money for a job is, from its record and, when it had to be asked, the chain.
+ *
+ * @param takesBackBeforeASeat whether the job's contract lets its poster take the money back at once
+ *                             while nobody is seated, as the one that prepares jobs does
+ */
+export function moneyOf(record: JobRecord, onChain: ChainSays["onChain"], takesBackBeforeASeat = false): MoneyView | undefined {
   if (!record.chain) return undefined;
   const takeBack = refundPath(record.jobId);
   if (onChain?.state === "refunded") return { kind: "refunded" };
@@ -41,5 +50,8 @@ export function moneyOf(record: JobRecord, onChain: ChainSays["onChain"]): Money
   if (record.tile.verdict === "passed") return { kind: "paid" };
   if (record.tile.verdict === "failed" || record.tile.verdict === "withdrawn") return { kind: "refunded" };
   const endsAt = onChain ? new Date(Number(onChain.endsAt) * MS_IN_A_SECOND).toISOString() : record.brief?.endsAt;
-  return endsAt ? { kind: "held", endsAt, takeBack } : { kind: "returnable", takeBack };
+  if (!endsAt) return { kind: "returnable", takeBack };
+  // the record's seats follow the chain's a moment behind; the refund page reads the chain before anything is sent
+  const isOpenToTakeBack = takesBackBeforeASeat && record.tile.pod.length === 0 && onChain?.state !== "working";
+  return { kind: "held", endsAt, takeBack, ...(isOpenToTakeBack ? { isOpenToTakeBack } : {}) };
 }

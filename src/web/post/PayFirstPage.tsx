@@ -5,15 +5,15 @@
  * Like the page it replaces, this holds the state and wires hooks to sheets; the rules live in state/
  * and the talking in hooks/.
  */
-import { useState, type ReactElement } from "react";
+import { useEffect, useState, type ReactElement } from "react";
 import { FormProvider, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { DEFAULT_MODE } from "../../job.ts";
 import type { MarketConfig } from "../../market.ts";
 import { Bill, DraftBack, IdeaStep, LinesStep, PayFirstStep, ProgressStrip, StepOrderContext, TermsStep } from "./components/index.ts";
-import { draftStore, keptSetUpStore, useKeptDraft, usePayFirst, usePointerDrift } from "./hooks/index.ts";
+import { draftStore, keptSetUpStillWaits, keptSetUpStore, useKeptDraft, usePayFirst, usePointerDrift } from "./hooks/index.ts";
 import {
-  BLANK_FORM, formOfKeptSetUp, freshSalt, PAY_FIRST_STEPS, payFirstProgressOf, PostFormSchema, priceInWei, whatIsPaid,
+  BLANK_FORM, COPY, formOfKeptSetUp, freshSalt, PAY_FIRST_STEPS, payFirstProgressOf, PostFormSchema, priceInWei, whatIsPaid,
   type DraftForm, type PostForm,
 } from "./state/index.ts";
 
@@ -30,6 +30,19 @@ export function PayFirstPage({ market, writing }: { readonly market: MarketConfi
 
   const [salt] = useState(() => kept?.salt ?? freshSalt());
   const paying = usePayFirst(market, form, salt, kept);
+  // a payment kept from before whose job has moved on since has nothing to finish: let it go, and its lines
+  const { letGo } = paying;
+  useEffect(() => {
+    if (!kept) return;
+    let isCurrent = true;
+    void keptSetUpStillWaits(market, kept).then((waits) => {
+      if (waits || !isCurrent) return;
+      letGo(COPY.payFirst.cameBackMovedOn);
+      form.reset(BLANK_FORM);
+    });
+    return () => { isCurrent = false; };
+    // asked once, of the payment the page came back to: kept never changes, and letGo and the form act on this page only
+  }, [kept]);
   useKeptDraft(market, { form: draft }, paying.kept !== undefined || paying.status.kind === "posted");
   const startAgain = (): void => {
     draftStore.forget(market);
@@ -44,16 +57,17 @@ export function PayFirstPage({ market, writing }: { readonly market: MarketConfi
         <Bill progress={progress} working={paying.status.kind === "posting" ? "pay" : undefined} />
         <FormProvider {...form}>
           <form id="post" className="sheets" noValidate onSubmit={(event) => void paying.submit(event)}>
-            <ProgressStrip progress={progress} />
+            <ProgressStrip progress={progress} working={paying.status.kind === "posting" ? "pay" : undefined} />
             {draftBack && <DraftBack onStartAgain={startAgain} />}
             <IdeaStep />
             <LinesStep lines="brief" />
             <LinesStep lines="exam" />
-            <TermsStep coin={market.coin} />
+            <TermsStep coin={market.coin} isPaid={paying.kept !== undefined} />
             <PayFirstStep
               market={market}
               view={{
-                paid: whatIsPaid(priceInWei(draft.price) ?? 0n, writing), mode: draft.mode ?? DEFAULT_MODE,
+                // once paid for, what was paid, not what the form says now
+                paid: whatIsPaid(priceInWei(paying.kept?.price ?? draft.price) ?? 0n, writing), mode: paying.kept?.mode ?? draft.mode ?? DEFAULT_MODE,
                 status: paying.status, steps: paying.steps, kept: paying.kept, isSubmitting: form.formState.isSubmitting,
               }}
             />

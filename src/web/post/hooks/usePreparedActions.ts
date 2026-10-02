@@ -16,6 +16,7 @@ import type { PreparingView } from "../../../preparing/records.ts";
 import { preparingWritingsPath } from "../../../routes.ts";
 import { connected, readAnswer } from "../../shared/index.ts";
 import { asSentence, COPY, latestWriting, needsTopUp, sealToApprove, type DraftRequest } from "../state/index.ts";
+import { QUERY_KEYS } from "./queryKeys.ts";
 
 export type PreparedAction = "write" | "approve" | "takeBack";
 type Working = keyof typeof COPY.prepared.working;
@@ -38,8 +39,10 @@ export function usePreparedActions(input: {
   readonly view: PreparingView | undefined;
   readonly job: JobV2 | undefined;
   readonly authorization: string | undefined;
+  /** read the job from the server again, now, for money that may have moved since it was last read */
+  readonly reread: () => Promise<PreparingView | undefined>;
 }): PreparedActions {
-  const { market, onChainId, view, job, authorization } = input;
+  const { market, onChainId, view, job, authorization, reread } = input;
   const config = useConfig();
   const client = useQueryClient();
   const [status, setStatus] = useState<ActionStatus>({ kind: "idle" });
@@ -52,8 +55,11 @@ export function usePreparedActions(input: {
     work(step)
       .then(() => setStatus({ kind: "idle" }))
       .catch((error: unknown) => setStatus({ kind: "stopped", action, why: asSentence(firstLine(error)) }))
-      // whatever happened, the chain and the server are read again rather than guessed at
-      .finally(() => void client.invalidateQueries());
+      // whatever happened, the job is read again from the chain and the server rather than guessed at
+      .finally(() => {
+        void client.invalidateQueries({ queryKey: QUERY_KEYS.preparedJob(onChainId) });
+        void client.invalidateQueries({ queryKey: QUERY_KEYS.chainJob(market.jobs, onChainId) });
+      });
   };
 
   return {
@@ -62,8 +68,10 @@ export function usePreparedActions(input: {
       const asked = WriteRequestSchema.safeParse(request);
       if (!asked.success) throw new Error(asked.error.issues[0]?.message ?? COPY.problems.noLines);
       if (!view || !authorization) throw new Error(COPY.prepared.signIn.says);
-      if (needsTopUp(view.money)) {
-        await send(config, market, step, { functionName: "topUp", args: [id], value: view.money.writingPrice });
+      // whether one more writing has to be paid for is decided on the money as it is now, not as last shown
+      const now = (await reread()) ?? view;
+      if (needsTopUp(now.money)) {
+        await send(config, market, step, { functionName: "topUp", args: [id], value: now.money.writingPrice });
       }
       const response = await fetch(preparingWritingsPath(onChainId), {
         method: "POST", headers: { "content-type": "application/json", authorization }, body: JSON.stringify(asked.data),

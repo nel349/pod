@@ -44,10 +44,30 @@ Public RPC endpoints, all answering on 2026-09-17: `https://testnet-rpc.monad.xy
 
 Record the addresses in the README's proof table with an explorer link each.
 
+## The switch-over to the contract that prepares jobs
+
+Once, after the server and the worker that know it are running from this code:
+
+1. A writer key, generated like the others, never the validator's: `POD_WRITER_ADDRESS` and
+   `POD_WRITER_KEY` in `.env`, and some testnet MON on it. It sends every writing's reservation, keep
+   and release.
+2. `POD_WRITING_PRICE_WEI` (one writing, 0.05 MON on testnet) and `POD_PAYOUT_GAS` (the gas each
+   payment carries, 100,000, tried first with a proxy wallet on a throwaway deployment) in `.env`.
+3. Every job on the first contract finished: settled or refunded. The script refuses otherwise.
+4. `./scripts/deploy-jobs-v2.sh`. It deploys the new contract only, numbered on from the first one's
+   next job, and writes `POD_JOBS_ADDRESS` (the new contract) and `POD_OLD_JOBS_ADDRESS` (the first)
+   into `.env`. The title contract stays as it is. Running `deploy-testnet.sh` again would replace it,
+   so that script refuses once a title contract is named.
+5. Restart the server and the worker. Each checks the contracts against the chain before it answers:
+   a contract named in the wrong place, a writer key the contract does not take checks from, or a
+   writer that is the validator stops it with a sentence. From then on the posting page pays first,
+   and the old way of posting is closed.
+
 ## The server
 
 ```
 POD_JOBS=/var/lib/pod/jobs PORT=3000 bun run serve
+POD_JOBS=/var/lib/pod/jobs bun run src/worker/main.ts
 ```
 
 `POD_JOBS` is a directory the runner writes and the server only reads: one directory per job, holding

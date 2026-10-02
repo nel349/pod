@@ -8,6 +8,7 @@ export * from "./SiteHeader.tsx";
 export * from "./WalletStatus.tsx";
 export * from "./Sheet.tsx";
 export * from "./readAnswer.ts";
+export * from "./queryKeys.ts";
 export * from "./useConnectedAccount.ts";
 export * from "./useMarket.ts";
 export * from "./useOwed.ts";

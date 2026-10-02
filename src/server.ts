@@ -46,6 +46,9 @@ const SVG = { "content-type": "image/svg+xml; charset=utf-8" } as const;
  */
 export const MOST_A_POSTING_MAY_WEIGH = 1_000_000;
 
+/** why the old way of posting is closed on a server whose contract prepares jobs */
+const PAID_FIRST = "posting here is paid first: a job is paid for on the contract, set up from the posting page, and its checks are written after";
+
 /**
  * What a request to write checks may weigh: an idea and a handful of sentences, not a document.
  */
@@ -120,6 +123,13 @@ export async function handle(request: Request, store: JobStore, { market, door, 
     return preparing ? await answerPreparing(request, pathname, preparing) : Response.json({ why: "no job is prepared on this server: it answers to no contract that prepares them" }, { status: 404 });
   }
 
+  // on a contract that prepares jobs, checks are written only for a job paid for, and a job opens only
+  // on its poster's approval: writing for free and posting the old way round are closed
+  const isPaidFirst = market?.page.writing !== undefined;
+  if (isPaidFirst && (pathname === ROUTES.writeChecks || pathname.startsWith(`${ROUTES.writeChecks}/`) || (request.method === "POST" && pathname === ROUTES.postJob))) {
+    return Response.json({ why: PAID_FIRST }, { status: 410 });
+  }
+
   // the one thing a stranger can change: posting a job they have already paid for
   if (request.method === "POST" && pathname === ROUTES.postJob) return await posted(request, store, market);
   if (request.method === "POST" && pathname === ROUTES.writeChecks) return await startWriting(request, market);
@@ -155,12 +165,17 @@ export async function handle(request: Request, store: JobStore, { market, door, 
     if (!market) return Response.json({ why: "this server answers to no chain" }, { status: 404 });
     const onChainId = pathname.slice(ROUTES.chainJob.length);
     if (!/^[0-9]+$/.test(onChainId)) return Response.json({ why: `${onChainId} is not a job's number on the contract` }, { status: 400 });
-    // a job on the contract named, when it is one answered here; otherwise on the one jobs are posted to now
+    // a job on the contract named, which has to be one answered here; with none named, on the one jobs
+    // are posted to now, or, when it has no such number, on the one they were posted to before
     const named = new URL(request.url).searchParams.get(QUERY.jobs);
-    const reader = named && market.earlier && isAddress(named) && isAddressEqual(named, market.earlier.jobs) ? market.earlier : market.chain;
-    const [job, now] = await Promise.all([reader.job(BigInt(onChainId)), reader.now()]);
-    if (!job) return Response.json({ why: `there is no job ${onChainId} on the contract` }, { status: 404 });
-    return Response.json(chainJobToTheWire(job, now, reader.jobs), { headers: NO_STORE });
+    const readers = [market.chain, ...(market.earlier ? [market.earlier] : [])];
+    const asked = named === null ? readers : readers.filter((reader) => isAddress(named) && isAddressEqual(named, reader.jobs));
+    if (asked.length === 0) return Response.json({ why: `${named} is not a contract this server answers to` }, { status: 400 });
+    for (const reader of asked) {
+      const [job, now] = await Promise.all([reader.job(BigInt(onChainId)), reader.now()]);
+      if (job) return Response.json(chainJobToTheWire(job, now, reader.jobs), { headers: NO_STORE });
+    }
+    return Response.json({ why: `there is no job ${onChainId} on the contract` }, { status: 404 });
   }
 
   if (pathname.startsWith(`${ROUTES.writeChecks}/`)) {

@@ -63,6 +63,7 @@ export function YourJobSheet({ market, job: shown, on }: {
         </p>
       )}
       {standing === "takenBack" && <p id="standing" className="said-status">{COPY.prepared.takenBack}</p>}
+      {standing === "closed" && <p id="standing" className="said-status">{COPY.prepared.closed}</p>}
       {standing === "preparing" && view && <p id="writings-left">{COPY.prepared.left(writingsLeft(view.money))}</p>}
       {/* the chain knows whose money it is: taking it back needs the wallet, not the note */}
       {standing === "preparing" && (viewer === "poster" || viewer === "unsigned") && (

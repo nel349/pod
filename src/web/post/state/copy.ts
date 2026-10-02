@@ -112,6 +112,7 @@ export const COPY = {
     modes: { flash: "Two hours", sprint: "A day", project: "A week" } satisfies Record<Mode, string>,
     name: "Its address on the wall",
     namePlaceholder: "a-coat-or-not",
+    paidFixed: "Paid for: the price and the time are what you paid, and stay as they are. The address and the lines can still change until it is sent to be written.",
   },
 
   pay: {
@@ -165,6 +166,8 @@ export const COPY = {
       approve: "Next: read the checks and approve them.",
       done: "Approved. It opens to builders now.",
     } satisfies Record<(typeof PAY_FIRST_STEPS)[number] | "done", string>,
+    /** under the seal, once the job has moved on from what posting does */
+    ended: { takenBack: "Taken back. The money is yours again.", closed: "Closed. The money went back to you." },
     title: "Pay, and have the checks written",
     plain: (paid: { readonly total: string; readonly price: string; readonly writings: string; readonly included: number; readonly window: string }) =>
       `You pay ${paid.total}: ${paid.price} for the job, and ${paid.writings} to have its checks written up to ${paid.included} times. An agent turns each of your lines into a check and tries each one three ways. You read them, say a line another way and have them written again if you need to, then approve them. Builders can start only once you approve, and from then they have ${paid.window}. Until you approve, you can take it all back, less the writings already done.`,
@@ -182,7 +185,11 @@ export const COPY = {
     comeBack: "You paid for this job and it was never sent to be written. Press Send it to be written to finish: you will not be charged again.",
     failedBeforePaying: "No money left your wallet.",
     failedAfterPaying: "Your payment is held by the contract, not lost. Press Send it to be written to finish: you will not be charged again.",
-    takeBack: "Or take it all back",
+    otherWallet: (poster: string) => `this job was paid for from ${poster}: connect that wallet to finish it`,
+    refused: "the chain refused the payment, so no money moved. You can post the job again",
+    movedOn: (onChainId: string) => `job ${onChainId}, which you paid for from this browser, was taken back or set up since, so there is nothing to finish. You can post a new job`,
+    /** said when the payment the page came back to has moved on since */
+    cameBackMovedOn: "The job you paid for earlier from this browser was taken back or set up since. This page is for a new one.",
   },
 
   /** a job paid for, while its checks are written, read and approved */
@@ -216,6 +223,7 @@ export const COPY = {
     takeBack: "Take the money back",
     takeBackSays: "Until you approve, you can take back everything not spent on writing.",
     takenBack: "You took the money back. The job is closed, and its address is free again.",
+    closed: "This job was approved and has closed since: its money went back to you.",
     working: {
       wallet: "Waiting for your wallet",
       send: "Sending it to the chain",
@@ -232,8 +240,8 @@ export const COPY = {
     notWritten: `write the checks first, in step ${stepNumber("checks")}`,
     stale: "you have changed what you asked for since the checks were written. Write them again",
     notProven: "every check has to pass its three trials before you can pay for it",
-    nameTaken: (name: string) =>
-      `there is already a job at /job/${name}. Give yours another address, in step ${stepNumber("terms")}, before you pay`,
+    nameTaken: (name: string, step: number = stepNumber("terms")) =>
+      `there is already a job at /job/${name}. Give yours another address, in step ${step}, before you pay`,
     nameUnknown: (why: string) => `could not check whether that address is free (${why}). Nothing was sent; try again`,
     cannotSeal: (why: string) => `this browser could not seal the job (${why}). Nothing was sent`,  },
 } as const;

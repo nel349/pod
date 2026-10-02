@@ -139,6 +139,8 @@ export const SITE = {
     money: {
       heldUntil: "The money is held by the contract until",
       onlyTheVerdict: "Only the verdict can move it before then. If the work is not finished by then, whoever posted the job can take it back: the contract allows nothing sooner.",
+      beforeASeat: "Nobody has taken a seat yet, so whoever posted the job can take the money back now. Once a seat is taken, only the verdict can move it before then, and if the work is not finished by then, whoever posted the job can take it back.",
+      nobodySeated: "Nobody has taken a seat yet, so you can still take the money back.",
       heldYours: "You posted this job, so that will be you.",
       whereToTakeBack: "Where to take it back",
       paidFor: "Paid for by",
@@ -231,6 +233,7 @@ export const SITE = {
     loading: "Reading the chain…",
     failed: (why: string) => `The chain could not be read: ${why}`,
     keptTitle: "Paid, not published",
+    keptSetUpTitle: "Paid, not sent to be written",
     kept: (name: string) => `You paid for ${name} from this browser, and it was never published. Finish publishing it, or take the money back.`,
     finish: "Finish publishing",
     keptSetUp: (name: string) => `You paid for ${name} from this browser, and its lines were never sent to be written. Send them now, or take the money back.`,
@@ -245,10 +248,10 @@ export const SITE = {
     unpublishedTitle: "Paid, not on the wall",
     unpublished: (onChainId: string, price: string) => `Job ${onChainId} on the contract: ${price} paid, and not on the wall.`,
     /** a job still preparing, its checks being written for the poster to read on its own page */
-    preparing: (onChainId: string, price: string) => `Job ${onChainId}: ${price} paid. Its checks are being written for you to read and approve.`,
+    preparing: (onChainId: string, price: string) => `Job ${onChainId}, priced at ${price}: its checks are being written for you to read and approve.`,
     openPreparing: "Read the checks",
     /** a job paid for whose lines never reached the server (R13) */
-    notSetUp: (onChainId: string, price: string) => `Job ${onChainId}: ${price} paid, and its lines were never sent to be written. Send them from the browser you paid from, or take the money back.`,
+    notSetUp: (onChainId: string, price: string) => `Job ${onChainId}, priced at ${price}: paid for, and its lines were never sent to be written. Send them from the browser you paid from, or take the money back.`,
     takeBackNotSetUp: "Take the money back",
     unpublishedUnread: "Whether anything you paid for never reached the wall could not be read from the chain just now. Reload to ask again.",
   },

@@ -10,7 +10,7 @@ export function KeptSheet({ kept }: { readonly kept: KeptHere }): ReactElement {
   // a job never set up is taken back on its own page; one never published, on the refund page
   const takeBack = kept.onChainId === undefined ? undefined : isSetUp ? preparingPagePath(kept.onChainId) : refundByNumberPath(kept.onChainId);
   return (
-    <Sheet number={1} id="kept" title={SITE.yours.keptTitle} stamp={false}>
+    <Sheet number={1} id="kept" title={isSetUp ? SITE.yours.keptSetUpTitle : SITE.yours.keptTitle} stamp={false}>
       <p className="lede">{isSetUp ? SITE.yours.keptSetUp(kept.kept.name) : SITE.yours.kept(kept.kept.name)}</p>
       <p className="actions">
         <a className="primary" href={ROUTES.post}>{isSetUp ? SITE.yours.finishSetUp : SITE.yours.finish}</a>

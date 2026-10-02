@@ -9,7 +9,9 @@ export function MoneyNext({ money }: { readonly money: MoneyView }): ReactElemen
   const now = useNow();
   const standing = moneyAt(money, now);
   switch (standing.kind) {
-    case "held": return <p className="note">{SITE.job.money.heldUntil} <When iso={standing.endsAt} />.</p>;
+    case "held": return standing.isOpenToTakeBack
+      ? <p><span className="note">{SITE.job.money.nobodySeated}</span> <a className="primary small" href={standing.takeBack}>{SITE.job.money.takeBack}</a></p>
+      : <p className="note">{SITE.job.money.heldUntil} <When iso={standing.endsAt} />.</p>;
     case "returnable": return <p><a className="primary small" href={standing.takeBack}>{SITE.job.money.takeBack}</a></p>;
     case "paid": return <p className="note">{SITE.job.money.paid}</p>;
     case "refunded": return <p className="note">{SITE.job.money.refunded}</p>;

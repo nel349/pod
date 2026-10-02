@@ -14,6 +14,7 @@ export * from "./useSealedJob.ts";
 export * from "./useWriteTheChecks.ts";
 export * from "./useKeptDraft.ts";
 export * from "./isNameTaken.ts";
+export * from "./keptSetUpStillWaits.ts";
 export * from "./keptSetUpStore.ts";
 export * from "./usePayFirst.ts";
 export * from "./usePreparedActions.ts";

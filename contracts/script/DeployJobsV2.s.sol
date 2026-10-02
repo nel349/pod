@@ -12,23 +12,22 @@ import { PodJobsV2 } from "../src/PodJobsV2.sol";
 ///      POD_DEPLOYER_KEY pays for it; POD_VALIDATOR_ADDRESS grades and is paid for writings, and must
 ///      be the old contract's validator; POD_WRITER_ADDRESS writes the checks; POD_OLD_JOBS_ADDRESS is
 ///      the contract whose next number this one starts from, read at the moment of deploying, after
-///      posting to it has been closed; POD_WRITING_PRICE_WEI is what one writing costs.
+///      posting to it has been closed; POD_WRITING_PRICE_WEI is what one writing costs; POD_PAYOUT_GAS is
+///      the gas sent with every payment, a payee that needs more withdrawing instead. 100,000 was tried
+///      on Monad testnet with a wallet behind a proxy before the switch-over (V4, TryPayoutGas.s.sol).
 contract DeployJobsV2 is Script {
-    /// @notice gas sent with every payment; a payee that needs more withdraws instead. To be tried on
-    ///         a throwaway Monad deployment with a proxy wallet before the switch-over.
-    uint256 public constant PAYOUT_GAS = 100_000;
-
     function run() external returns (PodJobsV2) {
         return deploy(
             vm.envUint("POD_DEPLOYER_KEY"),
             vm.envAddress("POD_VALIDATOR_ADDRESS"),
             vm.envAddress("POD_WRITER_ADDRESS"),
             PodJobs(vm.envAddress("POD_OLD_JOBS_ADDRESS")),
-            vm.envUint("POD_WRITING_PRICE_WEI")
+            vm.envUint("POD_WRITING_PRICE_WEI"),
+            vm.envUint("POD_PAYOUT_GAS")
         );
     }
 
-    function deploy(uint256 deployer, address validator, address writer, PodJobs old, uint256 writingPrice)
+    function deploy(uint256 deployer, address validator, address writer, PodJobs old, uint256 writingPrice, uint256 payoutGas)
         public
         returns (PodJobsV2 jobs)
     {
@@ -37,7 +36,7 @@ contract DeployJobsV2 is Script {
 
         uint256 firstJobId = old.nextJobId();
         vm.startBroadcast(deployer);
-        jobs = new PodJobsV2(validator, writer, firstJobId, writingPrice, PAYOUT_GAS);
+        jobs = new PodJobsV2(validator, writer, firstJobId, writingPrice, payoutGas);
         vm.stopBroadcast();
     }
 }

@@ -482,8 +482,9 @@ export class Worker {
     if (onTheWall?.chain?.jobId === onChainId && isAddressEqual(onTheWall.chain.jobs, prepared.address)) return;
 
     const job = await readJob(prepared, BigInt(onChainId));
-    // still preparing, or taken back before any set was approved: nothing to put on the wall
-    if (job.state === "preparing" || job.seal === zeroHash) return;
+    // still preparing, taken back before any set was approved, or taken back or closed after approval
+    // before it was ever published: nothing to put on the wall
+    if (job.state === "preparing" || job.state === "refunded" || job.seal === zeroHash) return;
     if (onTheWall) {
       this.say(`job ${onChainId}: approved as ${setUp.name}, which another job on the wall already has; it is not put there`);
       return;

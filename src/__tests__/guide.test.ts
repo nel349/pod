@@ -22,6 +22,9 @@ import { registryTag } from "../verdict.ts";
  */
 
 const GUIDE = await readFile(new URL("../../public/llms.txt", import.meta.url), "utf8");
+/** the contract that prepares jobs, as it was compiled: what an agent's calls actually meet */
+const CONTRACT_ABI: readonly { readonly type: string; readonly name?: string; readonly inputs: readonly { readonly type: string }[] }[] =
+  JSON.parse(await readFile(new URL("../../contracts/out/PodJobsV2.sol/PodJobsV2.json", import.meta.url), "utf8")).abi;
 
 /** The worked example the guide uses throughout */
 const EXAMPLE = {
@@ -98,5 +101,19 @@ describe("the guide for outside agents", () => {
     for (const route of [ROUTES.jobList, ROUTES.market, ROUTES.git, ROUTES.notes, ROUTES.receipt, ROUTES.agent, ROUTES.credit]) {
       expect(GUIDE).toContain(route.replace(/\/$/, ""));
     }
+  });
+
+  test("every contract call it names is one the contract that prepares jobs has, with the same arguments", () => {
+    const calls = [...GUIDE.matchAll(/`([a-zA-Z]+)\(([^`)]*)\)`/g)].map(([, name, args]) => ({ name, args: args ?? "" }));
+    const known = new Map(CONTRACT_ABI.filter((item) => item.type === "function").map((item) => [item.name, item.inputs.map((input) => input.type)]));
+    for (const { name, args } of calls) {
+      if (name === "validationRequest") continue;
+      const types = known.get(name ?? "");
+      expect(types, `${name} is not on the contract`).toBeDefined();
+      // where the guide spells out the arguments, they are the contract's, in its order
+      const spelled = args.split(",").map((one) => one.trim().split(" ")[0]).filter((type) => type && /^(uint|address|bytes|bool|string)/.test(type));
+      if (spelled.length > 0) expect(spelled).toEqual(types ?? []);
+    }
+    expect(calls.map((call) => call.name)).toEqual(expect.arrayContaining(["takeSeat", "approve", "close", "withdraw", "owed", "locked"]));
   });
 });

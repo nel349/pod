@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { isAddressEqual } from "viem";
 import { ChainJobSchema } from "../../../chainJob.ts";
 import type { MarketConfig } from "../../../market.ts";
 import { chainJobPath, refundApiPath } from "../../../routes.ts";
@@ -34,7 +35,9 @@ export function useRefundable(target: Exclude<RefundTarget, { readonly by: "none
     queryKey: REFUND_QUERY_KEYS.onChain(jobId),
     enabled: found !== undefined,
     queryFn: async (): Promise<OnChainNow> => {
-      const response = await fetch(chainJobPath(found?.onChainId ?? "", found?.jobs), { cache: "no-store" });
+      // a number with no contract named is looked for on the one jobs are posted to now, then the one before
+      const named = target.by === "name" || target.jobs !== undefined ? found?.jobs : undefined;
+      const response = await fetch(chainJobPath(found?.onChainId ?? "", named), { cache: "no-store" });
       if (!response.ok) throw new Error((await readAnswer(response, WhySchema)).why);
       return readAnswer(response, ChainJobSchema);
     },
@@ -42,5 +45,8 @@ export function useRefundable(target: Exclude<RefundTarget, { readonly by: "none
   if (job.isError) return { kind: "failed", why: job.error.message };
   if (onChain.isError) return { kind: "failed", why: onChain.error.message };
   if (!job.data || !onChain.data) return { kind: "loading" };
-  return { kind: "ready", job: job.data, onChain: onChain.data };
+  // the job is acted on where it was read, and only there: a link naming one contract never moves money on another
+  const isNamed = target.by === "name" || target.jobs !== undefined;
+  if (isNamed && !isAddressEqual(job.data.jobs, onChain.data.jobs)) return { kind: "failed", why: COPY.notThisContract(job.data.jobs) };
+  return { kind: "ready", job: { ...job.data, jobs: onChain.data.jobs }, onChain: onChain.data };
 }

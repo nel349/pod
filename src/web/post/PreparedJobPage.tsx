@@ -17,7 +17,7 @@ import {
 import { useConfig } from "wagmi";
 import { connected, useConnectedAccount } from "../shared/index.ts";
 import {
-  BLANK_FORM, COPY, formOfRequest, isThePoster, lastAsked, latestWriting, needsTopUp, nowLine, PAY_FIRST_STEPS, preparedProgressOf,
+  BLANK_FORM, COPY, formOfRequest, isThePoster, isWritingAsked, lastAsked, latestWriting, needsTopUp, nowLine, PAY_FIRST_STEPS, preparedProgressOf,
   requestKey, standingOf, toWriteRequest, whyNotApprove, writingVerdict, type DraftForm, type PostForm, type Progress, type StepName,
 } from "./state/index.ts";
 
@@ -36,7 +36,10 @@ export function PreparedJobPage({ market, onChainId }: { readonly market: Market
   const note = usePosterNote(market, onChainId, isPoster ? account : undefined);
   const prepared = usePreparedView(onChainId, note.authorization, job !== undefined && standingOf(job) === "preparing");
   const view = prepared.data;
-  const actions = usePreparedActions({ market, onChainId, view, job, authorization: note.authorization });
+  const actions = usePreparedActions({
+    market, onChainId, view, job, authorization: note.authorization,
+    reread: async () => (await prepared.refetch()).data,
+  });
 
   // a note that ran out is forgotten, so the button to sign another comes back
   const refusal = prepared.error instanceof PreparedRefused ? prepared.error.status : undefined;
@@ -68,7 +71,7 @@ export function PreparedJobPage({ market, onChainId }: { readonly market: Market
   const standing = standingOf(job);
   const viewer: Viewer = account === undefined ? "noWallet" : !isPoster ? "notYours" : note.authorization ? "poster" : "unsigned";
   const writing = view ? latestWriting(view) : undefined;
-  const isBusy = view !== undefined && (view.now.kind !== "idle" || view.asked !== undefined);
+  const isBusy = view !== undefined && isWritingAsked(view);
   const isFresh = writing !== undefined && requestKey(request) === requestKey(writing.request);
   const writeAgain = view && needsTopUp(view.money)
     ? COPY.prepared.topUpAndWrite(`${formatEther(view.money.writingPrice)} ${market.coin}`)

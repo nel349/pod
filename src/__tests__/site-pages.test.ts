@@ -317,6 +317,19 @@ describe("where the money is", () => {
   });
 });
 
+describe("a job on the contract that prepares jobs", () => {
+  test("open with nobody seated, its page says the money can be taken back now, and once a seat is taken, that only the verdict moves it", () => {
+    const open = running({ tile: tile({ verdict: "running", pod: [] }) });
+    expect(jobView(open, [], { takesBackBeforeASeat: true }).money).toMatchObject({ kind: "held", isOpenToTakeBack: true });
+    expect(job(open, { takesBackBeforeASeat: true })).toContain("Nobody has taken a seat yet, so whoever posted the job can take the money back now");
+    // a seat taken, on the record or on the chain, and the first contract, say what they always said
+    expect(jobView(running(), [], { takesBackBeforeASeat: true }).money).not.toHaveProperty("isOpenToTakeBack");
+    expect(jobView(open, [], { takesBackBeforeASeat: true, onChain: { state: "working", endsAt: 1_790_000_000n } }).money).not.toHaveProperty("isOpenToTakeBack");
+    expect(jobView(open, [], {}).money).not.toHaveProperty("isOpenToTakeBack");
+    expect(job(open)).toContain("Only the verdict can move it before then");
+  });
+});
+
 describe("a job paid for and never published", () => {
   const paid = (state: "open" | "settled" | "refunded" | "preparing") => ({
     jobs: "0x00000000000000000000000000000000000000c1",

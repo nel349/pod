@@ -16,6 +16,13 @@ set -a; . "$env_file"; set +a
 : "${MONAD_TESTNET_RPC:?MONAD_TESTNET_RPC is not set}"
 export FOUNDRY_DISABLE_NIGHTLY_WARNING=1
 
+# a second run would deploy a second title contract beside the first, and every title held would be on
+# the old one: the switch-over to the contract that prepares jobs is scripts/deploy-jobs-v2.sh
+if [ -n "${POD_TOKEN_ADDRESS:-}" ]; then
+  echo "POD_TOKEN_ADDRESS is set: the contracts are deployed already. For the switch-over, run scripts/deploy-jobs-v2.sh"
+  exit 1
+fi
+
 balance=$(cast balance "$POD_DEPLOYER_ADDRESS" --rpc-url "$MONAD_TESTNET_RPC")
 if [ "$balance" = "0" ]; then
   echo "the deployer $POD_DEPLOYER_ADDRESS has no MON. Fund it from the faucet first."

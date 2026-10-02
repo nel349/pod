@@ -72,6 +72,8 @@ export interface ChainSays {
   readonly holder?: string;
   /** the job on the contract now, read only when the record alone cannot say where the money is */
   readonly onChain?: Pick<OnChainJob, "state" | "endsAt">;
+  /** the job is on a contract that lets its poster take the money back at once while nobody is seated */
+  readonly takesBackBeforeASeat?: boolean;
 }
 
 export function jobView(record: JobRecord, notes: readonly Note[], chainSays: ChainSays): JobView {
@@ -81,7 +83,7 @@ export function jobView(record: JobRecord, notes: readonly Note[], chainSays: Ch
   const isRunning = tile.verdict === "running";
   // what is sealed follows the one publishing rule, which the server serves the checks and notes by
   const isSealed = !isPublished(record);
-  const money = moneyOf(record, chainSays.onChain);
+  const money = moneyOf(record, chainSays.onChain, chainSays.takesBackBeforeASeat === true);
   const tokenId = record.chain?.tokenId;
   return {
     jobId: tile.jobId, idea: tile.idea, verdict: tile.verdict, standing: standingWords(tile), mode: tile.mode,

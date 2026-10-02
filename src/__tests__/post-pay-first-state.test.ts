@@ -6,7 +6,7 @@ import { MODES } from "../job.ts";
 import { ApprovalSchema, type Finished, type Outcome, type PreparingView } from "../preparing/records.ts";
 import { specToTheWire } from "../specWire.ts";
 import {
-  COPY, cutTheSeal, formOfKeptSetUp, isSealed, keepSetUp, modeOfWindow, needsTopUp, nowLine, PAY_FIRST_STEPS, payFirstProgressOf,
+  COPY, cutTheSeal, formOfKeptSetUp, isSealed, isWritingAsked, keepSetUp, modeOfWindow, needsTopUp, nowLine, PAY_FIRST_STEPS, payFirstProgressOf,
   payFirstWords, preparedNumberIn, preparedProgressOf, readKeptSetUp, sealToApprove, standingOf, stepNumber, toWriteRequest,
   whatIsPaid, whyNotApprove, writingsLeft, writingVerdict, type DraftForm, type KeptSetUp,
 } from "../web/post/state/index.ts";
@@ -109,11 +109,17 @@ describe("a paid job's page", () => {
     expect(preparedNumberIn("/postal/10")).toBeUndefined();
   });
 
-  test("where it stands is the chain's to say: preparing, approved once a seal is fixed, or taken back with none", () => {
+  test("where it stands is the chain's to say: preparing, approved once a seal is fixed, closed after that, or taken back with none", () => {
     expect(standingOf({ state: "preparing", seal: ZERO_SEAL })).toBe("preparing");
     expect(standingOf({ state: "open", seal: `0x${"1".repeat(64)}` })).toBe("approved");
-    expect(standingOf({ state: "refunded", seal: `0x${"1".repeat(64)}` })).toBe("approved");
     expect(standingOf({ state: "refunded", seal: ZERO_SEAL })).toBe("takenBack");
+    // approved and then closed, its money gone back: not "open to builders"
+    expect(standingOf({ state: "refunded", seal: `0x${"1".repeat(64)}` })).toBe("closed");
+    expect(standingOf({ state: "settled", seal: `0x${"1".repeat(64)}` })).toBe("approved");
+    expect(isSealed(preparedProgressOf("closed"))).toBe(true);
+    // a job taken back or closed waits for nothing: the line under the seal says what became of it
+    expect(preparedProgressOf("closed").nextSays).toBe(COPY.payFirst.ended.closed);
+    expect(preparedProgressOf("takenBack").nextSays).toBe(COPY.payFirst.ended.takenBack);
     expect(modeOfWindow(BigInt(MODES.sprint.windowMinutes * 60))).toBe("sprint");
     expect(modeOfWindow(7n)).toBeUndefined();
   });
@@ -124,6 +130,18 @@ describe("a paid job's page", () => {
     expect(needsTopUp({ ...MONEY, balance: 0n })).toBe(true);
     // the writing under way is paid for already
     expect(needsTopUp({ ...MONEY, balance: 0n, reserved: MONEY.writingPrice })).toBe(false);
+  });
+
+  test("the page keeps asking while a writing is waiting, under way, or still asked for between tries", () => {
+    expect(isWritingAsked({ now: { kind: "idle" } })).toBe(false);
+    expect(isWritingAsked({ now: { kind: "trying" } })).toBe(true);
+    // the server between tries: nothing running, but the writing still asked for
+    expect(isWritingAsked({ now: { kind: "idle" }, asked: COAT_REQUEST })).toBe(true);
+  });
+
+  test("a name already taken is sent back to the sheet it is set on, numbered as this page numbers it", () => {
+    expect(COPY.problems.nameTaken("a-coat", stepNumber("terms", PAY_FIRST_STEPS))).toContain("in step 4");
+    expect(COPY.problems.nameTaken("a-coat")).toContain("in step 5");
   });
 
   test("the line under the buttons says where the writing is, its place in line included", () => {

@@ -10,7 +10,7 @@
  * contract that does not prepare jobs, or a writer key the contract does not answer to.
  */
 import { join } from "node:path";
-import { isAddress, isAddressEqual, type Account, type Address, type Chain, type PublicClient, type Transport, type WalletClient } from "viem";
+import { isAddress, type Account, type Address, type Chain, type PublicClient, type Transport, type WalletClient } from "viem";
 import { agentFactsFrom } from "./agentFacts.ts";
 import { CheckWriting, ProvenChecks, type CheckWriter } from "./checkwriting/index.ts";
 import { Claims } from "./claims.ts";
@@ -19,18 +19,18 @@ import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, JobList, Not
 import { BOX_SLOTS_FOLDER, CREDIT_FOLDER, PREPARING_FOLDER, PROVEN_FOLDER, REPOSITORIES_FOLDER } from "./folders.ts";
 import { holderOf } from "./handover.ts";
 import { readJob, readJobCount, readSeats, readTerms, readValidator } from "./jobs.ts";
-import { readJobV2, readWriter, readWritingMoney, readWritingPrice, readWritingsIncluded, WriterKey } from "./jobsV2.ts";
+import { readJobV2, readWritingMoney, readWritingPrice, readWritingsIncluded, WriterKey } from "./jobsV2.ts";
 import type { MarketConfig } from "./market.ts";
 import { ownersFrom, type OwnedContract } from "./owners.ts";
 import { readerFor, type ChainReader } from "./posting.ts";
 import { Preparing, PreparingStore } from "./preparing/index.ts";
+import { confirmTheContracts, JOBS_ADDRESS_SETTING } from "./contracts.ts";
 import { OLD_JOBS_SETTING, WRITER_KEY_SETTING } from "./live.ts";
 import type { Registries } from "./registry.ts";
 import type { Market, Services } from "./server.ts";
 import type { JobStore } from "./store.ts";
 
-/** The setting naming the contract new jobs are posted to */
-export const JOBS_ADDRESS_SETTING = "POD_JOBS_ADDRESS";
+export { JOBS_ADDRESS_SETTING } from "./contracts.ts";
 /** The setting naming the title contract */
 export const TOKEN_ADDRESS_SETTING = "POD_TOKEN_ADDRESS";
 
@@ -56,6 +56,10 @@ export interface ServicesInput {
 /** Every service, wired to the contracts it is given, after checking they are what they are said to be. */
 export async function servicesFor(input: ServicesInput): Promise<Services> {
   const { store, directory, publicClient, jobs } = input;
+  if (input.earlier && !input.writer) {
+    throw new Error(`${WRITER_KEY_SETTING} is not set: the contract at ${jobs} prepares jobs, and their checks are written and signed with the writer's key`);
+  }
+  await confirmTheContracts({ publicClient, jobs, ...(input.earlier ? { earlier: input.earlier } : {}), ...(input.writer ? { writer: input.writer.account.address } : {}) });
   const contract = { address: jobs, publicClient };
   // one doorkeeper for both of an agent's doors, so a seat is the same seat at each
   const keeper = new Doorkeeper({
@@ -87,7 +91,7 @@ export async function servicesFor(input: ServicesInput): Promise<Services> {
     credit: new CreditDoor({ book }),
     // who paid and who holds, on both contracts: old jobs keep their poster and their title holder (R12)
     owners: ownersFrom({
-      contracts: [ownedAt(jobs, publicClient), ...(input.earlier ? [ownedAt(input.earlier, publicClient)] : [])],
+      contracts: [{ ...ownedAt(jobs, publicClient), prepares: preparing !== undefined }, ...(input.earlier ? [ownedAt(input.earlier, publicClient)] : [])],
       ...(token ? { holder: (tokenId: bigint) => holderOf(token, tokenId) } : {}),
     }),
     agents: agentFactsFrom({ client: publicClient, registries: input.registries, validator: () => readValidator(contract), credit: book }),
@@ -128,19 +132,10 @@ export async function servicesFromTheEnvironment(
  * picked up before it answers anybody.
  */
 async function preparingOn(input: ServicesInput): Promise<Preparing> {
+  // confirmTheContracts has checked the writer against the contract; servicesFor refused a missing one
   const { publicClient, jobs, writer } = input;
   const at = { address: jobs, publicClient };
-  if (!writer) throw new Error(`${WRITER_KEY_SETTING} is not set: the contract at ${jobs} prepares jobs, and their checks are written and signed with the writer's key`);
-  let answersTo: Address;
-  try {
-    // only a contract that prepares jobs has a writer
-    answersTo = await readWriter(at);
-  } catch {
-    throw new Error(`${JOBS_ADDRESS_SETTING} names ${jobs}, which does not prepare jobs; with ${OLD_JOBS_SETTING} set it has to be the contract that replaced ${input.earlier}`);
-  }
-  if (!isAddressEqual(answersTo, writer.account.address)) {
-    throw new Error(`${WRITER_KEY_SETTING} is the key for ${writer.account.address}, but the contract at ${jobs} takes written checks only from ${answersTo}`);
-  }
+  if (!writer) throw new Error(`${WRITER_KEY_SETTING} is not set`);
   const preparing = new Preparing({
     store: new PreparingStore(join(input.directory, PREPARING_FOLDER)),
     wall: input.store,

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { MarketConfig } from "../../../market.ts";
-import { keptPaymentStore, keptSetUpStore, type Kept, type KeptSetUp } from "../../post/index.ts";
+import { keptPaymentStore, keptSetUpStillWaits, keptSetUpStore, type Kept, type KeptSetUp } from "../../post/index.ts";
 
 /**
  * A payment this browser sent and never finished, read once the page is in the browser: on a contract
@@ -15,11 +15,19 @@ export function useKeptPayment(market: MarketConfig): KeptHere | undefined {
   useEffect(() => {
     if (market.writing) {
       const setUp = keptSetUpStore.read(market);
-      setKept(setUp ? { kind: "setUp", kept: setUp, onChainId: setUp.onChainId } : undefined);
-      return;
+      if (!setUp) return undefined;
+      // shown only while its job still waits to be set up; one taken back or set up since is let go
+      let isCurrent = true;
+      void keptSetUpStillWaits(market, setUp).then((waits) => {
+        if (!isCurrent) return;
+        if (waits) setKept({ kind: "setUp", kept: setUp, onChainId: setUp.onChainId });
+        else keptSetUpStore.forget(market);
+      });
+      return () => { isCurrent = false; };
     }
     const payment = keptPaymentStore.read(market);
     setKept(payment ? { kind: "payment", kept: payment, onChainId: payment.payment.onChainId } : undefined);
+    return undefined;
   }, [market]);
   return kept;
 }

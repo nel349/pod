@@ -257,6 +257,18 @@ describe.skipIf(!available)("the worker, on the contract that prepares jobs", ()
     expect(await store.read(name)).toBeUndefined();
   }, 120_000);
 
+  test("a job taken back after approval, before the worker looked, is never put on the wall as open", async () => {
+    const said: string[] = [];
+    const preparing = new PreparingStore(await mkdtemp(join(tmpdir(), "pod-prepared-preparing-")));
+    const name = `prepared-approved-then-taken-back-${crypto.randomUUID().slice(0, 6)}`;
+    const { onChainId, seal, signature } = await aPreparedJob(preparing, name);
+    await posterApproves(onChainId, seal, signature);
+    const { request } = await anvil.publicClient.simulateContract({ address: jobs, abi: podJobsV2Abi, functionName: "takeBack", args: [onChainId], account: privateKeyToAccount(POSTER) });
+    await anvil.publicClient.waitForTransactionReceipt({ hash: await contractAs(POSTER).wallet.writeContract(request) });
+    await aWorker(said, { preparing }).tick();
+    expect(await store.read(name)).toBeUndefined();
+  }, 120_000);
+
   test("work that passes: the pod is paid, the verdict and its receipt are on the contract, and the title is recorded", async () => {
     const said: string[] = [];
     const job = await aJob("prepared-passes", WORKING);

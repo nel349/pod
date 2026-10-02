@@ -5,14 +5,16 @@ import { join } from "node:path";
 import { createTestClient, http, parseEther, type Address } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { podJobsV2Abi, readJobV2, readWritingMoney } from "../jobsV2.ts";
-import { PREPARING_FOLDER } from "../folders.ts";
+import { PREPARING_FOLDER, REPOSITORIES_FOLDER } from "../folders.ts";
 import { MODES } from "../job.ts";
 import { PreparingStore } from "../preparing/index.ts";
 import { refundByNumberPath, ROUTES } from "../routes.ts";
 import { serve, type Services } from "../server.ts";
 import { servicesFor } from "../services.ts";
 import { JobStore } from "../store.ts";
-import { COPY } from "../web/post/state/index.ts";
+import { COPY, keptSetUpKey } from "../web/post/state/index.ts";
+import { IMAGE } from "../sandbox.ts";
+import { Worker } from "../worker/index.ts";
 import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
 import { Browser, browserAvailable } from "./support/browser.ts";
 import { COAT_IDEA, DRY, GOOD_REPLY, replying, WET, writerWith } from "./support/coat.ts";
@@ -76,6 +78,21 @@ afterAll(async () => {
   await services?.preparing?.whenIdle();
   anvil?.stop();
 });
+
+/** The first time the page sends the lines, the connection drops, as it would with the tab closed. */
+const DROP_THE_SEND_ONCE = `(() => {
+  const send = window.fetch.bind(window);
+  window.fetch = (url, options) => {
+    if (String(url) === ${JSON.stringify(ROUTES.preparing)} && options?.method === "POST" && !sessionStorage.getItem("dropped")) {
+      sessionStorage.setItem("dropped", "yes");
+      return Promise.reject(new TypeError("Failed to fetch"));
+    }
+    return send(url, options);
+  };
+})();`;
+
+/** Where this browser keeps a payment not yet set up, on this chain and contract. */
+const KEPT_KEY = (): string => keptSetUpKey(31337, jobs);
 
 /** A fresh browser with the poster's wallet in it, and whatever else the test puts in every page first. */
 async function aBrowser(...before: readonly string[]): Promise<Browser> {
@@ -157,18 +174,7 @@ describe.skipIf(!available)("a stranger posts a job that is prepared before it o
   }, 480_000);
 
   test("paid, then the lines never reached the server: on return the page sends them, and nothing is paid twice", async () => {
-    // the first time the page sends the lines, the connection drops, as it would with the tab closed
-    const dropOnce = `(() => {
-      const send = window.fetch.bind(window);
-      window.fetch = (url, options) => {
-        if (String(url) === ${JSON.stringify(ROUTES.preparing)} && options?.method === "POST" && !sessionStorage.getItem("dropped")) {
-          sessionStorage.setItem("dropped", "yes");
-          return Promise.reject(new TypeError("Failed to fetch"));
-        }
-        return send(url, options);
-      };
-    })();`;
-    const page = await aBrowser(dropOnce);
+    const page = await aBrowser(DROP_THE_SEND_ONCE);
     await describeTheJob(page, "a-coat-sent-on-return");
     const held = await anvil.publicClient.getBalance({ address: jobs });
     await page.click("#submit");
@@ -244,8 +250,93 @@ describe.skipIf(!available)("a stranger posts a job that is prepared before it o
     await page.open(base + refundByNumberPath(id, jobs));
     await page.until(`document.querySelector("#standing")?.dataset.standing === "take back now"`, "the page to offer it now", 30, REFUND_SAYS);
     await page.click("#refund");
-    await page.until(`document.querySelector("#said").textContent.includes("on its way back")`, "the money to come back", 90, REFUND_SAYS);
+    await page.until(`document.querySelector("#said").textContent.includes("has paid 0.1 ETH back to the poster")`, "the money to come back", 90, REFUND_SAYS);
     expect((await readJobV2({ address: jobs, publicClient: anvil.publicClient }, BigInt(id)))?.state).toBe("refunded");
+  }, 480_000);
+
+  test("a kept payment whose job was taken back since is let go on return, with its lines, and Yours forgets it too", async () => {
+    const page = await aBrowser(DROP_THE_SEND_ONCE);
+    await describeTheJob(page, "a-coat-taken-back-elsewhere");
+    await page.click("#submit");
+    await page.until(`document.querySelector("#said").textContent.includes("held by the contract")`, "sending to fail after paying", 90, SAID);
+    const onChainId = await page.evaluate<string>(`JSON.parse(localStorage.getItem(${JSON.stringify(KEPT_KEY())})).onChainId`);
+    // taken back from another browser, before the lines ever reached the server
+    const payer = anvil.wallet(POSTER);
+    const { request } = await anvil.publicClient.simulateContract({ address: jobs, abi: podJobsV2Abi, functionName: "takeBack", args: [BigInt(onChainId)], account: payer.account });
+    await anvil.publicClient.waitForTransactionReceipt({ hash: await payer.writeContract(request) });
+
+    const kept = await page.evaluate<string>(`localStorage.getItem(${JSON.stringify(KEPT_KEY())})`);
+    await page.open(base + ROUTES.post);
+    await page.until(`document.querySelector("#said")?.textContent === ${JSON.stringify(COPY.payFirst.cameBackMovedOn)}`, "the page to let the payment go", 30, SAID);
+    expect(await page.evaluate<boolean>(`document.querySelector("#paid-as") === null`)).toBe(true);
+    expect(await page.evaluate<string>(`document.querySelector("#idea").value`)).toBe("");
+    expect(await page.evaluate<string | null>(`localStorage.getItem(${JSON.stringify(KEPT_KEY())})`)).toBeNull();
+
+    // your own page, finding the same payment kept, lets it go too rather than offering to finish it
+    await page.evaluate(`localStorage.setItem(${JSON.stringify(KEPT_KEY())}, ${JSON.stringify(kept)})`);
+    await page.open(base + ROUTES.yours);
+    await page.until(`localStorage.getItem(${JSON.stringify(KEPT_KEY())}) === null`, "your own page to let it go", 30);
+    expect(await page.evaluate<boolean>(`document.querySelector("#kept") === null`)).toBe(true);
+  }, 300_000);
+
+  test("a refund link naming a contract the job is not on, or one this server does not answer to, moves nothing", async () => {
+    const page = await aBrowser();
+    await describeTheJob(page, "a-coat-linked-wrongly");
+    const id = await pay(page);
+    // the job is on the new contract; a link naming the first one for its number finds nothing there
+    await page.open(base + refundByNumberPath(id, old));
+    await page.until(`document.body.innerText.includes("there is no job ${id} on the contract")`, "the page to find nothing", 30, `document.body.innerText.slice(0, 300)`);
+    expect(await page.evaluate<boolean>(`document.querySelector("#refund") === null`)).toBe(true);
+    await page.open(base + refundByNumberPath(id, "0x00000000000000000000000000000000000000e1"));
+    await page.until(`document.body.innerText.includes("is not a contract this server answers to")`, "the page to refuse the contract", 30, `document.body.innerText.slice(0, 300)`);
+    expect(await page.evaluate<boolean>(`document.querySelector("#refund") === null`)).toBe(true);
+  }, 300_000);
+
+  test("reworded and written again, the fourth writing paid for on its own, and every writing counted", async () => {
+    const page = await aBrowser();
+    await describeTheJob(page, "a-coat-written-four-times");
+    const id = await pay(page);
+    await readTheChecks(page);
+    const at = { address: jobs, publicClient: anvil.publicClient };
+    /** Press write again, and wait until the chain has kept the writing's price and the page can be pressed again. */
+    const writeAgain = async (count: number): Promise<void> => {
+      await page.click("#write");
+      const deadline = Date.now() + 240_000;
+      while ((await readWritingMoney(at, BigInt(id))).kept < count) {
+        if (Date.now() > deadline) throw new Error(`writing ${count} was never kept. The page said: ${await page.evaluate<string>(SHOWN)}`);
+        await Bun.sleep(250);
+      }
+      await page.until(`!document.querySelector("#write").disabled && document.querySelector("#writing").dataset.state !== "busy"`, `the page to be ready after writing ${count}`, 60, SHOWN);
+      expect((await readWritingMoney(at, BigInt(id))).kept).toBe(count);
+    };
+    // a line said another way: the set shown is out of date until the checks are written again
+    await page.type('[data-lines="brief"] input', `${WET}, every time`);
+    await page.until(`document.querySelector("#written-verdict")?.dataset.state === "stale"`, "the set to be out of date", 30, SHOWN);
+    await writeAgain(2);
+    await writeAgain(3);
+    expect(await page.evaluate<string>(`document.querySelector("#writings-left").textContent`)).toBe(COPY.prepared.left(0));
+    expect(await page.evaluate<string>(`document.querySelector("#write").textContent`)).toBe(COPY.prepared.topUpAndWrite("0.05 ETH"));
+    const held = await anvil.publicClient.getBalance({ address: jobs });
+    await writeAgain(4);
+    // the fourth was paid for on its own, and kept like the others
+    expect(await anvil.publicClient.getBalance({ address: jobs })).toBe(held);
+    expect(await readWritingMoney(at, BigInt(id))).toMatchObject({ balance: 0n, reserved: 0n, kept: 4 });
+  }, 600_000);
+
+  test("approved and the tab closed at once, the job reaches the wall all the same", async () => {
+    const page = await aBrowser();
+    const name = "a-coat-left-behind";
+    await anOpenJob(page, name);
+    await page.stop();
+    browser = undefined;
+    const worker = new Worker({
+      store: new JobStore(directory), repositories: join(directory, REPOSITORIES_FOLDER), image: IMAGE, runnerKey: VALIDATOR, times: 1,
+      jobs: { address: old, publicClient: anvil.publicClient, wallet: anvil.wallet(VALIDATOR) },
+      prepared: { address: jobs, publicClient: anvil.publicClient, wallet: anvil.wallet(VALIDATOR) },
+      preparing: new PreparingStore(join(directory, PREPARING_FOLDER)), say: () => undefined,
+    });
+    for (let i = 0; i < 20 && !(await new JobStore(directory).read(name)); i++) await worker.tick();
+    expect((await new JobStore(directory).read(name))?.tile.verdict).toBe("running");
   }, 480_000);
 
   test("a payment the poster's wallet could not take waits for them, and they withdraw it", async () => {

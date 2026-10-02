@@ -12,6 +12,8 @@ import { preparingMessage, setUpMessage } from "../messages.ts";
 import type { Registries } from "../registry.ts";
 import { openJob } from "../publish.ts";
 import { PreparingOnTheWireSchema, preparingFromTheWire, preparingToTheWire } from "../preparing/records.ts";
+import { ROUTES } from "../routes.ts";
+import { handle } from "../server.ts";
 import { servicesFor, type ServicesInput } from "../services.ts";
 import { JobStore } from "../store.ts";
 import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
@@ -74,6 +76,11 @@ describe.skipIf(!available)("the server's services, from what it is told", () =>
     expect(services.market?.page.jobs).toBe(prepares);
     // the page says what writing costs before anybody pays
     expect(services.market?.page.writing).toEqual({ price: `${WRITING}`, included: 3 });
+    // checks are written only for a job paid for, and nothing is posted the old way round
+    for (const [method, path] of [["POST", ROUTES.writeChecks], ["GET", `${ROUTES.writeChecks}/x`], ["POST", ROUTES.postJob]] as const) {
+      const answer = await handle(new Request(`http://pod.test${path}`, { method, ...(method === "POST" ? { body: "{}" } : {}) }), built.store, services);
+      expect(answer.status).toBe(410);
+    }
 
     const poster = anvil.wallet(POSTER);
     const at = { address: prepares, publicClient: anvil.publicClient };
@@ -118,9 +125,25 @@ describe.skipIf(!available)("the server's services, from what it is told", () =>
     expect(listing?.jobs.map((job) => job.jobId)).toContain("an-old-job");
   }, 120_000);
 
-  test("a contract that does not prepare jobs, named as the one that does, is refused when the server starts", async () => {
-    await expect(servicesFor(await input({ jobs: old, earlier: old, writer: anvil.wallet(WRITER) })))
+  test("a contract named in the wrong place, or twice, is refused when the server starts", async () => {
+    const anotherFirst = await anvil.deploy("PodJobs", [privateKeyToAccount(VALIDATOR).address], DEPLOYER);
+    await expect(servicesFor(await input({ jobs: anotherFirst, earlier: old, writer: anvil.wallet(WRITER) })))
       .rejects.toThrow("does not prepare jobs");
+    // the new contract named with the old one forgotten would serve the old page against it
+    await expect(servicesFor(await input({ jobs: prepares }))).rejects.toThrow("which prepares jobs: set POD_OLD_JOBS_ADDRESS");
+    await expect(servicesFor(await input({ jobs: prepares, earlier: prepares, writer: anvil.wallet(WRITER) }))).rejects.toThrow("both name");
+    const anotherPrepares = await anvil.deploy("PodJobsV2", [privateKeyToAccount(VALIDATOR).address, privateKeyToAccount(WRITER).address, 10n, WRITING, 100_000n], DEPLOYER);
+    await expect(servicesFor(await input({ jobs: prepares, earlier: anotherPrepares, writer: anvil.wallet(WRITER) })))
+      .rejects.toThrow("it has to be the first contract");
+    await expect(servicesFor(await input({ jobs: prepares, earlier: "0x00000000000000000000000000000000000000e1", writer: anvil.wallet(WRITER) })))
+      .rejects.toThrow("where there is no contract");
+  });
+
+  test("a contract that takes written checks from its validator is refused, so the validator's key never lives on the web server", async () => {
+    const validator = privateKeyToAccount(VALIDATOR).address;
+    const sharesItsKey = await anvil.deploy("PodJobsV2", [validator, validator, 10n, WRITING, 100_000n], DEPLOYER);
+    await expect(servicesFor(await input({ jobs: sharesItsKey, earlier: old, writer: anvil.wallet(VALIDATOR) })))
+      .rejects.toThrow("takes written checks from its validator");
   });
 
   test("a writer key the contract does not take checks from is refused when the server starts", async () => {
