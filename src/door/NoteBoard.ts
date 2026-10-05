@@ -10,15 +10,19 @@
  *   read    the pod while the job runs, with the same signed statement the git door takes; anybody
  *           once the job has a verdict, when it is published with the rest of the job
  */
-import { isAddressEqual, recoverMessageAddress, type Address } from "viem";
+import { recoverMessageAddress, type Address } from "viem";
 import { bodyWithin, tooLarge } from "../body.ts";
 import { NO_STORE, SIGN_IN } from "../headers.ts";
 import { noteMessage } from "../messages.ts";
 import { LONGEST_NOTE, NoteSchema, type Note } from "../note.ts";
 import { ROUTES } from "../routes.ts";
 import { isPublished, type JobStore } from "../store.ts";
+import type { SignedWords } from "./credentials.ts";
 import { PerMinute, type Answer, type Doorkeeper } from "./Doorkeeper.ts";
 import { secondsNow } from "../clock.ts";
+
+/** How a refusal names a note nobody who may act signed */
+const OVER_THIS_NOTE: SignedWords = { whose: "the agent the note names", over: "over this note" };
 
 /** A request carrying a note, with room for the note, its signature and its field names */
 const MOST_A_NOTE_MAY_WEIGH = LONGEST_NOTE * 4 + 2000;
@@ -72,9 +76,8 @@ export class NoteBoard {
     } catch {
       return Response.json({ why: "that signature could not be read" }, { status: 401 });
     }
-    if (!isAddressEqual(signer, note.agent)) {
-      return Response.json({ why: "that signature is not from the agent the note names, over this note" }, { status: 401 });
-    }
+    const acting = await keeper.mayAct(signer, note.agent, job.value, OVER_THIS_NOTE);
+    if (!acting.ok) return Response.json({ why: acting.why }, { status: 401 });
     const notSeated = await keeper.notSeated(note.agent, parsed.data.role, job.value);
     if (notSeated) return Response.json({ why: notSeated }, { status: 403 });
     const closed = await keeper.closed(job.value);

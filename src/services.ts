@@ -20,6 +20,7 @@ import { BOX_SLOTS_FOLDER, CREDIT_FOLDER, PREPARING_FOLDER, PROVEN_FOLDER, REPOS
 import { holderOf } from "./handover.ts";
 import { readJob, readJobCount, readSeats, readTerms, readValidator } from "./jobs.ts";
 import { readJobV2, readWritingMoney, readWritingPrice, readWritingsIncluded, WriterKey } from "./jobsV2.ts";
+import { grantsFor, SESSION_KEY_PLUGIN } from "./mandate.ts";
 import type { MarketConfig } from "./market.ts";
 import { ownersFrom, type OwnedContract } from "./owners.ts";
 import { readerFor, type ChainReader } from "./posting.ts";
@@ -61,11 +62,17 @@ export async function servicesFor(input: ServicesInput): Promise<Services> {
   }
   await confirmTheContracts({ publicClient, jobs, ...(input.earlier ? { earlier: input.earlier } : {}), ...(input.writer ? { writer: input.writer.account.address } : {}) });
   const contract = { address: jobs, publicClient };
+  // a seat can be worked by a key its wallet granted, which the session key plugin is asked about.
+  // Where the plugin is not deployed, which is any chain the mandate does not run on, the doors take
+  // a seat's own key and nothing else, rather than refusing in words about a contract that is not there
+  const plugin = await publicClient.getCode({ address: SESSION_KEY_PLUGIN });
+  const grants = plugin && plugin !== "0x" ? grantsFor({ publicClient }) : undefined;
   // one doorkeeper for both of an agent's doors, so a seat is the same seat at each
   const keeper = new Doorkeeper({
     store,
     chain: doorChainAt(jobs, publicClient),
     ...(input.earlier ? { earlier: [doorChainAt(input.earlier, publicClient)] } : {}),
+    ...(grants ? { grants } : {}),
   });
   const book = new CreditBook(join(directory, CREDIT_FOLDER));
   // beside the jobs, so a poster who paid can still publish after the server restarts

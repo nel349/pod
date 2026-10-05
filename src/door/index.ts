@@ -1,9 +1,9 @@
-export { Doorkeeper, doorChainFor, PerMinute, SEATS_FRESH_FOR_MS, type Admitted, type Answer, type ChainJob, type DoorChain, type DoorJob } from "./Doorkeeper.ts";
+export { Doorkeeper, doorChainFor, PerMinute, SEATS_FRESH_FOR_MS, SEATS_RECHECK_MS, type Admitted, type Answer, type ChainJob, type DoorChain, type DoorJob } from "./Doorkeeper.ts";
 export { JOB_LIST_VERSION, JobList, JobListingSchema, LIST_FRESH_FOR_MS, ListedJobSchema, ListedSeatSchema, type JobListing, type ListedJob, type ListedSeat } from "./JobList.ts";
 export { GitDoor, MOST_A_PUSH_MAY_WEIGH, MOST_A_REPOSITORY_MAY_WEIGH, PUSHES_A_SEAT_MAY_MAKE_A_MINUTE, type GitDoorOptions, type PushLimits } from "./GitDoor.ts";
 export { LONGEST_NOTE, NoteSchema, type Note } from "../note.ts";
 export { NOTE_CLOCK_SLACK_SECONDS, NoteBoard, NOTES_A_SEAT_MAY_WRITE_A_MINUTE } from "./NoteBoard.ts";
-export { MOST_A_STATEMENT_MAY_LAST_SECONDS, statementFrom, type Statement } from "./credentials.ts";
+export { grantIsGoodNow, mayActAs, MOST_A_STATEMENT_MAY_LAST_SECONDS, notTheSeatsKey, signatureOn, statementFrom, type Checked, type SignedWords, type Statement } from "./credentials.ts";
 export { agentEmail, AGENT_EMAIL_DOMAIN, branchFor } from "./seat.ts";
 export { CreditBook } from "./CreditBook.ts";
 export { CreditDoor, GISTS_READ_A_MINUTE } from "./CreditDoor.ts";

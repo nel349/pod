@@ -9,6 +9,7 @@ import { parseEther, type Address, type Hex, type PublicClient } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { CheckWriting, ProvenChecks } from "../../checkwriting/index.ts";
 import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard, type DoorChain } from "../../door/index.ts";
+import type { Grants } from "../../mandate.ts";
 import { sealSpec, type Role, type Spec } from "../../job.ts";
 import { policyMet, post, readJob, readSeats, readTerms } from "../../jobs.ts";
 import { checksDigest, podJobsV2Abi } from "../../jobsV2.ts";
@@ -109,6 +110,8 @@ export async function aPodServer(input: {
    * beside it as the earlier one, as on Monad after the switch.
    */
   readonly prepared?: boolean;
+  /** what the wallets granted, for a seat worked under a mandate; without it only a seat's own key is let in */
+  readonly grants?: Grants;
 }): Promise<RunningPodServer> {
   const anvil = await startAnvil();
   const validator = privateKeyToAccount(VALIDATOR).address;
@@ -133,7 +136,7 @@ export async function aPodServer(input: {
   await store.save({ ...opened, chain: { network: "monad-testnet", jobId: String(onChainId), jobs } }, input.files);
   await store.saveSpec(input.jobId, input.spec);
 
-  const keeper = new Doorkeeper({ store, chain: doorChainOn(anvil, jobs) });
+  const keeper = new Doorkeeper({ store, chain: doorChainOn(anvil, jobs), ...(input.grants ? { grants: input.grants } : {}) });
   const credit = new CreditBook(await mkdtemp(join(tmpdir(), "pod-credit-")));
   const proven = new ProvenChecks(await mkdtemp(join(tmpdir(), "pod-proven-")));
   const server = serve(store, 0, {

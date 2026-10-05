@@ -8,9 +8,14 @@
  *
  *   name       0x…                                the seat's key
  *   password   <role>.<until>.<signature>         until is seconds since 1970
+ *
+ * The name is the seat, which is an address on the contract. The signature is from that address, or
+ * from a key its wallet granted: an agent working under a mandate signs with a key of its owner's
+ * wallet, and the chain, not this server, says whether it may.
  */
-import { isAddress, isAddressEqual, isHex, recoverMessageAddress, type Address, type Hex } from "viem";
+import { isAddress, isHex, recoverMessageAddress, type Address, type Hex } from "viem";
 import type { Role } from "../job.ts";
+import type { GrantWindow, Grants } from "../mandate.ts";
 import { doorMessage } from "../messages.ts";
 import { SEATS } from "../seal.ts";
 import { branchFor } from "./seat.ts";
@@ -75,25 +80,66 @@ export function statementFrom(header: string | null): Checked<Statement> {
 }
 
 /**
- * Whether a statement is good now: not run out, not good for longer than a statement may be, and
- * signed by the key it names, over the sentence for this job, this seat and this branch.
+ * Who signed a statement that is good now: not run out, not good for longer than a statement may be,
+ * and a signature that can be read over the sentence for this job, this seat and this branch. Whether
+ * that signer may act as the seat the statement names is the next question, and `mayActAs` answers it.
  */
-export async function statementHolds(
+export async function signatureOn(
   statement: Statement,
   about: { readonly jobId: string; readonly onChainId: string; readonly jobs: Address },
   nowSeconds: number,
-): Promise<Checked<Statement>> {
+): Promise<Checked<Address>> {
   const inTime = isGoodNow(statement.until, nowSeconds);
   if (!inTime.ok) return inTime;
   const message = doorMessage({ ...about, role: statement.role, branch: branchFor(statement.role, statement.agent), until: statement.until });
-  let signer: Address;
   try {
-    signer = await recoverMessageAddress({ message, signature: statement.signature });
+    return { ok: true, value: await recoverMessageAddress({ message, signature: statement.signature }) };
   } catch {
     return { ok: false, why: "that signature could not be read" };
   }
-  if (!isAddressEqual(signer, statement.agent)) {
-    return { ok: false, why: "that signature is not from the address in the name, over the statement for this job and this seat" };
+}
+
+/** How a refusal names what was signed, and who it should have been signed by. */
+export interface SignedWords {
+  /** who the signature should be from, as the request named them */
+  readonly whose: string;
+  /** what was signed, as the refusal says it */
+  readonly over: string;
+}
+
+/** The one refusal for a signature that is neither the seat's own nor from a key its wallet granted. */
+export const notTheSeatsKey = (words: SignedWords): string =>
+  `that signature is not from ${words.whose}, nor from a key its wallet granted, ${words.over}`;
+
+/**
+ * Whether a key a wallet granted may be used now: inside the window the wallet granted it. A zero
+ * start is no wait and a zero end is no end, the way the plugin reads its own window.
+ */
+export function grantIsGoodNow(window: GrantWindow, nowSeconds: number): boolean {
+  return (window.from === 0 || nowSeconds >= window.from) && (window.until === 0 || nowSeconds < window.until);
+}
+
+/**
+ * Whether this signer may act as this seat under a mandate: the seat's wallet granted it this key,
+ * and the grant is good now. The seat's own key never reaches here, and neither does a seat the
+ * contract does not show taken, so a knock from a made-up key costs the chain nothing.
+ */
+export async function mayActAs(input: {
+  readonly signer: Address;
+  readonly agent: Address;
+  readonly nowSeconds: number;
+  readonly grants: Grants;
+  readonly words: SignedWords;
+}): Promise<Checked<Address>> {
+  let window: GrantWindow | undefined;
+  try {
+    window = await input.grants.granted(input.agent, input.signer);
+  } catch {
+    return { ok: false, why: "the chain could not be asked whether that key was granted: try again in a moment" };
   }
-  return { ok: true, value: statement };
+  if (!window) return { ok: false, why: notTheSeatsKey(input.words) };
+  if (!grantIsGoodNow(window, input.nowSeconds)) {
+    return { ok: false, why: "that key's grant has run out: grant it again in the wallet, or sign with the seat's own key" };
+  }
+  return { ok: true, value: input.signer };
 }

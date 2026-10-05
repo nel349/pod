@@ -4,20 +4,29 @@
  * One answer, from one place: a job is one that has money on this contract, a seat is one the
  * contract says the key holds, and a job's window is the one the contract measures by the chain's
  * own clock. The doors differ in what they let a seat do once it is in, not in who a seat is.
+ *
+ * A seat signs for itself, or a key its wallet granted signs for it: an agent working under a
+ * mandate was never handed the seat's key. Which keys a wallet granted is the chain's answer too,
+ * read from the session key plugin.
  */
 import { isAddressEqual, type Address } from "viem";
 import type { HeldSeat, JobState } from "../jobs.ts";
 import type { Role } from "../job.ts";
 import { isWallName } from "../routes.ts";
 import type { JobRecord, JobStore } from "../store.ts";
-import { statementFrom, statementHolds, type Statement } from "./credentials.ts";
+import type { Grants } from "../mandate.ts";
+import { mayActAs, notTheSeatsKey, signatureOn, statementFrom, type Checked, type SignedWords, type Statement } from "./credentials.ts";
 import { secondsNow } from "../clock.ts";
 
 /** What the doors ask the chain. The contract is the only list of who sits in a pod, and the only clock for its window */
 export interface DoorChain {
   readonly jobs: Address;
   job(onChainId: bigint): Promise<ChainJob | undefined>;
-  seats(onChainId: bigint): Promise<readonly HeldSeat[]>;
+  /**
+   * Who holds each seat. A copy read a moment ago may be used; asked `afresh`, the chain is read again,
+   * unless it was read just now, for a key the copy does not show seated.
+   */
+  seats(onChainId: bigint, afresh?: boolean): Promise<readonly HeldSeat[]>;
   /** what each seat pays and costs to take */
   terms(onChainId: bigint): Promise<Readonly<Record<Role, { readonly pay: bigint; readonly deposit: bigint }>>>;
   /** the time of the chain's latest block, which is the time the contract's window is measured by */
@@ -57,12 +66,21 @@ export type Answer<T> =
 
 const refused = (status: number, why: string, challenge = false): Answer<never> => ({ ok: false, status, why, challenge });
 
+/** How a refusal at the git door names a statement nobody who may act signed */
+const OVER_THE_STATEMENT: SignedWords = { whose: "the address in the name", over: "over the statement for this job and this seat" };
+
 export class Doorkeeper {
   /**
    * `chain` is the contract jobs are taken on now; `earlier` are contracts whose jobs are still on the
    * wall, so their seats keep their notes and their repositories after the switch to a newer one.
    */
-  constructor(private readonly options: { readonly store: JobStore; readonly chain: DoorChain; readonly earlier?: readonly DoorChain[] }) {}
+  constructor(private readonly options: {
+    readonly store: JobStore;
+    readonly chain: DoorChain;
+    readonly earlier?: readonly DoorChain[];
+    /** what a wallet granted, read from the chain; without it only a seat's own key is let in */
+    readonly grants?: Grants;
+  }) {}
 
   get jobs(): Address {
     return this.options.chain.jobs;
@@ -88,21 +106,46 @@ export class Doorkeeper {
   async admit(request: Request, job: DoorJob): Promise<Answer<Admitted>> {
     const read = statementFrom(request.headers.get("authorization"));
     if (!read.ok) return refused(401, read.why, true);
+    const statement = read.value;
     const about = { jobId: job.jobId, onChainId: String(job.onChainId), jobs: job.chain.jobs };
-    const held = await statementHolds(read.value, about, secondsNow());
-    if (!held.ok) return refused(403, held.why);
-    const notSeated = await this.notSeated(held.value.agent, held.value.role, job);
+    const signed = await signatureOn(statement, about, secondsNow());
+    if (!signed.ok) return refused(403, signed.why);
+    const acting = await this.mayAct(signed.value, statement.agent, job, OVER_THE_STATEMENT);
+    if (!acting.ok) return refused(403, acting.why);
+    const notSeated = await this.notSeated(statement.agent, statement.role, job);
     if (notSeated) return refused(403, notSeated);
-    return { ok: true, value: { ...job, statement: held.value } };
+    return { ok: true, value: { ...job, statement } };
+  }
+
+  /**
+   * Whether this signature may act as this seat: the seat's own key, as ever, or a key the seat's
+   * wallet granted. The plugin is asked only for a seat the contract shows taken, so a knock with a
+   * made-up key is refused without reading the chain at all.
+   */
+  async mayAct(signer: Address, agent: Address, job: DoorJob, words: SignedWords): Promise<Checked<Address>> {
+    if (isAddressEqual(signer, agent)) return { ok: true, value: signer };
+    const { grants } = this.options;
+    if (!grants || (await this.seatsOf(agent, job)).length === 0) return { ok: false, why: notTheSeatsKey(words) };
+    return mayActAs({ signer, agent, nowSeconds: secondsNow(), grants, words });
   }
 
   /** Why this key cannot act as this seat on this job, or nothing if it holds it. */
   async notSeated(agent: Address, role: Role, job: DoorJob): Promise<string | undefined> {
-    const { onChainId } = job;
-    const mine = (await job.chain.seats(onChainId)).filter((seat) => isAddressEqual(seat.agent, agent));
+    const mine = await this.seatsOf(agent, job, role);
     if (mine.some((seat) => seat.role === role)) return undefined;
-    if (mine.length > 0) return `that key holds the ${mine.map((seat) => seat.role).join(" and ")} seat on job ${onChainId}, not the ${role} seat`;
-    return `that key holds no seat on job ${onChainId}. Take one on the contract first`;
+    if (mine.length > 0) return `that key holds the ${mine.map((seat) => seat.role).join(" and ")} seat on job ${job.onChainId}, not the ${role} seat`;
+    return `that key holds no seat on job ${job.onChainId}. Take one on the contract first`;
+  }
+
+  /** Which seats this address holds on this job, read from the chain; `role` is the seat it asked about. */
+  private async seatsOf(agent: Address, job: DoorJob, role?: Role): Promise<readonly HeldSeat[]> {
+    const heldBy = async (afresh: boolean): Promise<readonly HeldSeat[]> =>
+      (await job.chain.seats(job.onChainId, afresh)).filter((seat) => isAddressEqual(seat.agent, agent));
+    // seats are only ever added: a key the copy shows seated is seated, and one it does not may have
+    // taken its seat a moment ago, so the chain is asked again before it is refused
+    const mine = await heldBy(false);
+    const shows = role === undefined ? mine.length > 0 : mine.some((seat) => seat.role === role);
+    return shows ? mine : heldBy(true);
   }
 
   /** Why nothing more may be added to this job, or nothing if its window is open. */
@@ -152,6 +195,12 @@ const A_MINUTE_MS = 60_000;
  */
 export const SEATS_FRESH_FOR_MS = 2_000;
 
+/**
+ * How soon after a read the seats may be read again for a key not shown seated. A key taking its seat
+ * is let in at once; made-up keys knocking cost at most two reads a second.
+ */
+export const SEATS_RECHECK_MS = 500;
+
 /** The contract, read the way the doors need it. */
 export function doorChainFor(input: {
   readonly jobs: Address;
@@ -168,9 +217,9 @@ export function doorChainFor(input: {
       // the contract answers zeroes for a job that was never posted, rather than refusing
       return /^0x0{40}$/i.test(found.poster) ? undefined : found;
     },
-    seats(onChainId) {
+    seats(onChainId, afresh = false) {
       const kept = seatsRead.get(onChainId);
-      if (kept && Date.now() - kept.at < SEATS_FRESH_FOR_MS) return kept.seats;
+      if (kept && Date.now() - kept.at < (afresh ? SEATS_RECHECK_MS : SEATS_FRESH_FOR_MS)) return kept.seats;
       const seats = input.readSeats(onChainId);
       seatsRead.set(onChainId, { at: Date.now(), seats });
       // a read that failed is not kept: the next knock reads again
