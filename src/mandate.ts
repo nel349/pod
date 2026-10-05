@@ -101,8 +101,11 @@ export const MANDATE_STEPS: readonly { readonly id: StepId; readonly where: Wher
   { id: "watch", where: "phone" },
 ];
 
-/** The wallet, which opens in a phone's browser with nothing to install */
-export const WALLET_ADDRESS = "https://kuiralabs.github.io/mandate/";
+/**
+ * The wallet, which opens in a phone's browser with nothing to install. The preview, because it is
+ * the one that runs on Monad: the wallet at /mandate/ is the Arc one and does not know this chain.
+ */
+export const WALLET_ADDRESS = "https://kuiralabs.github.io/mandate-next/";
 
 /** Teaches an agent POD: the seats, the doors, and what each seat does */
 export const SKILL_INSTALL = "npx skills add nel349/pod";
