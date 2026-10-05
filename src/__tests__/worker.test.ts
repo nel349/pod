@@ -486,7 +486,9 @@ describe.skipIf(!available)("the worker", () => {
     const worker = aWorker(said);
     await untilSettled(worker, said, async () => (await readJob(reading(), job.onChainId)).state === "refunded");
     const key = await asksForItsVerdict(job.pod.qa, qaId, job.jobId);
-    await worker.tick();
+    // a look that could not read the registry leaves it to the next one, by design: so this waits for
+    // the answer rather than for one look, and says what the worker said if it never comes
+    await untilSettled(worker, said, async () => (await answerTo(key)).responseHash !== NOTHING);
     const answered = await answerTo(key);
     expect(answered.tag).toBe("pod.qa");
     expect(answered.response).toBe(0);
