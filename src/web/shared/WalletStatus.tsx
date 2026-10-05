@@ -61,6 +61,28 @@ function PasskeyConnected({ address, market }: { readonly address: `0x${string}`
   );
 }
 
+/**
+ * A passkey wallet this browser has made before, with its key not in this page: after a reload, a new
+ * tab, or the lock that follows a quiet quarter of an hour. Nothing is being connected, so it does not
+ * say connect: the wallet is theirs and it is shut. One press, one passkey, and it is open again, with
+ * no panel and nothing to choose, because there is nothing to decide.
+ */
+function OpenMine({ onOpen, onBrowserWallet, isBusy }: {
+  readonly onOpen: () => void;
+  readonly onBrowserWallet: (() => void) | undefined;
+  readonly isBusy: boolean;
+}): ReactElement {
+  return (
+    <>
+      <button type="button" id="open-wallet" className="primary small" disabled={isBusy}
+        aria-label={CHROME.wallet.passkey.openMineLabel} onClick={onOpen}>
+        {isBusy ? CHROME.wallet.connecting : CHROME.wallet.passkey.openMine}
+      </button>
+      {onBrowserWallet && <button type="button" className="change" onClick={onBrowserWallet}>{CHROME.wallet.passkey.orBrowser}</button>}
+    </>
+  );
+}
+
 /** Nothing connected: the button that opens the two ways to connect. */
 function Connect(): ReactElement {
   const config = useConfig();
@@ -70,6 +92,20 @@ function Connect(): ReactElement {
   const connect = useConnect();
   const connection = useConnection();
   const isBusy = passkey.isBusy || connect.isPending || connection.status === "connecting" || connection.status === "reconnecting";
+  const useBrowserWallet = (): void => { panel.close(); connect.mutate({ connector: injectedConnector(config) }); };
+  // a wallet this browser already has is opened, not connected: no choice is left to make
+  if (passkey.isRemembered) {
+    return (
+      <>
+        <OpenMine onOpen={passkey.openAgain} onBrowserWallet={hasBrowserWallet ? useBrowserWallet : undefined} isBusy={isBusy} />
+        {passkey.problem && (
+          <span className="wrong" role="status">
+            {passkey.problem.kind === "cancelled" ? CHROME.wallet.panel.cancelled : CHROME.wallet.panel.failed(passkey.problem.why)}
+          </span>
+        )}
+      </>
+    );
+  }
   return (
     <>
       <button type="button" id="connect-wallet" aria-expanded={panel.isOpen} aria-controls="wallet-panel" onClick={panel.toggle}>
@@ -84,7 +120,7 @@ function Connect(): ReactElement {
           on={{
             makePasskeyWallet: passkey.make,
             openPasskeyWallet: passkey.openAgain,
-            useBrowserWallet: () => { panel.close(); connect.mutate({ connector: injectedConnector(config) }); },
+            useBrowserWallet,
             close: panel.close,
           }}
         />

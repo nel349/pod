@@ -54,6 +54,10 @@ export const CHROME = {
       hidePhrase: "Hide the words",
       lock: "Lock the wallet",
       lockSays: "Locked, its key is forgotten by this page; your passkey opens it again.",
+      /** the header, when this browser has a passkey wallet and the page does not hold its key */
+      openMine: "Open my wallet",
+      openMineLabel: "Open your passkey wallet: its key is never stored, so opening it asks your passkey",
+      orBrowser: "Use a browser wallet",
     },
   },
 } as const;

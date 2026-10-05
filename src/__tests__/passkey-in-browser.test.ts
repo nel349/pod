@@ -94,11 +94,23 @@ async function shownAddressWhenOpen(page: Browser): Promise<string> {
   return shownAddress(page);
 }
 
-/** Lock the open wallet from its panel; the header goes back to offering to connect. */
+/** Lock the open wallet from its panel; the header goes back to offering to open it again. */
 async function lock(page: Browser): Promise<void> {
   await page.click("#wallet-details");
   await page.click("#lock-wallet");
-  await page.until(`document.querySelector("#connect-wallet")`, "the header to offer connecting again", 30, HEADER);
+  await page.until(`document.querySelector("#open-wallet")`, "the header to offer opening the wallet again", 30, HEADER);
+}
+
+/**
+ * Press the header's one offer for a wallet this browser already has, which is a passkey prompt and
+ * nothing else: no panel, and no choice to make, because there is none left.
+ */
+async function openMine(page: Browser): Promise<void> {
+  await page.until(`document.querySelector("#open-wallet")?.textContent === ${JSON.stringify(CHROME.wallet.passkey.openMine)}`, "the header to offer opening the wallet", 30, HEADER);
+  // nothing to choose from: the panel that asks which kind of wallet is not there
+  if (await page.evaluate<boolean>(`document.querySelector("#connect-wallet") !== null`)) throw new Error("the header still asks which wallet to connect");
+  await page.click("#open-wallet");
+  await page.until(`document.querySelector("#wallet-details")`, "the passkey wallet to be open again", 30, HEADER);
 }
 
 /** Open the wallet panel and press its first offer, then wait for the wallet to be connected. */
@@ -174,18 +186,18 @@ describe.skipIf(!available)("a stranger with no browser wallet makes one from a 
     await page.until(`document.querySelector("#standing")?.textContent.startsWith("Approved")`, "the job's page again, by the back button", 30, SHOWN);
     expect(await page.evaluate<boolean>(`window.__samePage === true`)).toBe(true);
 
-    // locked, the page forgets the key; the same passkey opens the same wallet, and opening is now the first offer
+    // locked, the page forgets the key; the same passkey opens the same wallet, in one press
     await lock(page);
-    await pressThePasskeyOffer(page, CHROME.wallet.panel.open);
+    await openMine(page);
     expect(await shownAddress(page)).toBe(address);
 
     // a reload connects nothing on its own: the key lived only in the page. The approved job is public, so
     // its page says where it stands without asking for a wallet, and the header asks the passkey again
     await page.open(`${base}${ROUTES.post}/${id}`);
-    await page.until(`document.querySelector("#connect-wallet")`, "the header to offer connecting after a reload", 30, HEADER);
+    await page.until(`document.querySelector("#open-wallet")`, "the header to offer opening the wallet after a reload", 30, HEADER);
     await page.until(`document.querySelector("#standing")?.textContent.startsWith("Approved")`, "the job's page to say where it stands", 30, SHOWN);
     expect(await page.evaluate<boolean>(`document.querySelector("#connect") === null`)).toBe(true);
-    await pressThePasskeyOffer(page, CHROME.wallet.panel.open);
+    await openMine(page);
     expect(await shownAddress(page)).toBe(address);
   }, 480_000);
 
