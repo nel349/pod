@@ -13,6 +13,7 @@ import { serve, type Market } from "../server.ts";
 import { JobStore, type JobRecord } from "../store.ts";
 import { CheckWriting, ProvenChecks } from "../checkwriting/index.ts";
 import { SITE } from "../web/site/copy.ts";
+import { CHROME } from "../web/shared/copy.ts";
 import { Browser, browserAvailable } from "./support/browser.ts";
 import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
 import { walletInThePage } from "./support/wallet.ts";
@@ -172,6 +173,17 @@ describe.skipIf(!available)("the pages the server draws, in a browser", () => {
     await page.until(`document.querySelector(".not-their-wallet")`, "the page to say this is not the wallet that paid");
     expect(await text(page, ".not-their-wallet")).toContain(SITE.job.money.notTheirWallet("0x3C44…93BC", "0x7099…79C8"));
     expect(await page.evaluate<boolean>(`!!document.querySelector(".not-their-wallet button")`)).toBe(true);
+    expect(await errors(page)).toEqual([]);
+  }, 120_000);
+
+  test("on the agents page, the line an agent is told to run is one press away, and the press copies it", async () => {
+    const page = await openAt(ROUTES.agents, false);
+    const line = await text(page, ".copyable pre");
+    expect(line).toContain(ROUTES.guide);
+    await page.click(".copyable .copy");
+    // the button says it copied only once the clipboard has taken the line; reading the clipboard
+    // back needs a permission a headless browser does not give, and the write is what this is about
+    await page.until(`document.querySelector(".copyable .copy")?.textContent === ${JSON.stringify(CHROME.copy.copied)}`, "the button to say it copied", 10);
     expect(await errors(page)).toEqual([]);
   }, 120_000);
 

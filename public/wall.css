@@ -217,6 +217,38 @@ pre.repeat {
   overflow-wrap: normal;
 }
 
+/* a seat's name and its share each read on one line; what it does takes the room that is left */
+.record th[scope="row"] { white-space: nowrap; }
+.record th:last-child, .record td:last-child { white-space: nowrap; text-align: right; }
+
+/* a row of things to press or follow, which wraps as a row rather than running into itself */
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+
+/* a line the reader is meant to type or copy: wrapped, rather than cut off at the sheet's edge */
+pre.repeat.wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* a line with a button that copies it. On a phone the button sits under the line, where it cannot
+   cover it; from a tablet up it sits in the line's own corner, which costs no height */
+.copyable { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin: 0 0 16px; }
+.copyable pre.repeat { align-self: stretch; margin: 0; }
+.copyable .copy {
+  padding: 5px 12px;
+  font: 700 11px/1.4 var(--type);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--yellow);
+  border: 2px solid var(--ink);
+  cursor: pointer;
+}
+.copyable .copy:hover, .copyable .copy:focus-visible { background: var(--pink); }
+
+@media (min-width: 481px) {
+  .copyable { display: block; position: relative; }
+  .copyable pre.repeat { padding-right: 92px; }
+  .copyable .copy { position: absolute; top: 10px; right: 10px; }
+}
+
 .sheet a:not(.primary):not(.agent) { color: var(--ink); text-decoration-thickness: 2px; text-underline-offset: 3px; }
 
 /* ================= an agent, a receipt, your own page ================= */

@@ -8,6 +8,7 @@ import {
   jobView, moneyAt, needsTheChainForMoney, receiptView, renderSite, tileView, unpublishedView, type AgentFactsView, type SiteData, type SitePage,
 } from "../web/site/index.ts";
 import { lengthOf, SITE, timeLeft, whenInUTC } from "../web/site/copy.ts";
+import { CONNECTOR_INSTALL, MANDATE_STEPS, SKILL_INSTALL, WALLET_ADDRESS } from "../mandate.ts";
 import type { SignedReceipt } from "../receipt.ts";
 
 const LEAD = "0x00000000000000000000000000000000000000a1";
@@ -378,13 +379,25 @@ describe("a job paid for and never published", () => {
 });
 
 describe("the page for bringing an agent", () => {
-  test("says what each seat does and is paid, what a seat costs, and how to run ours against this site", () => {
+  test("says what each seat does and is paid, what a seat costs, and where to point an agent", () => {
     const html = draw({ page: "agents" });
     expect(html).toContain(`${SHARES.builder}%`);
     expect(html).toContain(SITE.agents.deposit(DEPOSIT_PERCENT));
-    expect(html).toContain(`--server ${SITE_ADDRESS}`);
+    // the address an agent is given is this site's own, and it is one press away
+    expect(html).toContain(`${SITE_ADDRESS}${ROUTES.guide}`);
+    expect(html).toContain('class="copyable"');
     expect(html).toContain(`href="${ROUTES.guide}"`);
     expect(html).toContain(`href="${ROUTES.jobList}"`);
+  });
+
+  test("the mandate is the five steps, in the order the wallet and the connector take them, each line one press away", () => {
+    const html = draw({ page: "agents" });
+    const steps = [...html.matchAll(/data-step="(\w+)" data-where="(\w+)"/g)].map(([, id, where]) => ({ id, where }));
+    expect(steps).toEqual(MANDATE_STEPS.map((step) => ({ id: step.id, where: step.where })));
+    for (const line of [SKILL_INSTALL, CONNECTOR_INSTALL]) expect(html).toContain(line);
+    // the sentence the owner gives their agent names this site, so it can be given as it is
+    expect(html).toContain(SITE.agents.mandate.sentence(SITE_ADDRESS));
+    expect(html).toContain(WALLET_ADDRESS);
   });
 });
 

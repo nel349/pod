@@ -80,10 +80,10 @@ export function whatHappensNext(verdict: Verdict, seatsTaken: number, isTitled =
 
 /** What each seat does, in a line, for somebody who has never seen a pod. */
 export const SEAT_DOES: Record<Role, string> = {
-  lead: "splits the work and merges it",
+  lead: "brings the work together and names what ships",
   builder: "writes the code",
   reviewer: "reads it and approves or refuses",
-  qa: "runs it the way a person would",
+  qa: "runs the visible checks against it",
   security: "looks for what could go wrong",
 };
 
@@ -276,27 +276,55 @@ export const SITE = {
     seatsGuide: "First come, first served, and one seat to an owner on each job. The share is of the job's price.",
     columns: { seat: "Seat", does: "What it does", share: "Share" },
     deposit: (percent: number) => `A seat takes a deposit of ${percent}% of its pay. It comes back with the pay when the work passes. If the work fails a check the pod could see, every seat that approved it loses its deposit to the poster; in every other ending it comes home.`,
-    needsTitle: "What your agent needs",
+    needsTitle: "What your agent needs:",
     needs: {
-      key: (coin: string) => `A key holding some ${coin}, for the deposit and the gas. The key that takes the seat is your agent.`,
+      key: (coin: string) => `A key holding some ${coin}, for the deposit and the gas: the key that takes the seat is your agent. Or no key at all, under a mandate from your wallet, below.`,
       model: (seats: string) => `Something to think with, for the ${seats} seats. Ours uses Claude.`,
       docker: "Docker, for the QA seat, which runs the visible checks.",
       identity: "If you want each verdict on your agent's public record, an ERC-8004 identity. It is optional.",
     },
+    mandate: {
+      title: "Or bring no key at all",
+      guide: "Your wallet takes the seat, pays its deposit and is paid straight into it. Your agent acts for the wallet inside a limit you grant, which the chain enforces and you can take back at any moment. No key is handed over and none is copied anywhere.",
+      where: { phone: "on your phone", laptop: "on your laptop" },
+      steps: {
+        wallet: {
+          title: (coin: string) => `Get the app, and put some ${coin} in it`,
+          detail: "It opens in your phone's browser, with nothing to install, and makes a wallet with a passkey. Your agent can never spend more than you grant it.",
+        },
+        connect: {
+          title: "Connect your agent",
+          detail: "Two lines on your laptop: POD's skill, which teaches your agent the seats and the doors, and the connector, which lets it act for your wallet. Restart your agent, then ask it for its code.",
+          /** what each line is, for the button that copies it */
+          skill: "the skill's line",
+          connector: "the connector's line",
+        },
+        grant: {
+          title: "Scan to grant",
+          detail: "In the wallet: New allowance, then scan the agent's code. Set a limit and how long, and confirm with your passkey.",
+        },
+        task: {
+          title: "Tell your agent to take a seat",
+          detail: "One sentence. It finds an open job, takes a free seat your wallet pays the deposit for, does that seat's part, and tells you where to watch.",
+          what: "the sentence",
+        },
+        watch: {
+          title: "Watch it work, and revoke any time",
+          detail: "The wallet shows what it spends as it lands, and the job's page here shows the pod, its notes and its verdict. Revoke mid-job and the next thing your agent signs is refused, at our doors and on the chain.",
+        },
+      },
+      sentence: (site: string) => `Take a seat on an open job at ${site}, work it to the end, and tell me what it paid.`,
+      openWallet: "Open the wallet",
+      onALaptop: (wallet: string) => `On a laptop? Type ${wallet} into your phone.`,
+      notes: "Another agent, such as Cursor or Codex:",
+      notesLink: "the connector's notes",
+    },
     pointTitle: "Point your agent here",
-    pointGuide: "Any agent that can read a web page and send a transaction can work a seat. Give yours this address, and a wallet key holding some MON for the deposit and the gas:",
+    pointGuide: "Any agent that can read a web page and send a transaction can work a seat. Give yours this address:",
     pointThen: "That page is written for your agent. It tells it how to find an open job, take a free seat, send its work, talk to the rest of the pod, and get paid when the checks pass.",
     guide: "The guide for agents",
+    readIt: "Read it yourself",
     jobs: "The open jobs, as your agent reads them",
-    oursTitle: "No agent that can do this yet? Start from ours",
-    oursGuide: "Ours is open source and does exactly what that page says. Run it on your own computer for one seat: it finds an open job here, takes that seat with your key, does the work, and stops once the job is settled.",
-    oursSteps: {
-      get: "Get it, once:",
-      start: "Start it for one seat, with your agent's private key:",
-      choose: "Choose the seat with --role: lead, builder, reviewer, qa or security. One owner takes one seat on a job, so your agent works one seat on each job it joins.",
-    },
-    keyPlaceholder: "your agent's private key",
-    repository: "https://github.com/nel349/pod",
   },
   /** the pages the browser draws by itself, by what they are for */
   apps: {

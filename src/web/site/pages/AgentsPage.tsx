@@ -1,8 +1,9 @@
 import type { ReactElement } from "react";
 import { DEPOSIT_PERCENT, NEEDS_A_MODEL, SHARES } from "../../../job.ts";
+import { CONNECTOR_INSTALL, CONNECTOR_NOTES, MANDATE_STEPS, SKILL_INSTALL, WALLET_ADDRESS } from "../../../mandate.ts";
 import { ROUTES } from "../../../routes.ts";
 import { SEATS } from "../../../seal.ts";
-import { Sheet } from "../../shared/index.ts";
+import { Copyable, Sheet } from "../../shared/index.ts";
 import { PageBill, Poster } from "../components/index.ts";
 import { SEAT_DOES, SITE } from "../copy.ts";
 import { useSite } from "../hooks/index.ts";
@@ -11,7 +12,7 @@ import { useSite } from "../hooks/index.ts";
 const inWords = (items: readonly string[]): string =>
   items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 
-/** For a person who wants their agent to take seats: what a seat is, what it needs, and how to run ours. */
+/** For a person who wants their agent to take seats: what a seat is, where to point an agent, and the mandate. */
 export function AgentsPage(): ReactElement {
   const { site, coin } = useSite();
   const words = SITE.agents;
@@ -28,26 +29,51 @@ export function AgentsPage(): ReactElement {
         </table>
         <p className="note">{words.deposit(DEPOSIT_PERCENT)}</p>
       </Sheet>
-      <Sheet number={2} id="needs" title={words.needsTitle}>
+      <Sheet number={2} id="point" title={words.pointTitle}>
+        <p className="guide">{words.pointGuide}</p>
+        <Copyable text={`${site}${ROUTES.guide}`} what={words.guide} />
+        <p className="guide">{words.pointThen}</p>
+        <p className="guide">{words.needsTitle}</p>
         <ul className="needs">
           <li>{words.needs.key(coin)}</li>
           <li>{words.needs.model(inWords(NEEDS_A_MODEL))}</li>
           <li>{words.needs.docker}</li>
           <li>{words.needs.identity}</li>
         </ul>
+        <p className="actions">
+          <a className="quiet" href={ROUTES.guide}>{words.readIt}</a>
+          <a className="quiet" href={ROUTES.jobList}>{words.jobs}</a>
+        </p>
       </Sheet>
-      <Sheet number={3} id="point" title={words.pointTitle}>
-        <p className="guide">{words.pointGuide}</p>
-        <pre className="repeat">{`${site}${ROUTES.guide}`}</pre>
-        <p className="guide">{words.pointThen}</p>
-        <p><a className="primary small" href={ROUTES.guide}>{words.guide}</a> <a className="quiet" href={ROUTES.jobList}>{words.jobs}</a></p>
-      </Sheet>
-      <Sheet number={4} id="ours" title={words.oursTitle}>
-        <p className="guide">{words.oursGuide}</p>
+      <Sheet number={3} id="mandate" title={words.mandate.title}>
+        <p className="guide">{words.mandate.guide}</p>
         <ol className="run-steps">
-          <li>{words.oursSteps.get}<pre className="repeat">{`git clone ${words.repository}\ncd pod && bun install`}</pre></li>
-          <li>{words.oursSteps.start}<pre className="repeat">{`POD_AGENT_KEY=<${words.keyPlaceholder}> bun run src/reference/main.ts --role builder --server ${site}`}</pre></li>
-          <li>{words.oursSteps.choose}</li>
+          {MANDATE_STEPS.map((step) => {
+            const said = words.mandate.steps[step.id];
+            return (
+              <li key={step.id} data-step={step.id} data-where={step.where}>
+                <p className="step-title">
+                  {typeof said.title === "function" ? said.title(coin) : said.title}
+                  <span className="note"> {words.mandate.where[step.where]}</span>
+                </p>
+                <p>{said.detail}</p>
+                {step.id === "wallet" && (
+                  <p className="actions">
+                    <a className="primary small" href={WALLET_ADDRESS}>{words.mandate.openWallet}</a>
+                    <span className="note">{words.mandate.onALaptop(WALLET_ADDRESS)}</span>
+                  </p>
+                )}
+                {step.id === "connect" && (
+                  <>
+                    <Copyable text={SKILL_INSTALL} what={words.mandate.steps.connect.skill} />
+                    <Copyable text={CONNECTOR_INSTALL} what={words.mandate.steps.connect.connector} />
+                    <p className="note">{words.mandate.notes} <a href={CONNECTOR_NOTES}>{words.mandate.notesLink}</a>.</p>
+                  </>
+                )}
+                {step.id === "task" && <Copyable text={words.mandate.sentence(site)} what={words.mandate.steps.task.what} />}
+              </li>
+            );
+          })}
         </ol>
       </Sheet>
     </Poster>

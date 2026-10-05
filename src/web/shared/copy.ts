@@ -7,6 +7,8 @@ export const CHROME = {
   home: "POD, back to the wall",
   nav: { wall: "The wall", post: "Post a job", yours: "Yours", agents: "Agents" },
   navLabel: "Where to go",
+  /** the button on a line the reader is meant to run */
+  copy: { copy: "Copy", copied: "Copied", failed: "Select it" },
   broken: (why: string) => `This page stopped working: ${why.replace(/\.$/, "")}. Nothing has been sent. Reload the page to start again.`,
   wallet: {
     none: "No wallet in this browser",
