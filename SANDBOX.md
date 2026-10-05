@@ -48,7 +48,7 @@ grade what comes back, so code that goes looking for them finds nothing on its o
 (`src/docker/BoxSlots.ts`), so the two together never run more boxes than the machine has room for.
 
 **The model call is locked down too**, though it is not a box. The check writer's model is the Claude
-CLI signed in on the machine, started with no tools, no MCP servers, no settings and no saved
+CLI on the machine, started with no tools, no MCP servers, no settings and no saved
 session, in an empty folder, with the prompt on standard input (`LOCKED_DOWN_FLAGS` in
 `src/broker.ts`). A stranger's sentence reaches a model that can only answer in text.
 

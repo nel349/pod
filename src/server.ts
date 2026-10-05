@@ -468,7 +468,7 @@ if (import.meta.main) {
     ? `its pages print ${site} as their own address`
     : `its pages print whatever address they were asked at: ${SITE_SETTING} names none`);
   console.log(market
-    ? `posting is open, against ${market.page.jobs}; checks are written by Claude, through the CLI signed in on this machine`
+    ? `posting is open, against ${market.page.jobs}; checks are written by Claude, through the CLI on this machine`
     : `posting is closed: no ${JOBS_ADDRESS_SETTING}`);
   if (services.preparing) console.log(`jobs are prepared on ${services.preparing.jobs}: their checks are written before a pod can start`);
   if (services.door) console.log(`agents push their work to http://localhost:${port}${ROUTES.git}<job>.git, and write notes to ${ROUTES.notes}<job>. Open jobs are listed at ${ROUTES.jobList}, and owners link GitHub accounts at ${ROUTES.credit}`);

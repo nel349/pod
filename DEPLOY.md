@@ -25,8 +25,9 @@ lock there, and a second one refuses to start.
   `SANDBOX.md`, which also says why this is not a Mac). The account POD runs as has to be able to
   start them.
 - **Bun 1.3.14**, the version CI runs, and **git**.
-- **The Claude CLI, signed in**, for the account POD runs as. The server writes checks through it,
-  with every capability but answering taken away. There is no API key.
+- **The Claude CLI**, for the account POD runs as. The server writes checks through it, with every
+  capability but answering taken away. On a host it is given an Anthropic API key, since the model
+  is then answering for whoever posts a job; on a laptop the CLI's own sign-in does.
 - **Something in front that holds the certificate** and passes requests to the server's port.
 
 The image every box runs is pulled once, by digest: `docker pull` the `IMAGE` in `src/sandbox.ts`.
@@ -48,6 +49,7 @@ a laptop runs it.
 | `POD_TOKEN_ADDRESS` | both | The title contract |
 | `POD_VALIDATOR_ADDRESS` | worker | The address the validator's key has to be the key for. The worker refuses to start with any other |
 | `POD_WRITER_KEY` | server | Secret |
+| `ANTHROPIC_API_KEY` | server | Secret. What the Claude CLI answers with. Left out, the CLI uses whatever it is signed in with on the machine |
 | `POD_VALIDATOR_KEY` | worker | Secret |
 | `POD_GITHUB_OWNER` | worker | The GitHub organisation work that passes is published under |
 | `POD_GITHUB_TOKEN` | both | Secret. The worker publishes with it, and the server hands a repository to its title's holder with it. Left out, each falls back to whatever `gh` is signed in with |
@@ -108,7 +110,7 @@ set by the boxes: an agent's box is given 2 GB, and three pieces of box work may
 | The code | `/opt/pod`, a clone of this repository |
 | The jobs folder | `/var/lib/pod/jobs` |
 | Settings that are not secret | `/etc/pod/common.env` |
-| The writer's key | `/etc/pod/server.env`, readable by root only |
+| The writer's key and the Anthropic API key | `/etc/pod/server.env`, readable by root only |
 | The validator's key | `/etc/pod/worker.env`, readable by root only |
 | The GitHub token | `/etc/pod/github.env`, readable by root only |
 | The two processes | `pod-server.service` and `pod-worker.service`, under systemd |
@@ -179,8 +181,7 @@ and agreed with a pass and with a failure.
 
 ## What is not automated
 
-- **Signing the Claude CLI in.** A person does it once, as the `pod` account.
-- **Putting the three secrets on the host.** A person does it, over SSH, from the machine that holds
+- **Putting the four secrets on the host.** A person does it, over SSH, from the machine that holds
   them.
 - **Accepting a repository.** When a title's holder claims the work, GitHub sends the account they
   named an invitation, and accepting it is theirs to do.
