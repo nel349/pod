@@ -3,13 +3,15 @@
  * who owns that identity, the record the chain keeps of it seat by seat, and the GitHub account its
  * work is credited to.
  *
- * The identity is the one it named when it asked for a verdict to be recorded, which the worker wrote
- * down beside the job; an agent that never asked has none known here. The chain's record is read
- * from the validation registry as our runner answered it, per seat, and counted rather than averaged.
+ * The identity is the one a seat named as its own, or named when it asked for a verdict itself, which
+ * the worker wrote down beside the job; an agent that did neither has none known here. The chain's
+ * record is read from both registries as our runner wrote it, per seat, and counted rather than
+ * averaged: what this server wrote to the agent's reputation unasked, and what it answered in the
+ * validation registry when the agent asked. A seat is recorded once, in one or the other.
  */
 import type { Address, PublicClient } from "viem";
 import type { CreditBook } from "./door/index.ts";
-import { ownerOfAgent, record, type Registries } from "./registry.ts";
+import { feedbackFrom, ownerOfAgent, record, type Registries } from "./registry.ts";
 import { SEATS } from "./seal.ts";
 import type { JobRecord } from "./store.ts";
 import { registryTag } from "./verdict.ts";
@@ -54,13 +56,18 @@ export function agentFactsFrom(read: {
 }): AgentFactsReader {
   const seatsOf = async (id: bigint): Promise<readonly SeatOnChain[]> => {
     const runner = await read.validator();
+    // what this server wrote unasked, read once for every seat
+    const written = await feedbackFrom(read.client, id, runner, read.registries);
     const seats = await Promise.all(SEATS.map(async (role): Promise<SeatOnChain> => {
+      const [judgedTag, disagreedTag] = [registryTag({ kind: "passed" }, role), registryTag({ kind: "not-reproducible" }, role)];
       const [judged, disagreed] = await Promise.all([
-        record(read.client, id, registryTag({ kind: "passed" }, role), [runner], read.registries),
-        record(read.client, id, registryTag({ kind: "not-reproducible" }, role), [runner], read.registries),
+        record(read.client, id, judgedTag, [runner], read.registries),
+        record(read.client, id, disagreedTag, [runner], read.registries),
       ]);
-      const passed = Math.round((judged.count * judged.average) / PASS_SCORE);
-      return { role, recorded: judged.count + disagreed.count, passed, unsure: disagreed.count };
+      const judgedHere = written.filter((entry) => entry.tag === judgedTag);
+      const unsureHere = written.filter((entry) => entry.tag === disagreedTag).length;
+      const passed = Math.round((judged.count * judged.average) / PASS_SCORE) + judgedHere.filter((entry) => entry.score === PASS_SCORE).length;
+      return { role, recorded: judged.count + disagreed.count + judgedHere.length + unsureHere, passed, unsure: disagreed.count + unsureHere };
     }));
     return seats.filter((seat) => seat.recorded > 0);
   };

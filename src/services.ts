@@ -15,12 +15,12 @@ import { agentFactsFrom } from "./agentFacts.ts";
 import { CheckWriting, ProvenChecks, type CheckWriter } from "./checkwriting/index.ts";
 import { Claims } from "./claims.ts";
 import { BoxSlots } from "./docker/index.ts";
-import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard, type DoorChain } from "./door/index.ts";
+import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, IdentityDoor, JobList, NoteBoard, type DoorChain } from "./door/index.ts";
 import { BOX_SLOTS_FOLDER, CREDIT_FOLDER, PREPARING_FOLDER, PROVEN_FOLDER, REPOSITORIES_FOLDER } from "./folders.ts";
 import { holderOf } from "./handover.ts";
 import { readJob, readJobCount, readSeats, readTerms, readValidator } from "./jobs.ts";
 import { readJobV2, readWritingMoney, readWritingPrice, readWritingsIncluded, WriterKey } from "./jobsV2.ts";
-import { grantsFor, SESSION_KEY_PLUGIN } from "./mandate.ts";
+import { grantsFor, seatAllowance, SESSION_KEY_PLUGIN } from "./mandate.ts";
 import type { MarketConfig } from "./market.ts";
 import { ownersFrom, type OwnedContract } from "./owners.ts";
 import { readerFor, type ChainReader } from "./posting.ts";
@@ -84,7 +84,8 @@ export async function servicesFor(input: ServicesInput): Promise<Services> {
     ? { price: `${await readWritingPrice(contract)}`, included: await readWritingsIncluded(contract) }
     : undefined;
   const market: Market = {
-    page: { ...input.page, jobs, ...(writing ? { writing } : {}) },
+    // an agent working for a wallet is told what the wallet has to allow, only where a wallet can grant at all
+    page: { ...input.page, jobs, ...(writing ? { writing } : {}), ...(grants ? { seatAllowance: seatAllowance(jobs) } : {}) },
     chain: readerFor({ jobs, read: (id) => readJob(contract, id), now: async () => (await publicClient.getBlock()).timestamp }),
     ...(input.earlier ? { earlier: ownedAt(input.earlier, publicClient).reader } : {}),
     writing: new CheckWriting({ writer: input.checkWriter, proven }),
@@ -94,6 +95,7 @@ export async function servicesFor(input: ServicesInput): Promise<Services> {
     market,
     door: new GitDoor({ repositories: join(directory, REPOSITORIES_FOLDER), keeper, credit: book }),
     notes: new NoteBoard({ keeper, store }),
+    identities: new IdentityDoor({ keeper, store, client: publicClient, registries: input.registries }),
     jobList: new JobList({ keeper, store }),
     credit: new CreditDoor({ book }),
     // who paid and who holds, on both contracts: old jobs keep their poster and their title holder (R12)

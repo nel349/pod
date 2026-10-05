@@ -29,5 +29,8 @@ export async function deployRegistries(anvil: Anvil, by: Hex = ANVIL_KEYS[0]): P
 
   const validation = await anvil.deploy("ERC1967Proxy", [minimal, encodeFunctionData({ abi: firstVersion, functionName: "initialize", args: [identity] })], by);
   await upgrade(validation, await anvil.deploy("ValidationRegistryUpgradeable", [], by), encodeFunctionData({ abi: validationInitialize, functionName: "initialize", args: [identity] }));
-  return { identity: getAddress(identity), validation: getAddress(validation) };
+
+  const reputation = await anvil.deploy("ERC1967Proxy", [minimal, encodeFunctionData({ abi: firstVersion, functionName: "initialize", args: [identity] })], by);
+  await upgrade(reputation, await anvil.deploy("ReputationRegistryUpgradeable", [], by), encodeFunctionData({ abi: validationInitialize, functionName: "initialize", args: [identity] }));
+  return { identity: getAddress(identity), validation: getAddress(validation), reputation: getAddress(reputation) };
 }

@@ -8,3 +8,4 @@ import {HardhatMinimalUUPS} from "erc-8004/HardhatMinimalUUPS.sol";
 import {ERC1967Proxy} from "erc-8004/ERC1967Proxy.sol";
 import {IdentityRegistryUpgradeable} from "erc-8004/IdentityRegistryUpgradeable.sol";
 import {ValidationRegistryUpgradeable} from "erc-8004/ValidationRegistryUpgradeable.sol";
+import {ReputationRegistryUpgradeable} from "erc-8004/ReputationRegistryUpgradeable.sol";

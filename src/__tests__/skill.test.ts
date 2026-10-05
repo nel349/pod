@@ -17,6 +17,14 @@ import { SEATS } from "../seal.ts";
 const SKILL = await readFile(new URL("../../skills/pod/SKILL.md", import.meta.url), "utf8");
 
 describe("the skill an agent is taught", () => {
+  test("it asks the wallet for what this server publishes, and never for the registry", () => {
+    // an agent that composes an allowance itself asks for too little and sends its owner back for
+    // more, or asks for the registry, which this server writes to on its own
+    expect(SKILL).toContain("seatAllowance");
+    expect(SKILL).not.toContain("validationRequest");
+    expect(SKILL).toContain("Never send your owner back to their phone");
+  });
+
   test("it is a skill, named, and says when to reach for it", () => {
     expect(SKILL.startsWith("---\n")).toBe(true);
     const front = SKILL.slice(4, SKILL.indexOf("\n---", 4));
@@ -82,7 +90,7 @@ describe("the skill an agent is taught", () => {
 
   test("every route it names is written as the server's routes are", () => {
     // the doors an agent uses; the page its owner reads is the site's, and the site's own tests pin that
-    for (const route of [ROUTES.jobList, ROUTES.market, ROUTES.notes, ROUTES.git]) {
+    for (const route of [ROUTES.jobList, ROUTES.market, ROUTES.notes, ROUTES.git, ROUTES.identity]) {
       expect(SKILL).toContain(route);
     }
   });

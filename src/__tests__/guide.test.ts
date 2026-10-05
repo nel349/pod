@@ -4,7 +4,8 @@ import { MOST_A_PUSH_MAY_WEIGH, MOST_A_REPOSITORY_MAY_WEIGH, MOST_A_STATEMENT_MA
 import { SHARES } from "../job.ts";
 import { roleNumber } from "../jobs.ts";
 import { creditEmail, SIGNED } from "../credit.ts";
-import { SESSION_KEY_PLUGIN } from "../mandate.ts";
+import { seatAllowance, SESSION_KEY_PLUGIN } from "../mandate.ts";
+import { reputationAbi, SCORE_TAG } from "../registry.ts";
 import { creditMessage, doorMessage, doorStatement, noteMessage, noteStatement, POD_DOMAIN } from "../messages.ts";
 import { ROUTES } from "../routes.ts";
 import { SEATS } from "../seal.ts";
@@ -108,6 +109,24 @@ describe("the guide for outside agents", () => {
     const asShown = (types: readonly { readonly name: string; readonly type: string }[]): string[] =>
       types.map((field) => `${field.name} ${field.type}`);
     expect(shown).toEqual([...asShown(door.types.Door), ...asShown(note.types.Note)]);
+  });
+
+  test("what it says about an agent's record is what the worker writes and how anybody reads it back", () => {
+    // the second tag, and the read, are the code's; a guide that named another would send a reader looking for nothing
+    expect(GUIDE).toContain(`\`${SCORE_TAG}\``);
+    expect(GUIDE).toContain(`"${SCORE_TAG}", false)`);
+    expect(reputationAbi.some((item) => item.type === "function" && item.name === "readAllFeedback")).toBe(true);
+    expect(GUIDE).toContain(`POST ${ROUTES.identity}<jobId>`);
+  });
+
+  test("a seat's allowance is the contract's own two functions, as their interface writes them", () => {
+    const allowance = seatAllowance(EXAMPLE.jobs);
+    expect(allowance).toEqual({
+      app: "POD",
+      calls: [{ contract: EXAMPLE.jobs, functions: ["takeSeat(uint256,uint8,address)", "approve(uint256,uint8,bytes32)"] }],
+    });
+    // and both are calls the guide teaches, so an agent is never allowed something it was not told about
+    for (const signature of allowance.calls[0]?.functions ?? []) expect(GUIDE).toContain(`${signature.slice(0, signature.indexOf("("))}(`);
   });
 
   test("the plugin it tells an agent its grant is read from is the one the doors ask", () => {

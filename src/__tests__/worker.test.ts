@@ -4,16 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseEther, toHex, type Address, type Hex, type PublicClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { agentEmail, branchFor } from "../door/index.ts";
+import { agentEmail, branchFor, Doorkeeper, IdentityDoor } from "../door/index.ts";
 import { sealSpec, type Role, type Spec } from "../job.ts";
 import { approve, MOST_BLOCKS_A_LOG_READ_COVERS, post, readJob, readValidator, takeSeat } from "../jobs.ts";
 import { openJob } from "../publish.ts";
 import type { JobRecord } from "../store.ts";
 import { agentFactsFrom } from "../agentFacts.ts";
 import { commitToBytes32, commitWork, head, openRepository } from "../repo.ts";
-import { record, registerAgent, requestValidation, verdictOnChain, type Registries } from "../registry.ts";
+import { feedbackFrom, record, registerAgent, requestValidation, verdictOnChain, writeFeedback, type Registries } from "../registry.ts";
 import { signReceipt } from "../receipt.ts";
-import { receiptPath } from "../routes.ts";
+import { receiptPath, ROUTES } from "../routes.ts";
 import { IMAGE } from "../sandbox.ts";
 import { SEATS } from "../seal.ts";
 import { isPublished, JobStore } from "../store.ts";
@@ -21,7 +21,7 @@ import { podTokenAbi, tokenOfJob } from "../token.ts";
 import { stillToPublish, Worker } from "../worker/index.ts";
 import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
 import { COAT_IDEA, DRY, good, serverSaying, WET, WORKING } from "./support/coat.ts";
-import { aPod, anAgent, type Agent } from "./support/podServer.ts";
+import { aPod, anAgent, doorChainOn, type Agent } from "./support/podServer.ts";
 import { deployRegistries } from "./support/registries.ts";
 import { aTitledJob } from "./support/titled.ts";
 import { dockerAvailable } from "./support/tools.ts";
@@ -367,6 +367,102 @@ describe.skipIf(!available)("the worker", () => {
     });
     // an identity nothing was recorded for is named nowhere here, so none is claimed for it
     expect(await agents.of(stranger.address, records)).toEqual({});
+  }, 300_000);
+
+  test("a seat that names its identity has its verdict written by the worker, once, with nothing asked of its owner", async () => {
+    const job = await aJob("a-coat-recorded-unasked", WORKING, SEATS);
+    const reviewerId = await anIdentity(job.pod.reviewer);
+    const stranger = anAgent();
+    await anvil.fund(stranger.address);
+    const strangerId = await anIdentity(stranger);
+    const runner = privateKeyToAccount(VALIDATOR).address;
+    const door = new IdentityDoor({ keeper: new Doorkeeper({ store, chain: doorChainOn(anvil, jobs) }), store, client: anvil.publicClient, registries });
+    const names = async (identity: bigint | string): Promise<{ readonly status: number; readonly said: { readonly why?: string; readonly seat?: string; readonly recorded?: boolean } }> => {
+      const answer = await door.handle(new Request(`http://pod.test${ROUTES.identity}${job.jobId}`, { method: "POST", body: JSON.stringify({ identity: String(identity) }) }));
+      return { status: answer.status, said: (await answer.json()) as { why?: string; seat?: string; recorded?: boolean } };
+    };
+    const written = (id: bigint) => feedbackFrom(anvil.publicClient, id, runner, registries);
+    const sentByTheReviewer = () => anvil.publicClient.getTransactionCount({ address: job.pod.reviewer.address });
+
+    // an identity whose key holds no seat here names itself, and is told why not
+    const uninvited = await names(strangerId);
+    expect(uninvited.status).toBe(403);
+    expect(uninvited.said.why).toContain("is not the key that holds a seat");
+    // and a number the registry never gave out is no identity at all
+    expect((await names(999_999n)).status).toBe(404);
+
+    // the reviewer names its identity before there is a verdict: it is kept, and nothing is written yet
+    const early = await names(reviewerId);
+    expect(early.status).toBe(201);
+    expect(early.said).toMatchObject({ seat: "reviewer", recorded: false });
+    const before = await sentByTheReviewer();
+    const said: string[] = [];
+    const worker = aWorker(said);
+    await worker.tick();
+    expect(await written(reviewerId)).toEqual([]);
+
+    // once the job is settled the worker writes it, from its own key, under the seat's tag
+    await untilSettled(worker, said, async () => (await written(reviewerId)).length > 0);
+    expect(await written(reviewerId)).toEqual([{ score: 100, tag: "pod.reviewer" }]);
+    expect(said.some((line) => line.includes(`recorded passed for agent #${reviewerId}, the reviewer on ${job.jobId}, with nothing asked of its owner`))).toBe(true);
+    // the reviewer itself sent nothing for it: no transaction left its key between naming and being recorded
+    expect(await sentByTheReviewer()).toBe(before);
+
+    // looked at again, and by a worker that has just started, it is written once
+    await worker.tick();
+    await aWorker().tick();
+    expect(await written(reviewerId)).toEqual([{ score: 100, tag: "pod.reviewer" }]);
+    // naming it again is answered with where it stands, and a second identity for the same seat is refused
+    expect(await names(reviewerId)).toMatchObject({ status: 200, said: { recorded: true } });
+    const secondId = await anIdentity(job.pod.reviewer);
+    expect((await names(secondId)).status).toBe(409);
+    // an agent that then asks the other registry as well is not recorded twice
+    const asked = await asksForItsVerdict(job.pod.reviewer, reviewerId, job.jobId);
+    await worker.tick();
+    expect((await answerTo(asked)).responseHash).toBe(NOTHING);
+
+    // and its page reads it back, the same as a verdict it had asked for
+    const agents = agentFactsFrom({ client: anvil.publicClient, registries, validator: () => readValidator(reading()) });
+    expect(await agents.of(job.pod.reviewer.address, await store.all())).toEqual({
+      identity: { id: reviewerId, owner: job.pod.reviewer.address, seats: [{ role: "reviewer", recorded: 1, passed: 1, unsure: 0 }] },
+    });
+  }, 300_000);
+
+  test("a worker stopped between sending a seat's verdict and writing it down neither loses it nor sends it twice", async () => {
+    const job = await aJob("a-coat-recorded-across-a-stop", WORKING, SEATS);
+    const qaId = await anIdentity(job.pod.qa);
+    const securityId = await anIdentity(job.pod.security);
+    const runner = privateKeyToAccount(VALIDATOR).address;
+    const written = (id: bigint) => feedbackFrom(anvil.publicClient, id, runner, registries);
+    const said: string[] = [];
+    const worker = aWorker(said);
+    await untilSettled(worker, said, async () => (await readJob(reading(), job.onChainId)).state === "settled");
+
+    // stopped after the entry landed and before it was written down: the chain has one more than was noted
+    await writeFeedback({ publicClient: anvil.publicClient, wallet: anvil.wallet(VALIDATOR) }, {
+      agentId: qaId, score: 100, tag: "pod.qa", site: "", receiptURI: "http://pod.test/receipt", receiptHash: (await store.read(job.jobId))!.signed!.hash,
+    }, registries);
+    // and stopped before the entry was ever sent: the chain has what was noted, and no more
+    const record = (await store.read(job.jobId))!;
+    await store.save({
+      ...record,
+      identities: [
+        { role: "qa", agent: job.pod.qa.address, agentId: qaId.toString() },
+        { role: "security", agent: job.pod.security.address, agentId: securityId.toString() },
+      ],
+      recorded: [
+        { role: "qa", agent: job.pod.qa.address, agentId: qaId.toString(), entriesBefore: 0 },
+        { role: "security", agent: job.pod.security.address, agentId: securityId.toString(), entriesBefore: 0 },
+      ],
+    });
+
+    await aWorker().tick();
+    // the one that landed is not sent again, and the one that never left is sent now
+    expect(await written(qaId)).toEqual([{ score: 100, tag: "pod.qa" }]);
+    expect(await written(securityId)).toEqual([{ score: 100, tag: "pod.security" }]);
+    await aWorker().tick();
+    expect(await written(qaId)).toHaveLength(1);
+    expect(await written(securityId)).toHaveLength(1);
   }, 300_000);
 
   test("somebody a seat names as its owner is not the seat: only the key that held it has its verdict recorded", async () => {

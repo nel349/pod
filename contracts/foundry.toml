@@ -11,4 +11,11 @@ remappings = [
   "erc-8004/=lib/erc-8004-contracts/contracts/",
 ]
 
+# The reputation registry is too deep for the plain compiler, as the ERC-8004 team's own build knows:
+# it is compiled through the IR, and only it. Our own contracts compile exactly as they are deployed.
+additional_compiler_profiles = [{ name = "through-ir", via_ir = true, optimizer = true }]
+compilation_restrictions = [
+  { paths = "lib/erc-8004-contracts/contracts/ReputationRegistryUpgradeable.sol", via_ir = true },
+]
+
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

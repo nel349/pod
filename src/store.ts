@@ -90,6 +90,8 @@ export interface JobRecord {
   readonly waitingBecause?: string;
   /** the verdicts recorded in ERC-8004 for this job's seats: one per seat, and which request it answered */
   readonly recorded?: readonly RecordedVerdict[];
+  /** the identities this job's seats said are theirs, each waiting for the job to settle before it is written to */
+  readonly identities?: readonly NamedIdentity[];
   /**
    * Taken off the wall by whoever runs this server, with when and why, such as a dry run. Nothing is
    * deleted: its page, receipt and checks answer at their addresses as before, and say it is retired.
@@ -121,7 +123,26 @@ export interface RecordedVerdict {
   readonly role: string;
   readonly agent: Address;
   readonly agentId: string;
-  readonly key: Hex;
+  /** the request it answered, when the agent asked the validation registry for it itself */
+  readonly key?: Hex;
+  /**
+   * The entry this server wrote to the reputation registry, when nobody had to ask: there once it has
+   * landed, with its transaction when the worker that sent it is the one that wrote this down.
+   */
+  readonly written?: { readonly hash?: Hex };
+  /**
+   * How many entries this server had written for this agent under this tag before it sent this one.
+   * A worker stopped between sending and writing it down reads the chain when it starts again: one
+   * more than this means it landed, the same means it never did, and it is neither lost nor doubled.
+   */
+  readonly entriesBefore?: number;
+}
+
+/** The identity a seat said is its own, checked against the chain when it said so. */
+export interface NamedIdentity {
+  readonly role: string;
+  readonly agent: Address;
+  readonly agentId: string;
 }
 
 const RECORD = "job.json";

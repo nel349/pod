@@ -343,6 +343,9 @@ export class Worker {
         return { role: seat.role, agent: seat.agent, commit, at: when ? isoOf(when.at) : `before ${isoOf(lookedBackTo)}` };
       });
 
+      // read before the verdict is published, which writes the record afresh from the receipt alone:
+      // whatever is to stay with the job is what was beside it a moment before that
+      const kept = await store.read(record.jobId);
       const published = await publish(store, {
         jobId: record.jobId, seal: record.seal, idea: spec.idea, mode: spec.mode, price: spec.price, report,
         pod: seats.map((seat) => ({ role: seat.role, agent: seat.agent, owner: seat.owner })),
@@ -352,13 +355,17 @@ export class Worker {
       });
       // what the chain already knows about the job, who paid for it, and its brief, whose window decides
       // when a held verdict is published, stay with it: the grading knows none of them
-      // and the worker's tries, read fresh: this grading started one, and it did not fail on our side
-      const tries = (await store.read(record.jobId))?.tries;
+      // and the worker's tries, read fresh: this grading started one, and it did not fail on our side.
+      // So do the identities its seats named as their own, which a seat may say at any time, grading
+      // included: a verdict is written to them once the job settles, so losing one here would be a
+      // seat told it will be recorded and then never recorded
+      const tries = kept?.tries;
       await store.save({
         ...published, chain: record.chain,
         ...(record.poster ? { poster: record.poster } : {}),
         ...(record.brief ? { brief: record.brief } : {}),
         ...(tries ? { tries: { ...tries, failed: 0 } } : {}),
+        ...(kept?.identities ? { identities: kept.identities } : {}),
       });
       this.say(`${record.jobId}: ${report.signed.receipt.verdict}`);
     } finally {

@@ -7,7 +7,8 @@
  * need answered: may this key act for that wallet now. Nothing is stored and nothing is issued, so a
  * grant the owner takes away stops the agent at its next knock.
  */
-import { parseAbi, type Address, type PublicClient } from "viem";
+import { parseAbi, toFunctionSignature, type AbiFunction, type Address, type PublicClient } from "viem";
+import { podJobsAbi } from "./jobs.ts";
 
 /**
  * The session key plugin. It is the same address on every network because it is deployed through the
@@ -117,3 +118,28 @@ export const SKILL_INSTALL = "npx skills add nel349/pod";
 export const CONNECTOR_INSTALL = "claude mcp add arc-mandate -s user -e ARC_MANDATE_NETWORK=monadTestnet -- npx -y @kuiralabs/arc-mandate";
 /** Where the connector's source and its notes on other agents are */
 export const CONNECTOR_NOTES = "https://github.com/nel349/arc-agent-mandate/blob/main/mcp/README.md";
+
+/** The two things a seat does on the contract: sitting down, and saying a commit should ship. */
+const A_SEAT_CALLS = ["takeSeat", "approve"] as const;
+
+/**
+ * What a wallet's allowance has to name for its agent to work a seat, said the way the wallet's
+ * connector takes it. An agent hands this over untouched and composes nothing, so the one scan a
+ * person makes covers the whole seat, and they are never sent back for something that was left out.
+ *
+ * It is the job contract and those two functions, read from the contract's own interface so the
+ * words here cannot drift from what the chain will accept. Nothing else: the verdict on an agent's
+ * record is written by this server, not asked for by the wallet.
+ */
+export interface SeatAllowance {
+  readonly app: string;
+  readonly calls: readonly { readonly contract: Address; readonly functions: readonly string[] }[];
+}
+
+export function seatAllowance(jobs: Address): SeatAllowance {
+  // the same two functions on the first contract and on the one that prepares jobs
+  const functions = podJobsAbi
+    .filter((item): item is Extract<(typeof podJobsAbi)[number], AbiFunction> => item.type === "function" && (A_SEAT_CALLS as readonly string[]).includes(item.name))
+    .map((item) => toFunctionSignature(item));
+  return { app: "POD", calls: [{ contract: jobs, functions }] };
+}

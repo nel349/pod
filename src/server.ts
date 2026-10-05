@@ -18,7 +18,7 @@ import { firstLine } from "./errors.ts";
 import { chainJobToTheWire } from "./chainJob.ts";
 import { JOBS_FOLDER_SETTING } from "./folders.ts";
 import type { Claims } from "./claims.ts";
-import type { CreditDoor, GitDoor, JobList, NoteBoard } from "./door/index.ts";
+import type { CreditDoor, GitDoor, IdentityDoor, JobList, NoteBoard } from "./door/index.ts";
 import { renderCard } from "./card.ts";
 import { isPublished, JobStore, publicRecord } from "./store.ts";
 import { cardPath, checkFilePath, isSafeName, isWallName, jobPath, preparingPath, QUERY, RECEIPT_FILE, ROUTES, WRITINGS, writingPath } from "./routes.ts";
@@ -73,6 +73,8 @@ export interface Services {
   readonly door?: GitDoor;
   /** what the seats of a job say to each other */
   readonly notes?: NoteBoard;
+  /** where a seat says which ERC-8004 identity is its own */
+  readonly identities?: IdentityDoor;
   /** the open jobs, for agents looking for work */
   readonly jobList?: JobList;
   /** which GitHub account each agent's work is credited to */
@@ -96,7 +98,7 @@ const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const guide = new URL("../public/llms.txt", import.meta.url);
 const MARKDOWN = { "content-type": "text/markdown; charset=utf-8" } as const;
 
-export async function handle(request: Request, store: JobStore, { market, door, notes, jobList, credit, claims, owners, agents, preparing }: Services = {}): Promise<Response> {
+export async function handle(request: Request, store: JobStore, { market, door, notes, identities, jobList, credit, claims, owners, agents, preparing }: Services = {}): Promise<Response> {
   const { pathname } = new URL(request.url);
   const page = (head: Head, drawn: SitePage, status = 200): Response => {
     const data: SiteData = {
@@ -113,6 +115,9 @@ export async function handle(request: Request, store: JobStore, { market, door, 
   // agents' work, in and out, through git. It speaks its own methods, so it is answered before the rest
   if (pathname.startsWith(ROUTES.git)) {
     return door ? await door.handle(request) : new Response("pushing work is not open on this server\n", { status: 404, headers: TEXT });
+  }
+  if (pathname.startsWith(ROUTES.identity)) {
+    return identities ? await identities.handle(request) : Response.json({ why: "identities are not recorded on this server" }, { status: 404 });
   }
   if (pathname.startsWith(ROUTES.notes)) {
     return notes ? await notes.handle(request) : Response.json({ why: "notes are not open on this server" }, { status: 404 });

@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { privateKeyToAccount } from "viem/accounts";
 import {
-  agentWalletOf, identityRegistryOf, ownerOfAgent, record, registerAgent, requestValidation, verdictOnChain, writeVerdict,
+  agentWalletOf, feedbackFrom, identityRegistryOf, ownerOfAgent, record, registerAgent, reputationAbi, requestValidation, verdictOnChain,
+  writeFeedback, writeVerdict,
   type Registries,
 } from "../registry.ts";
 import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
@@ -73,5 +74,49 @@ describe.skipIf(!available)("the ERC-8004 registries, as deployed locally", () =
     const key = `0x${"bc".repeat(32)}` as const;
     await requestValidation(as(ANVIL_KEYS[1]), { runner, agentId: first.agentId, evidenceURI: EVIDENCE, key }, at);
     await expect(requestValidation(as(ANVIL_KEYS[2]), { runner, agentId: second.agentId, evidenceURI: EVIDENCE, key }, at)).rejects.toThrow();
+  }, 60_000);
+});
+
+describe.skipIf(!available)("the reputation registry, where POD writes what a seat did", () => {
+  const RECEIPT = `0x${"56".repeat(32)}` as const;
+  const entry = (agentId: bigint, over: { readonly score?: number; readonly tag?: string } = {}) => ({
+    agentId, score: over.score ?? 100, tag: over.tag ?? "pod.reviewer", site: "http://pod.test", receiptURI: EVIDENCE, receiptHash: RECEIPT,
+  });
+
+  test("it is the ERC-8004 team's own, wired to the same identities", async () => {
+    expect(await anvil.publicClient.readContract({ address: at.reputation, abi: reputationAbi, functionName: "getIdentityRegistry" })).toBe(at.identity);
+    expect(await anvil.publicClient.readContract({ address: at.reputation, abi: reputationAbi, functionName: "getVersion" })).toBe("2.0.0");
+  }, 60_000);
+
+  test("the grader writes a seat's verdict with nothing asked of the agent or its owner, and it reads back", async () => {
+    const { agentId } = await registerAgent(as(ANVIL_KEYS[2]), at);
+    const grader = privateKeyToAccount(RUNNER).address;
+    expect(await feedbackFrom(anvil.publicClient, agentId, grader, at)).toEqual([]);
+
+    await writeFeedback(as(RUNNER), entry(agentId), at);
+    await writeFeedback(as(RUNNER), entry(agentId, { score: 0, tag: "pod.builder" }), at);
+    expect(await feedbackFrom(anvil.publicClient, agentId, grader, at)).toEqual([
+      { score: 100, tag: "pod.reviewer" },
+      { score: 0, tag: "pod.builder" },
+    ]);
+  }, 60_000);
+
+  test("an agent's own owner is refused, which is why an entry here is one it could not have written", async () => {
+    const owner = as(ANVIL_KEYS[3]);
+    const { agentId } = await registerAgent(owner, at);
+    await expect(writeFeedback(owner, entry(agentId), at)).rejects.toThrow(/Self-feedback not allowed/);
+    expect(await feedbackFrom(anvil.publicClient, agentId, privateKeyToAccount(ANVIL_KEYS[3]).address, at)).toEqual([]);
+  }, 60_000);
+
+  test("what somebody else writes about an agent is not read as the grader's", async () => {
+    const { agentId } = await registerAgent(as(ANVIL_KEYS[4]), at);
+    // a stranger may write, since anybody but the owner can; a reader who names the grader never sees it
+    await writeFeedback(as(ANVIL_KEYS[5]), entry(agentId, { score: 100 }), at);
+    expect(await feedbackFrom(anvil.publicClient, agentId, privateKeyToAccount(RUNNER).address, at)).toEqual([]);
+    expect(await feedbackFrom(anvil.publicClient, agentId, privateKeyToAccount(ANVIL_KEYS[5]).address, at)).toEqual([{ score: 100, tag: "pod.reviewer" }]);
+  }, 60_000);
+
+  test("an identity that was never registered cannot be written about", async () => {
+    await expect(writeFeedback(as(RUNNER), entry(999_999n), at)).rejects.toThrow();
   }, 60_000);
 });

@@ -38,6 +38,8 @@ export const ROUTES = {
   git: "/git/",
   /** what the seats of a job say to each other, each note signed with its seat key */
   notes: "/api/notes/",
+  /** where a seat says which ERC-8004 identity is its own, so its verdict is written there */
+  identity: "/api/identity/",
   /** everything an outside agent does on its side, where agents look for it */
   guide: "/llms.txt",
   /** a wallet's own page: what it posted, what it holds, and the one thing to do next on each */

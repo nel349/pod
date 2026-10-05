@@ -1,10 +1,16 @@
 /**
  * Talking to the ERC-8004 registries on Monad testnet.
  *
- * Two of the three legs are deployed there and wired to each other: identity, which says who an agent
- * is and who owns it, and validation, which records that somebody asked for work to be checked and
- * what the answer was. Reputation lives on mainnet at a different address and we do not use it: the
- * record POD relies on is the validation summary, which is already filtered by tag.
+ * All three legs are deployed there and wired to each other: identity, which says who an agent is
+ * and who owns it; validation, which records that somebody asked for work to be checked and what the
+ * answer was; and reputation, where anybody but an agent's own owner may write what the agent did.
+ *
+ * Reputation is where POD writes a seat's verdict. Until 5 October this said reputation lived only on
+ * mainnet, which was not so, and the record went to validation alone: that registry takes a request
+ * from the agent's owner and nobody else, so every agent had to ask for its own record, and an agent
+ * working for somebody's wallet needed that wallet to ask. Reputation needs nothing from the owner,
+ * and refuses the owner outright, so what is written there is what the agent could not have said
+ * about itself.
  *
  * Two rules in the deployed contracts shape everything here:
  *
@@ -29,17 +35,21 @@ export const MONAD_TESTNET = {
   faucet: "https://faucet.monad.xyz",
   identityRegistry: "0x8004A818BFB912233c491871b3d84c89A494BD9e" as Address,
   validationRegistry: "0x8004Cb1BF31DAf7788923b405b754f57acEB4272" as Address,
+  /** version 2.0.0, wired to the identity registry above, checked on chain 2026-10-05 */
+  reputationRegistry: "0x8004B663056A597Dffe9eCcC1965A193B7388713" as Address,
 } as const;
 
-/** Where the two registries are. Monad's, unless a test deploys its own on a local chain */
+/** Where the registries are. Monad's, unless a test deploys its own on a local chain */
 export interface Registries {
   readonly identity: Address;
   readonly validation: Address;
+  readonly reputation: Address;
 }
 
 export const MONAD_REGISTRIES: Registries = {
   identity: MONAD_TESTNET.identityRegistry,
   validation: MONAD_TESTNET.validationRegistry,
+  reputation: MONAD_TESTNET.reputationRegistry,
 };
 
 export const identityAbi = parseAbi([
@@ -51,6 +61,24 @@ export const identityAbi = parseAbi([
   "function isApprovedForAll(address owner, address operator) view returns (bool)",
   "function getVersion() view returns (string)",
 ]);
+
+/**
+ * The reputation registry, read off its deployment. Two of its rules are what the design rests on: it
+ * refuses an entry from an identity's own owner or operators, and every read names whose entries it
+ * trusts, so a reader asks for what this grader wrote and gets only that.
+ */
+export const reputationAbi = parseAbi([
+  "function giveFeedback(uint256 agentId, int128 value, uint8 valueDecimals, string tag1, string tag2, string endpoint, string feedbackURI, bytes32 feedbackHash)",
+  "function readAllFeedback(uint256 agentId, address[] clientAddresses, string tag1, string tag2, bool includeRevoked) view returns (address[] clients, uint64[] feedbackIndexes, int128[] values, uint8[] valueDecimals, string[] tag1s, string[] tag2s, bool[] revokedStatuses)",
+  "function getIdentityRegistry() view returns (address)",
+  "function getVersion() view returns (string)",
+]);
+
+/**
+ * The second tag on every entry POD writes: what the number is out of. A number on a chain with no
+ * unit beside it is a number somebody will read the wrong way round.
+ */
+export const SCORE_TAG = "out-of-100";
 
 export const validationAbi = parseAbi([
   "function validationRequest(address validatorAddress, uint256 agentId, string requestURI, bytes32 requestHash) external",
@@ -203,6 +231,51 @@ export function requestValidation(by: Sender, input: Parameters<typeof requestCa
 /** The verdict itself, which only the runner the request named may send. */
 export function writeVerdict(by: Sender, input: Parameters<typeof verdictCall>[0], at: Registries = MONAD_REGISTRIES): Promise<Hex> {
   return send(by, at.validation, verdictCall(input));
+}
+
+/** One entry POD writes about a seat: how it ended, under which seat's tag, and the receipt that says so. */
+export interface Feedback {
+  readonly agentId: bigint;
+  /** out of 100, as every answer POD has ever given a registry */
+  readonly score: number;
+  /** which seat, and whether the runs disagreed: `pod.reviewer`, say */
+  readonly tag: string;
+  /** where this server is, which is who is speaking */
+  readonly site: string;
+  readonly receiptURI: string;
+  readonly receiptHash: Hex;
+}
+
+/**
+ * Write what a seat did to the agent's record, from the grader's own key. Nothing is asked of the
+ * agent or of whoever owns it, and the registry would refuse them if they tried: an entry here is one
+ * the agent could not have written about itself.
+ */
+export function writeFeedback(by: Sender, entry: Feedback, at: Registries = MONAD_REGISTRIES): Promise<Hex> {
+  return send(by, at.reputation, encodeFunctionData({
+    abi: reputationAbi,
+    functionName: "giveFeedback",
+    args: [entry.agentId, BigInt(entry.score), 0, entry.tag, SCORE_TAG, entry.site, entry.receiptURI, entry.receiptHash],
+  }));
+}
+
+/** One entry as it reads back: what was scored, and under which seat's tag. */
+export interface FeedbackRead {
+  readonly score: number;
+  readonly tag: string;
+}
+
+/**
+ * What one writer has put on an agent's record, entries taken back left out. The writer is named
+ * because the registry trusts nobody by itself: a reader says whose entries count, and anybody else
+ * writing about the same agent cannot move what POD says of it.
+ */
+export async function feedbackFrom(client: PublicClient, agentId: bigint, writer: Address, at: Registries = MONAD_REGISTRIES): Promise<readonly FeedbackRead[]> {
+  const [, , values, , tags, units] = await client.readContract({
+    address: at.reputation, abi: reputationAbi, functionName: "readAllFeedback",
+    args: [agentId, [writer], "", SCORE_TAG, false],
+  });
+  return values.map((value, index) => ({ score: Number(value), tag: tags[index] ?? "" })).filter((_, index) => units[index] === SCORE_TAG);
 }
 
 /** What the registry says about one request: who answered, with what, and under which tag. */

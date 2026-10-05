@@ -1,10 +1,19 @@
 /**
- * The worker's answers in ERC-8004: each seat's verdict in the registry, for the agents that ask.
+ * The worker's answers in ERC-8004: each seat's verdict on its agent's record.
  *
- * Only an agent's owner may ask the registry for a verdict, and outside agents are their owners', so
- * the worker never asks for anybody (decided 24 Sep, Y12). An agent asks, naming this worker and
- * pointing at the job's receipt; the worker reads the registry for requests that name it, and answers
- * each seat once. It answers only for an identity that is the seat's own key, as its owner or as the
+ * Two ways there, and a seat is recorded by whichever comes first, once.
+ *
+ * The worker writes it. A seat says which identity is its own, the worker checks that against the
+ * chain, and once the job is settled it writes the verdict to the reputation registry from its own
+ * key. Nothing is asked of the agent's owner, and the registry would refuse the owner: what is
+ * written there is what the agent could not have said about itself. This is how an agent working for
+ * somebody's wallet is recorded, since nobody should have to reach for their phone to be told their
+ * agent did well (5 Oct).
+ *
+ * Or the agent asks. Only an agent's owner may ask the validation registry for a verdict, and outside
+ * agents are their owners', so the worker never asks for anybody (decided 24 Sep, Y12). An agent
+ * asks, naming this worker and pointing at the job's receipt; the worker reads the registry for
+ * requests that name it, and answers. It answers only for an identity that is the seat's own key, as its owner or as the
  * wallet it says it acts with: the owner a seat names for itself is anybody it likes, and an identity
  * is cheap to make, so neither may stand in for the key that held the seat. And it answers only once
  * the chain agrees with the verdict: work paid for a pass, a poster refunded for a failure.
@@ -20,10 +29,10 @@ import { isAddressEqual, zeroHash, type Address, type Hex } from "viem";
 import { z } from "zod";
 import { errorCode, firstLine } from "../errors.ts";
 import { MOST_BLOCKS_A_LOG_READ_COVERS, readJob, readSeats, type Contract, type HeldSeat } from "../jobs.ts";
-import { agentWalletOf, ownerOfAgent, validationAbi, verdictOnChain, writeVerdict, type Registries } from "../registry.ts";
+import { agentWalletOf, feedbackFrom, ownerOfAgent, validationAbi, verdictOnChain, writeFeedback, writeVerdict, type Registries } from "../registry.ts";
 import { isWallName, receiptPath, ROUTES } from "../routes.ts";
 import type { SignedReceipt } from "../receipt.ts";
-import type { JobRecord, JobStore } from "../store.ts";
+import type { JobRecord, JobStore, NamedIdentity } from "../store.ts";
 import { registryResponse, registryTag } from "../verdict.ts";
 
 /** How many slices of blocks one look reads: a long catch-up goes on over several looks, never holding up the rest */
@@ -101,6 +110,85 @@ export class RegistryAnswers {
       this.options.say(`${holding.length - MOST_HELD} of the oldest requests waiting for a verdict were let go: more are held than may be`);
     }
     await this.save({ readTo: readTo.toString(), holding: holding.slice(-MOST_HELD) });
+    await this.writeForTheSeatsThatNamedThemselves();
+  }
+
+  /** Every seat that said which identity is its own, on a job the chain now agrees with: its verdict, written. */
+  private async writeForTheSeatsThatNamedThemselves(): Promise<void> {
+    for (const record of await this.options.store.all()) {
+      for (const named of record.identities ?? []) {
+        try {
+          await this.write(record.jobId, named);
+        } catch (error) {
+          this.options.say(`${record.jobId}: the ${named.role}'s verdict could not be written to agent #${named.agentId} yet: ${firstLine(error)}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * One seat's verdict on its agent's record, written once however many times the worker looks, and
+   * however it was stopped. The seat is written down before the entry is sent, with how many entries
+   * were there; a worker that starts again reads the chain, and one more means it landed.
+   */
+  private async write(jobId: string, named: NamedIdentity): Promise<void> {
+    const { store, jobs, registries, runner, say } = this.options;
+    const record = await store.read(jobId);
+    const contract = record?.chain ? this.contractOf(record.chain.jobs) : undefined;
+    if (!record?.chain || !contract) return;
+    const sameSeat = (one: { readonly role: string; readonly agent: Address }): boolean => one.role === named.role && isAddressEqual(one.agent, named.agent);
+    const already = record.recorded?.find(sameSeat);
+    if (already && (already.key !== undefined || already.written !== undefined)) return;
+
+    const onChainId = BigInt(record.chain.jobId);
+    const settled = await this.settledAsGraded(record, onChainId, contract);
+    if (settled.is === "not yet") return;
+    if (settled.is === "never") {
+      // it ended some other way than its verdict says, so there is nothing true to write: let go of it
+      await store.save({ ...record, identities: (record.identities ?? []).filter((one) => !sameSeat(one)) });
+      say(`${jobId}: nothing is written for agent #${named.agentId}, since the job did not settle as it was graded`);
+      return;
+    }
+    const agentId = BigInt(named.agentId);
+    // asked again now: an identity can change hands between a seat naming it and the job settling
+    const seat = await this.seatOf(agentId, await readSeats(contract, onChainId));
+    if (!seat || !sameSeat(seat)) {
+      await store.save({ ...record, identities: (record.identities ?? []).filter((one) => !sameSeat(one)) });
+      say(`${jobId}: agent #${named.agentId} is no longer the ${named.role}'s own, so nothing is written`);
+      return;
+    }
+
+    const verdict = { kind: settled.signed.receipt.verdict };
+    const tag = registryTag(verdict, seat.role);
+    const entries = async (): Promise<number> => (await feedbackFrom(jobs.publicClient, agentId, runner, registries)).filter((entry) => entry.tag === tag).length;
+    const written = await this.options.onTheChain(async () => {
+      const there = await entries();
+      if (already?.entriesBefore !== undefined) {
+        // stopped after sending and before writing it down: the chain says whether it landed
+        if (there > already.entriesBefore) return "landed" as const;
+      } else {
+        await this.remember(jobId, { role: seat.role, agent: seat.agent, agentId: named.agentId, entriesBefore: there });
+      }
+      return writeFeedback({ publicClient: jobs.publicClient, wallet: jobs.wallet }, {
+        agentId, score: registryResponse(verdict), tag,
+        site: this.options.site ?? "",
+        receiptURI: `${this.options.site ?? ""}${receiptPath(jobId)}`,
+        receiptHash: settled.signed.hash,
+      }, registries);
+    });
+    await this.wroteDown(jobId, seat, written === "landed" ? undefined : written);
+    say(`recorded ${settled.signed.receipt.verdict} for agent #${named.agentId}, the ${seat.role} on ${jobId}, with nothing asked of its owner`);
+  }
+
+  /** Mark a seat's entry as written, reading the record fresh so nothing written meanwhile is lost. */
+  private async wroteDown(jobId: string, seat: { readonly role: string; readonly agent: Address }, hash: Hex | undefined): Promise<void> {
+    const record = await this.options.store.read(jobId);
+    if (!record) return;
+    await this.options.store.save({
+      ...record,
+      recorded: (record.recorded ?? []).map((one) =>
+        one.role === seat.role && isAddressEqual(one.agent, seat.agent) ? { ...one, written: hash ? { hash } : {} } : one),
+    });
   }
 
   private async answer(request: Request): Promise<Outcome> {
@@ -133,7 +221,8 @@ export class RegistryAnswers {
       return "ignored";
     }
     const already = record.recorded?.find((recorded) => recorded.role === seat.role && isAddressEqual(recorded.agent, seat.agent));
-    if (already && already.key.toLowerCase() !== request.key.toLowerCase()) {
+    // recorded once, whichever way it was: an entry this worker wrote itself answers no request at all
+    if (already && already.key?.toLowerCase() !== request.key.toLowerCase()) {
       say(`agent #${request.agentId} asked about ${jobId} again, and the ${seat.role}'s verdict is recorded once`);
       return "ignored";
     }
