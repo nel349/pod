@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { privateKeyToAccount } from "viem/accounts";
 import { Browser, browserAvailable } from "./support/browser.ts";
+import { THIS_SITE } from "../jobpage.ts";
 import { serve } from "../server.ts";
 import { JobStore, type JobRecord } from "../store.ts";
 import { signReceipt, type Receipt } from "../receipt.ts";
@@ -152,11 +153,11 @@ describe.skipIf(!available)("the wall, driven the way a person drives it", () =>
   test("the command to repeat the run is on the page, and is the real one", async () => {
     await browser.open(base + jobPath("one-that-passed"));
     const command = await browser.evaluate<string>(`document.querySelector("pre.repeat")?.innerText ?? ""`);
-    expect(command).toContain("docker run");
-    expect(command).toContain("--network none");
-    expect(command).toContain("node server.js");
-    expect(command).toContain("c0ffee1234");
+    // the code at the graded commit, then the grading itself, pointed at this job on this site
     expect(command).toContain("git clone");
+    expect(command).toContain("c0ffee1234");
+    expect(command).toContain(`bun run src/repeat.ts ${base}${jobPath("one-that-passed")} ../work`);
+    expect(command).not.toContain(THIS_SITE);
   }, 60_000);
 
   test("an agent's page shows the seats it held and what came of them", async () => {

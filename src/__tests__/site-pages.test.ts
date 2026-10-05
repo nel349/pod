@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Tile } from "../gallery.ts";
 import type { JobRecord } from "../store.ts";
 import { recordByRole } from "../agentpage.ts";
-import { claimPath, preparingPagePath, receiptFilePath, receiptPath, refundByNumberPath, refundPath, ROUTES } from "../routes.ts";
+import { claimPath, jobPath, preparingPagePath, receiptFilePath, receiptPath, refundByNumberPath, refundPath, ROUTES } from "../routes.ts";
 import { DEPOSIT_PERCENT, SHARES } from "../job.ts";
 import {
   jobView, moneyAt, needsTheChainForMoney, receiptView, renderSite, tileView, unpublishedView, type AgentFactsView, type SiteData, type SitePage,
@@ -262,7 +262,8 @@ describe("one job, opened", () => {
   test("a job with a receipt shows how to repeat the run, and one without simply does not", () => {
     const html = job(record({ signed }));
     expect(html).toContain("Check it yourself");
-    expect(html).toContain("--network none");
+    // the grading itself, pointed at this job by the address the page was reached at
+    expect(html).toContain(`bun run src/repeat.ts ${SITE_ADDRESS}${jobPath("excuses")} ../work`);
     expect(html).toContain(`href="${receiptFilePath("excuses")}"`);
     expect(job(record())).not.toContain("Check it yourself");
   });

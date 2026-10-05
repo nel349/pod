@@ -7,8 +7,9 @@
  *
  * Every assertion is something that would embarrass us if it were false on the day.
  */
-import { cardPath, checksPath, jobPath, receiptPath, ROUTES } from "./routes.ts";
+import { cardPath, checksPath, jobApiPath, jobPath, ROUTES } from "./routes.ts";
 import { SITE } from "./web/site/copy.ts";
+import { JobViewSchema, type JobView } from "./web/site/views/job.ts";
 
 export interface Finding {
   readonly what: string;
@@ -26,17 +27,23 @@ export interface AuditOutcome {
 /** Text that means a page rendered something it did not have. */
 const HOLES = ["undefined", "NaN", "[object Object]", "null</", "&lt;no "];
 
+/** The verdicts a job shows only once they are public, each of which a receipt records. */
+const VERDICTS_WITH_A_RECEIPT: readonly JobView["verdict"][] = ["passed", "failed"];
+
+/** What the server answers for the checks of a job with no public verdict, when its pod may see none of them */
+const SEALED_UNTIL_THE_VERDICT = 409;
+
 export async function audit(base: string, get: typeof globalThis.fetch = globalThis.fetch): Promise<AuditOutcome> {
   const started = Date.now();
   const findings: Finding[] = [];
   let checked = 0;
 
   const site = base.replace(/\/$/, "");
-  const look = async (path: string, what: string): Promise<Response | undefined> => {
+  const look = async (path: string, what: string, alsoRight: readonly number[] = []): Promise<Response | undefined> => {
     checked++;
     try {
       const response = await get(`${site}${path}`);
-      if (!response.ok) findings.push({ what, where: path, detail: `came back ${response.status}` });
+      if (!response.ok && !alsoRight.includes(response.status)) findings.push({ what, where: path, detail: `came back ${response.status}` });
       return response;
     } catch (error) {
       findings.push({ what, where: path, detail: (error as Error).message });
@@ -84,24 +91,41 @@ export async function audit(base: string, get: typeof globalThis.fetch = globalT
       findings.push({ what: `the card for ${jobId} is an image`, where: cardPath(jobId), detail: "it was served as something else" });
     }
 
-    const index = await look(checksPath(jobId), `the checks for ${jobId} can be fetched`);
-    const listed = ((await index?.text()) ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+    // what is owed for a job follows what the job says of itself: one still running, or closed with no
+    // verdict, has no receipt, and lists only the checks its pod may see, or says why it lists none
+    const said = await look(jobApiPath(jobId), `job ${jobId} says what it is to a program`);
+    const job = said?.ok ? JobViewSchema.safeParse(await said.json()) : undefined;
+    if (job && !job.success) {
+      findings.push({ what: `job ${jobId} says what it is in the shape its page is drawn from`, where: jobApiPath(jobId), detail: job.error.issues[0]?.message ?? "it did not" });
+    }
+    if (!job?.success) continue;
+
+    const offered = job.data.receipt;
+    const hasAVerdict = offered !== undefined || VERDICTS_WITH_A_RECEIPT.includes(job.data.verdict);
+    const index = await look(checksPath(jobId), `the checks for ${jobId} can be fetched`, hasAVerdict ? [] : [SEALED_UNTIL_THE_VERDICT]);
+    const listed = index?.ok ? (await index.text()).split("\n").map((l) => l.trim()).filter(Boolean) : [];
     if (index?.ok && listed.length === 0) {
       findings.push({ what: `the checks for ${jobId} are published`, where: checksPath(jobId), detail: "the list was empty" });
     }
     for (const path of listed) await look(path, `${path} can be fetched`);
 
-    const receipt = await look(receiptPath(jobId), `the receipt for ${jobId} is readable`);
+    if (!offered) {
+      if (hasAVerdict) {
+        findings.push({ what: `job ${jobId} has a receipt to check its verdict by`, where: jobPath(jobId), detail: `it says ${job.data.verdict}, and offers no receipt` });
+      }
+      continue;
+    }
+    const receipt = await look(offered.file, `the receipt for ${jobId} is readable`);
     if (receipt?.ok) {
       const signed = (await receipt.json()) as { readonly receipt?: { readonly start?: string } };
       if (!signed.receipt?.start) {
         findings.push({
           what: `the receipt for ${jobId} says how to repeat the run`,
-          where: receiptPath(jobId),
+          where: offered.file,
           detail: "it has no start command, so nobody can repeat it",
         });
       }
-      if (!body.includes("Check it yourself")) {
+      if (!body.includes(SITE.job.repeatTitle)) {
         findings.push({
           what: `job ${jobId} shows the command to repeat it`,
           where: jobPath(jobId),

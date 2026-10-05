@@ -57,9 +57,10 @@ async function receipt(over: Partial<Receipt> = {}): Promise<NonNullable<JobReco
 async function site(record?: JobRecord): Promise<string> {
   const store = new JobStore(await mkdtemp(join(tmpdir(), "pod-audit-")));
   if (record) await store.save(record, { "loads.mjs": "// asks the page for a page\n" });
-  const port = 8900 + Math.floor(Math.random() * 900);
-  servers.push(serve(store, port));
-  return `http://127.0.0.1:${port}`;
+  // a port nobody holds, chosen by the machine: a guessed one is sometimes somebody else's
+  const server = serve(store, 0);
+  servers.push(server);
+  return `http://127.0.0.1:${server.port}`;
 }
 
 describe("reading the wall the way a stranger would", () => {
@@ -103,6 +104,38 @@ describe("auditing a running site", () => {
     const outcome = await audit(base);
     expect(outcome.findings.map((f) => f.what)).toContain("the receipt for coat-or-no-coat says how to repeat the run");
     expect(saidPlainly(outcome)).toContain("nobody can repeat it");
+  });
+
+  test("a job closed with no verdict owes no receipt, and is not asked for one", async () => {
+    const base = await site({
+      jobId: "coat-or-no-coat", seal: SEAL, tile: tile({ verdict: "withdrawn" }),
+      checksSaid: [{ says: "the page answers", hidden: false }], approvals: [],
+    });
+
+    const outcome = await audit(base);
+    expect(outcome.findings).toEqual([]);
+    expect(outcome.jobs).toEqual(["coat-or-no-coat"]);
+  });
+
+  test("a job still running, its checks all sealed, owes neither checks nor a receipt yet", async () => {
+    const base = await site({
+      jobId: "coat-or-no-coat", seal: SEAL, tile: tile({ verdict: "running" }),
+      checksSaid: [{ says: "the page answers", hidden: true }], approvals: [],
+    });
+
+    const outcome = await audit(base);
+    expect(outcome.findings).toEqual([]);
+  });
+
+  test("a verdict with no receipt to check it by is a finding", async () => {
+    const base = await site({
+      jobId: "coat-or-no-coat", seal: SEAL, tile: tile(),
+      checksSaid: [{ says: "the page answers", hidden: false, exitCode: 0 }], approvals: [],
+    });
+
+    const outcome = await audit(base);
+    expect(outcome.findings.map((f) => f.what)).toEqual(["job coat-or-no-coat has a receipt to check its verdict by"]);
+    expect(saidPlainly(outcome)).toContain("it says passed, and offers no receipt");
   });
 
   test("a site that is not there is every check failing, not a crash", async () => {

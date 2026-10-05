@@ -118,7 +118,7 @@ export function jobView(record: JobRecord, notes: readonly Note[], chainSays: Ch
 function receiptParts(jobId: string, signed: SignedReceipt, repository: string | undefined): NonNullable<JobView["receipt"]> {
   return {
     page: receiptPath(jobId), file: receiptFilePath(jobId), finishedAt: signed.receipt.finishedAt,
-    repeat: repeatCommand(signed.receipt, checksPath(jobId), repository),
+    repeat: repeatCommand(signed.receipt, jobId, repository),
   };
 }
 

@@ -259,6 +259,17 @@ describe("the server itself", () => {
     expect((await get(store, cardPath("never-happened"))).status).toBe(404);
   });
 
+  test("its pages print the address the request named, until the server is told where it is reached from outside", async () => {
+    const store = await storeWith();
+    const asked = new Request(`http://pod.test${ROUTES.agents}`, { headers: { accept: "text/html" } });
+    expect(await (await handle(asked, store)).text()).toContain(`http://pod.test${ROUTES.guide}`);
+
+    // behind whatever holds the certificate, the request arrives over plain http, and the page must not say so
+    const told = await (await handle(asked, store, { site: "https://pod.example" })).text();
+    expect(told).toContain(`https://pod.example${ROUTES.guide}`);
+    expect(told).not.toContain("http://pod.test");
+  });
+
   test("it answers reads only", async () => {
     const store = await storeWith(record());
     const posted = await handle(new Request(`http://pod.test${ROUTES.wall}`, { method: "POST" }), store);

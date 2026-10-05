@@ -4,8 +4,9 @@
  * This is the point of the whole project, in one file. A stranger takes a published job, fetches the
  * receipt and the checks that produced it, runs them against the code themselves, and finds out
  * whether we told the truth. Nothing here trusts the server it is talking to: the receipt's signature
- * is checked, the checks are run in the same sealed box, and the answer it prints is the answer its
- * own machine reached, not the one it was handed.
+ * is checked, the code is fingerprinted and held against the tree the receipt names, the checks are
+ * run in the same sealed box, and the answer it prints is the answer its own machine reached, not the
+ * one it was handed.
  *
  * It answers a question with three outcomes, not two. "Agrees", "disagrees", and "the published run
  * could not be repeated here", which is a fact about this machine and is said as one.
@@ -15,7 +16,8 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { grade, type CheckToRun } from "./blackbox.ts";
 import { readableToTheBox } from "./sandbox.ts";
-import { verifyReceipt, type SignedReceipt } from "./receipt.ts";
+import type { Hex } from "viem";
+import { fingerprintTree, verifyReceipt, type SignedReceipt } from "./receipt.ts";
 import { reachVerdict, type Verdict } from "./verdict.ts";
 import { checksPath, receiptPath } from "./routes.ts";
 
@@ -35,6 +37,11 @@ export interface RepeatOutcome {
   readonly agrees: boolean;
   /** whether the receipt was signed by the runner it names */
   readonly signatureHolds: boolean;
+  /**
+   * The code that was run here, fingerprinted the way the grader fingerprints it, beside the tree the
+   * receipt names. A verdict reached on some other code says nothing about the published one.
+   */
+  readonly tree: { readonly here: Hex; readonly published: Hex; readonly isTheSame: boolean };
   readonly checksRun: readonly string[];
   readonly seconds: number;
 }
@@ -62,6 +69,8 @@ export async function repeat(request: RepeatRequest): Promise<RepeatOutcome> {
   if (!response.ok) throw new Error(`${origin} has no receipt for ${jobId}: ${response.status}`);
   const signed = (await response.json()) as SignedReceipt;
   const signatureHolds = await verifyReceipt(signed);
+  const here = await fingerprintTree(request.artefact);
+  const tree = { here, published: signed.receipt.tree, isTheSame: here.toLowerCase() === signed.receipt.tree.toLowerCase() };
 
   const checks = await fetchChecks(get, origin, jobId);
   if (checks.length === 0) throw new Error(`${origin} published no checks for ${jobId}`);
@@ -91,16 +100,17 @@ export async function repeat(request: RepeatRequest): Promise<RepeatOutcome> {
     }));
   }
 
-  const here = reachVerdict(rounds.map((round) => ({
+  const reached = reachVerdict(rounds.map((round) => ({
     exitCode: round.passed ? 0 : 1,
     summary: round.checks.map((c) => `${c.says}:${c.exitCode}`).join("|"),
   })));
 
   return {
     published: signed.receipt.verdict,
-    here,
-    agrees: here.kind === signed.receipt.verdict,
+    here: reached,
+    agrees: reached.kind === signed.receipt.verdict,
     signatureHolds,
+    tree,
     checksRun: toRun.map((c) => c.says),
     seconds: (Date.now() - started) / 1000,
   };
@@ -131,6 +141,9 @@ export function saidPlainly(outcome: RepeatOutcome): string {
       ? `The published verdict holds: ${outcome.published}, and this machine reached ${outcome.here.kind}.`
       : `This machine disagrees. Published: ${outcome.published}. Here: ${outcome.here.kind}.`,
     `Checks run here: ${outcome.checksRun.join(", ")}`,
+    outcome.tree.isTheSame
+      ? `The code run here is the tree the receipt names.`
+      : `The code run here is not the tree the receipt names: here ${outcome.tree.here}, the receipt ${outcome.tree.published}. What this machine reached is about some other code.`,
     outcome.signatureHolds
       ? `The receipt was signed by the runner it names.`
       : `The receipt's signature does not match the runner it names. Treat everything above with that in mind.`,
@@ -147,5 +160,5 @@ if (import.meta.main) {
   }
   const outcome = await repeat({ jobURL, artefact });
   console.log(saidPlainly(outcome));
-  process.exit(outcome.agrees && outcome.signatureHolds ? 0 : 1);
+  process.exit(outcome.agrees && outcome.signatureHolds && outcome.tree.isTheSame ? 0 : 1);
 }

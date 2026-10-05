@@ -227,8 +227,9 @@ export async function checkout(repo: Repository, commit: string, into: string): 
 /**
  * The copy that survives us: one file holding every commit, which anybody can clone from.
  *
- * It is written when a job is graded and published like everything else. Its hash goes in the signed
- * receipt, so a copy downloaded later can be proved identical to the one the verdict was about.
+ * It is written when a job is graded and published like everything else. The signed receipt names
+ * the commit, which git itself derives from everything in it, and a fingerprint of the tree, so the
+ * code in a copy downloaded later can be proved to be what the verdict was about.
  */
 export async function bundle(repo: Repository, to: string): Promise<string> {
   await must([`--git-dir=${repo.path}`, "bundle", "create", to, "--all"]);

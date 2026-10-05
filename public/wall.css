@@ -271,6 +271,9 @@ a.primary.small { font-size: 18px; padding: 10px 16px 8px; box-shadow: 4px 4px 0
 
 .foot { margin-top: 12px; }
 .foot p { margin: 0; font: 400 14px/1.4 var(--type); color: #a8a89f; }
+/* on the dark ground a link in the browser's own blue cannot be read: the paper's colour, and yellow under the pointer, as in the header */
+.foot a { color: var(--paper); text-underline-offset: 3px; }
+.foot a:hover { color: var(--yellow); }
 
 /* ================= a phone ================= */
 

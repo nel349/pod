@@ -50,9 +50,10 @@ async function publishedJob(): Promise<{ readonly jobURL: string }> {
     checksDirectory: CHECKS, approvals: [],
   });
 
-  const port = 8800 + Math.floor(Math.random() * 900);
-  servers.push(serve(store, port));
-  return { jobURL: `http://127.0.0.1:${port}${jobPath("coat-or-no-coat")}` };
+  // a port nobody holds, chosen by the machine: a guessed one is sometimes somebody else's
+  const server = serve(store, 0);
+  servers.push(server);
+  return { jobURL: `http://127.0.0.1:${server.port}${jobPath("coat-or-no-coat")}` };
 }
 
 describe("a job URL is all a stranger needs", () => {
@@ -75,7 +76,10 @@ describe.skipIf(!withDocker)("repeating a verdict somebody else published", () =
     expect(outcome.signatureHolds).toBe(true);
     // the hidden check ran here too: it is published once there is a verdict
     expect(outcome.checksRun).toHaveLength(2);
+    // and what ran here is the code the receipt is about, not merely code that also passes
+    expect(outcome.tree.isTheSame).toBe(true);
     expect(saidPlainly(outcome)).toContain("The published verdict holds");
+    expect(saidPlainly(outcome)).toContain("The code run here is the tree the receipt names");
   }, 300_000);
 
   test("code that is not the graded code disagrees, and says so", async () => {
@@ -94,5 +98,9 @@ describe.skipIf(!withDocker)("repeating a verdict somebody else published", () =
     expect(outcome.here.kind).toBe("failed");
     expect(outcome.agrees).toBe(false);
     expect(saidPlainly(outcome)).toContain("This machine disagrees");
+    // the disagreement is explained: it was never the published code
+    expect(outcome.tree.isTheSame).toBe(false);
+    expect(outcome.tree.here).not.toBe(outcome.tree.published);
+    expect(saidPlainly(outcome)).toContain(`is not the tree the receipt names: here ${outcome.tree.here}, the receipt ${outcome.tree.published}`);
   }, 300_000);
 });

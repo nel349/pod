@@ -13,6 +13,7 @@ import type { CheckWriting, ProvenChecks } from "./checkwriting/index.ts";
 import type { MarketConfig } from "./market.ts";
 import { isAddress, isAddressEqual, type Address } from "viem";
 import { bodyWithin, tooLarge } from "./body.ts";
+import { siteFromTheEnvironment, SITE_SETTING } from "./address.ts";
 import { NO_STORE } from "./headers.ts";
 import { firstLine } from "./errors.ts";
 import { chainJobToTheWire } from "./chainJob.ts";
@@ -68,6 +69,11 @@ export interface Market {
 
 /** What this server opens beyond the wall, each only when it has a chain to answer to. */
 export interface Services {
+  /**
+   * Where the wall is reached from outside, when it is told. Left out, each page prints the address it
+   * was asked at, which is right on a laptop and wrong behind whatever holds the certificate.
+   */
+  readonly site?: string;
   readonly market?: Market;
   /** the git door agents clone, fetch and push through */
   readonly door?: GitDoor;
@@ -98,12 +104,12 @@ const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const guide = new URL("../public/llms.txt", import.meta.url);
 const MARKDOWN = { "content-type": "text/markdown; charset=utf-8" } as const;
 
-export async function handle(request: Request, store: JobStore, { market, door, notes, identities, jobList, credit, claims, owners, agents, preparing }: Services = {}): Promise<Response> {
+export async function handle(request: Request, store: JobStore, { site, market, door, notes, identities, jobList, credit, claims, owners, agents, preparing }: Services = {}): Promise<Response> {
   const { pathname } = new URL(request.url);
   const page = (head: Head, drawn: SitePage, status = 200): Response => {
     const data: SiteData = {
       ...drawn, ...(market ? { market: market.page } : {}), coin: market?.page.coin ?? MONAD_TESTNET.coin, drawnAt: new Date().toISOString(),
-      site: new URL(request.url).origin,
+      site: site ?? new URL(request.url).origin,
     };
     // the browser moving here in place asks for what the page is drawn from, at the page's own address
     if (wantsPageData(request)) return Response.json({ title: head.title, data } satisfies PageData, { status, headers: NO_STORE });
@@ -270,7 +276,8 @@ export async function handle(request: Request, store: JobStore, { market, door, 
    *
    * `git clone` against this URL gives somebody the whole repository, including the attempts that
    * failed, with no account and no server of ours in the way. It is the answer to "what if you
-   * disappear", and the receipt carries its hash so a copy can be proved identical later.
+   * disappear", and the receipt names the commit and a fingerprint of its tree, so the code in a copy
+   * can be proved later to be what was graded.
    */
   if (pathname.startsWith(ROUTES.bundle)) {
     const jobId = pathname.slice(ROUTES.bundle.length);
@@ -452,10 +459,14 @@ if (import.meta.main) {
   const port = Number(process.env.PORT ?? 3000);
   const store = new JobStore(directory);
   const { servicesFromTheEnvironment, JOBS_ADDRESS_SETTING } = await import("./services.ts");
-  const services = await servicesFromTheEnvironment(store, directory);
+  const site = siteFromTheEnvironment();
+  const services = { ...(await servicesFromTheEnvironment(store, directory)), ...(site ? { site } : {}) };
   const { market } = services;
   const server = serve(store, port, services);
   console.log(`the wall is at http://localhost:${port}${ROUTES.wall}, reading ${directory}`);
+  console.log(site
+    ? `its pages print ${site} as their own address`
+    : `its pages print whatever address they were asked at: ${SITE_SETTING} names none`);
   console.log(market
     ? `posting is open, against ${market.page.jobs}; checks are written by Claude, through the CLI signed in on this machine`
     : `posting is closed: no ${JOBS_ADDRESS_SETTING}`);

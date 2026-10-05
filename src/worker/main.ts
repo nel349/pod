@@ -10,6 +10,7 @@
  */
 import { join } from "node:path";
 import { isHex } from "viem";
+import { siteFromTheEnvironment } from "../address.ts";
 import { BoxSlots } from "../docker/index.ts";
 import { BOX_SLOTS_FOLDER, JOBS_FOLDER_SETTING, PREPARING_FOLDER, REPOSITORIES_FOLDER, WORKER_FOLDER } from "../folders.ts";
 import { GITHUB_OWNER_SETTING } from "../github.ts";
@@ -34,6 +35,7 @@ await confirmTheContracts({
   ...(contracts.earlier ? { earlier: contracts.earlier.address } : {}),
 });
 const publishTo = process.env[GITHUB_OWNER_SETTING];
+const site = siteFromTheEnvironment();
 
 const worker = new Worker({
   store: new JobStore(directory),
@@ -46,7 +48,7 @@ const worker = new Worker({
   token: contracts.token,
   runnerKey: key,
   image: IMAGE,
-  ...(process.env.POD_SITE ? { site: process.env.POD_SITE } : {}),
+  ...(site ? { site } : {}),
   registry: { registries: MONAD_REGISTRIES, stateFolder: join(directory, WORKER_FOLDER) },
   ...(publishTo ? { publishTo: { owner: publishTo } } : {}),
 });
