@@ -42,8 +42,8 @@
     <rect x="822" y="136" width="46" height="24" rx="6" fill="#f6f5f2" stroke="#e0dfda"/><text x="834" y="152">QA</text>
     <rect x="876" y="136" width="48" height="24" rx="6" fill="#f6f5f2" stroke="#e0dfda"/><text x="884" y="152">sec.</text>
   </g>
-  <text x="588" y="182" font-size="12.5" fill="#5d6068">Each seat puts down a deposit and approves one exact commit.</text>
-  <text x="588" y="198" font-size="12.5" fill="#5d6068">A later commit clears every approval given for the earlier one.</text>
+  <text x="588" y="182" font-size="12.5" fill="#5d6068">Each seat pays a deposit. Four approve one exact commit.</text>
+  <text x="588" y="198" font-size="12.5" fill="#5d6068">A later commit clears every approval given before it.</text>
 
   <!-- the box -->
   <rect x="290" y="270" width="370" height="164" rx="10" fill="#ffffff" stroke="#17181c" stroke-width="1.5"/>
@@ -69,7 +69,7 @@
   <text x="726" y="317" font-size="12.5" fill="#5d6068">every job, passed and failed</text>
   <text x="726" y="334" font-size="12.5" fill="#5d6068">the signed receipt</text>
   <text x="726" y="351" font-size="12.5" fill="#5d6068">every check, hidden ones too,</text>
-  <text x="726" y="368" font-size="12.5" fill="#5d6068">published once there is a verdict</text>
+  <text x="726" y="368" font-size="12.5" fill="#5d6068">published once the money moves</text>
   <text x="726" y="392" font-size="12.5" fill="#5d6068">no wallet needed to read it</text>
 
   <!-- the stranger -->
@@ -83,9 +83,9 @@
   <text x="56" y="296" font-size="14" font-weight="600" fill="#17181c">The validator</text>
   <text x="56" y="317" font-size="12.5" fill="#5d6068">re-runs the checks</text>
   <text x="56" y="334" font-size="12.5" fill="#5d6068">signs a receipt</text>
-  <text x="56" y="351" font-size="12.5" fill="#5d6068">writes the verdict to the</text>
-  <text x="56" y="368" font-size="12.5" fill="#5d6068">ERC-8004 registry</text>
-  <text x="56" y="392" font-size="12.5" fill="#5d6068">and only then settles</text>
+  <text x="56" y="351" font-size="12.5" fill="#5d6068">settles the money, and</text>
+  <text x="56" y="368" font-size="12.5" fill="#5d6068">only then writes each seat's</text>
+  <text x="56" y="385" font-size="12.5" fill="#5d6068">verdict to ERC-8004</text>
 
   <!-- flows -->
   <line x1="220" y1="150" x2="290" y2="150" stroke="#1d6f45" stroke-width="2" marker-end="url(#arrowMoney)"/>

@@ -10,8 +10,8 @@ what break in the code it would fail on. If the answer is "none", the test is de
 
 ## 1. The mutation check, which is the rule that matters
 
-Before writing a test, and again before keeping it: **if I deliberately broke the logic under test —
-flipped a comparison, skipped the write, returned an empty payload — would this exact test go red?**
+Before writing a test, and again before keeping it: **if I deliberately broke the logic under test
+(flipped a comparison, skipped the write, returned an empty payload), would this exact test go red?**
 
 If a plausible bug slips past it, the test is structurally blind and the assertion has to bind to the
 requirement instead.
@@ -44,7 +44,7 @@ run real containers, the chain tests deploy this build's bytecode to a real EVM 
 balances, the browser tests drive a real browser, and the registry tests read the live testnet. A
 mock in any of those positions would prove only that the mock behaves like the mock.
 
-Fake the thing you do not control and are not testing — a third party's paid API, a clock you need to
+Fake the thing you do not control and are not testing: a third party's paid API, a clock you need to
 fast-forward past. Never the thing under test. When a dependency is too slow or too remote to run for
 real, that is a fact worth stating in the test's name, not papering over.
 
@@ -113,7 +113,8 @@ So: after a change to anything visible, it goes in front of a person before it i
 | Chain | The contract's rules against a real EVM: payment, refund, the held job, a stranger refused | every push |
 | Git | That a graded commit is a commit, and the tree is what git says it is | every push |
 | Browser | That the pages work as things people use, not as HTML containing the right words | every push |
-| Agent | That a seat's agent did its seat's work | locally, and nightly |
+| Agent | That a seat's agent did its seat's work, in real boxes, with a program standing in for the model | every push |
+| Doors | That an outside agent can work a job through the public doors and only as its seat, against a local chain | every push |
 | Live audit | That the deployed site is not lying: dead links, holes, receipts that cannot be repeated | before every submission |
 
 A feature is not done until its layer has a test for it, and the mutation check has been asked of

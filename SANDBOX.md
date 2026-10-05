@@ -12,6 +12,78 @@ Two dangers, and people usually only plan for the first.
    the runner so everything reports green, fetch the answers, detect that it is being judged, or be
    deliberately flaky so no verdict can be reached.
 
+This file is in two parts. **What runs today** is held against the code, line for line, and was last
+checked on 5 October 2026. Everything after it is how we got there: the spikes, dated, and the
+reasons.
+
+---
+
+## What runs today
+
+Every box is the same image, `node` pinned by digest (`IMAGE` in `src/sandbox.ts`), with every
+capability dropped and `no-new-privileges` set. What differs is what each may reach and write.
+
+| Box | Started by | Network | Filesystem | Limits |
+|---|---|---|---|---|
+| **The work being graded** | `grade` in `src/blackbox.ts` | A private network made for this one grading, with no route out (`docker network create --internal`) | Read-only. The code is mounted read-only at `/repo` and copied into `/work`, which is memory, 256 MB. `/tmp` is memory, 64 MB | 512 MB, one CPU, 128 processes. It has 90 seconds to start answering, 180 when the worker grades |
+| **Each check** | the same function, one box per check | The same private network: it reaches the work at port 3000 and nothing else | Read-only. The checks are mounted read-only at `/checks`. `/tmp` is memory, 64 MB | 512 MB, one CPU, 128 processes, 60 seconds |
+| **An agent**, which here is the check writer | `runInBox` in `src/agent.ts` | None at all. The model arrives as a socket file mounted into the box (`src/broker.ts`), so the credential never enters it | Its own workspace, mounted writable at `/work` | 2 GB, two CPUs, 512 processes, and its own timeout |
+
+The work and the checks never share a box. The checks drive the work over the private network and
+grade what comes back, so code that goes looking for them finds nothing on its own disk.
+
+**How one verdict is reached** (`gradeCommit` in `src/pipeline.ts`):
+
+- **One exact commit is laid out**, with `git archive`: its files and nothing else. No `.git`, so the
+  box cannot read the history, and no later commit can change what was graded.
+- **The whole set of checks runs three times**, each time in fresh boxes on a fresh network, and the
+  runs have to agree. Two answers is "not reproducible", which is its own outcome.
+- **Everything is taken down afterwards**, whatever happened: the work's box and the network by name,
+  and by the grading's label anything Docker made after it stopped answering.
+- **A signed receipt** records what ran: the commit, a fingerprint of the tree, the image, the command
+  that started the work, each check with its exit code, the number of runs, and the verdict
+  (`src/receipt.ts`).
+
+**How many boxes at once.** Writing checks and grading share three slots, kept on disk beside the jobs
+(`src/docker/BoxSlots.ts`), so the two together never run more boxes than the machine has room for.
+
+**The model call is locked down too**, though it is not a box. The check writer's model is the Claude
+CLI signed in on the machine, started with no tools, no MCP servers, no settings and no saved
+session, in an empty folder, with the prompt on standard input (`LOCKED_DOWN_FLAGS` in
+`src/broker.ts`). A stranger's sentence reaches a model that can only answer in text.
+
+**Checking a verdict yourself** runs the same `grade`, from `src/repeat.ts`, on your machine: it
+checks the receipt's signature, holds your copy of the code against the tree the receipt names,
+fetches the checks from the site and runs them twice. Every job page prints the lines to run.
+
+### Written down, not built
+
+So that nobody reads an intention as a feature. Each of these is described further down as part of the
+design, and none of them is in the code that grades today.
+
+- **A route to a declared host.** A job can declare hosts, and the receipt records them, but the
+  grading network has no route out for anybody. Work that needs a live third party cannot pass.
+- **Catching an undeclared call** is a search of the work's own log for the words a failed lookup
+  prints (`undeclaredCalls` in `src/pipeline.ts`). It is evidence when the work says so, and silence
+  proves nothing.
+- **The install phase.** `installDependencies` in `src/sandbox.ts` is written and tested: the one box
+  with a route out. Nothing calls it. Work is graded as committed, with what the image has.
+- **The receipt in the in-toto shape.** The receipt is our own, `pod.receipt.v1`.
+- **A third box for checks that must run in-process.** Every check is black box.
+- **The diff filter**, with its list of paths that never apply.
+- **Deploying what was built.**
+
+### Where it runs
+
+On a rented Linux machine that holds nothing else (see `DEPLOY.md`). Two reasons it is not a laptop:
+
+- **A container escape is a host compromise**, so the host is one we are happy to lose.
+- **Docker Desktop on a Mac does not keep a writable folder apart from the host the way Linux does.**
+  Found on 24 September: a link made inside a box, in a folder mounted writable, sets the mode of the
+  file it points at on the Mac to readable and writable by everybody. The box still cannot read it,
+  but every local user now can. An agent's workspace is exactly such a folder, so the boxes with one
+  run on Linux, which is not affected.
+
 ---
 
 ## What we ran, and what happened
@@ -126,7 +198,8 @@ which we do not control and should not.
    for, and it is easier to see when the graded run has no route at all.
 
 **Honest work often needs the network**, and a flat ban would be wrong. A site that calls a weather
-service is not cheating. So:
+service is not cheating. So, as designed (the first is built, the second is not, and the third is a
+search of the log: see "Written down, not built" above):
 
 - **The job declares what it needs to reach**, and that declaration is part of what done means.
 - **The graded run gets either a recorded stand-in for that service, or a route to exactly that host**,
@@ -138,7 +211,10 @@ The spike showed why the last point matters: an artefact making an undeclared lo
 immediately and carried on running, printing the refusal in its own log. That is visible evidence
 somebody can act on, rather than a silent pass.
 
-## The design
+## The design, as it was written on 17 September
+
+What follows is the design the spikes led to. Most of it is what runs today, and the table at the top
+of this file is the authority on which parts.
 
 **Two boxes, and the checks never enter the one holding the code.**
 
@@ -147,20 +223,22 @@ somebody can act on, rather than a silent pass.
 2. **Checks box.** Fresh container from the same pinned digest, holding the checks, able to reach the
    artefact and nothing else. It drives the artefact and grades what comes back.
 
-Where a check cannot be black box, it runs in a third fresh container with the code applied only to
-paths that are not tests and not build configuration, and its result is marked as the weaker kind.
+Where a check cannot be black box, it would run in a third fresh container with the code applied only
+to paths that are not tests and not build configuration, and its result marked as the weaker kind.
+Not built: every check today is black box.
 
 **The rest of the posture:**
 
 - **Pin the image by digest**, never a tag. Every harness we read pins by tag and is therefore not
   reproducible.
 - **Single-commit repository.** No history, no remotes, no tags, so there is nothing to mine.
-- **No network during the graded run.** Dependencies are installed in a separate phase, or baked in.
+- **No network during the graded run.** Dependencies were to be installed in a separate phase, which
+  is written and not yet called.
 - **Run three times and require unanimity.** Two answers means "not reproducible", which is its own
   outcome and not a failure of the system.
-- **Record a receipt** in the in-toto test-result shape: what ran, the exit codes, the tree
-  fingerprint, the image digest, and the base commit. That receipt is what the verdict on chain points
-  at.
+- **Record a receipt**: what ran, the exit codes, the tree fingerprint, the image digest, and the
+  commit. That receipt is what the verdict on chain points at. The in-toto test-result shape was the
+  plan; the receipt that exists is our own.
 - **Throwaway host.** A container escape is a host compromise, so the box runs somewhere we are happy
   to lose.
 
@@ -205,8 +283,8 @@ Two rules came out of it, and both are in the code.
 **It happened again on 20 September**, in the other direction. An agent's workspace is made for it
 by us, and it was 0700 like any temporary directory, so an agent could not write into the workspace
 it had been handed: no code, no decision, nothing. Every agent test passed on this Mac and every one
-failed on Linux. The rule is now in two functions that say which side they are for — one for a
-directory the box only reads, one for a workspace it owns — and the reason is in both.
+failed on Linux. The rule is now in two functions that say which side they are for, one for a
+directory the box only reads and one for a workspace it owns, and the reason is in both.
 
 The second one matters beyond this bug: the failure mode it replaced made every real startup failure
 look identical, which is the worst thing a grading system can do to the person reading the verdict.
@@ -223,8 +301,4 @@ decides the price floor. A managed sandbox, if we ever need one, is roughly a ce
 
 ## Still to do
 
-- The diff filter, with its list of paths that never apply.
-- Deployment of the built artefact, which is part of "done" and has not been sandboxed yet.
-
-Done since this was written: the separate install phase, which is the only phase with a route out,
-and the signed receipt.
+The list under "Written down, not built", at the top of this file, is the whole of it.

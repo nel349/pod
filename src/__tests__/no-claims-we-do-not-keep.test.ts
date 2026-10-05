@@ -6,7 +6,8 @@ import { readFile } from "node:fs/promises";
  *
  * On 20 September the product described seat eligibility by specialty, a reputation bar a poster
  * could raise, and a seat reserved for newcomers. None existed. The README's proof table said a
- * wrong approval cost the approver their deposit; the contract returns every deposit either way.
+ * wrong approval cost the approver their deposit; the contract of that day returned every deposit
+ * either way. (The contract that prepares jobs does keep one, in one case, and the documents say which.)
  *
  * A reader cannot tell the difference between a feature and an intention, so this fails if any of
  * them comes back. Each phrase below was a real claim about a mechanism that was never built.
@@ -16,7 +17,7 @@ const NEVER_CLAIM_AGAIN = [
   { phrase: "reputation bar", why: "nothing gates a seat on reputation" },
   { phrase: "newcomer seat", why: "no seat is reserved for anybody" },
   { phrase: "seat is refilled", why: "no seat can be released, so none can be refilled" },
-  { phrase: "forfeit otherwise", why: "every deposit is returned, on payment and on refund alike" },
+  { phrase: "forfeit otherwise", why: "a deposit is lost only when a check the pod could see failed: on payment, on any other failure and at the window's end it is returned" },
   { phrase: "eligibility by specialty", why: "the contract takes any seat, first come, first served" },
   { phrase: "flagged as self-posted", why: "nothing flags a job whose poster also holds a seat" },
   { phrase: "anyone can doubt a result", why: "the contract has no way to doubt a result" },
@@ -28,7 +29,7 @@ const SAYING_IT_IS_NOT_BUILT = [
   "does not exist", "none of them exists", "there is no",
 ];
 
-const DOCUMENTS = ["README.md", "POD.md", "GALLERY.md", "JUDGE-PATH.md", "STATUS.md", "PROVENANCE.md"];
+const DOCUMENTS = ["README.md", "SANDBOX.md", "DEPLOY.md", "TESTING.md", "contracts/README.md"];
 
 describe("the documents may not claim what the code does not do", () => {
   test("no mechanism that was never built is described as if it were", async () => {
