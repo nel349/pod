@@ -8,3 +8,5 @@ export { keptSetUpStore } from "./hooks/keptSetUpStore.ts";
 export { keptSetUpStillWaits } from "./hooks/keptSetUpStillWaits.ts";
 export type { Kept } from "./state/keptPayment.ts";
 export type { KeptSetUp } from "./state/payFirst.ts";
+
+export { PostPages } from "./PostPages.tsx";

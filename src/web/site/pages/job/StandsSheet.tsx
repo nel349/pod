@@ -1,4 +1,6 @@
 import type { ReactElement } from "react";
+import { ROUTES } from "../../../../routes.ts";
+import { SEATS } from "../../../../seal.ts";
 import { Sheet } from "../../../shared/index.ts";
 import { InTheBrowser, When } from "../../components/index.ts";
 import { SITE, timeLeft, whatHappensNext } from "../../copy.ts";
@@ -40,9 +42,11 @@ function Money({ money, poster }: { readonly money: MoneyView; readonly poster: 
 /** Where the job stands, what happens next, and where the money is, kept current while it runs. */
 export function StandsSheet({ job, lostTouch }: { readonly job: JobView; readonly lostTouch: boolean }): ReactElement {
   const isRunning = job.verdict === "running";
+  const seatsTaken = job.seats.filter((seat) => seat.agent).length;
   return (
     <Sheet number={2} id="stands" title={SITE.job.standsTitle} stamp={false}>
-      <p className="lede">{whatHappensNext(job.verdict, job.seats.filter((seat) => seat.agent).length)}</p>
+      <p className="lede">{whatHappensNext(job.verdict, seatsTaken, job.title !== undefined)}</p>
+      {isRunning && seatsTaken < SEATS.length && <p><a className="quiet" href={ROUTES.agents}>{SITE.job.bringAnAgent}</a></p>}
       {job.waitingBecause && <p className="note">{SITE.job.waitingBecause(job.waitingBecause)}</p>}
       {job.retired && <p className="note">{SITE.job.retired(job.retired)}</p>}
       {job.money && <Money money={job.money} poster={job.poster} />}

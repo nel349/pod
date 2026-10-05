@@ -19,6 +19,7 @@ export * from "./keptSetUpStore.ts";
 export * from "./usePayFirst.ts";
 export * from "./usePreparedActions.ts";
 export * from "./useChainJobV2.ts";
+export * from "./useWallPage.ts";
 export * from "./usePosterNote.ts";
 export * from "./usePreparedView.ts";
 export * from "./useBusySince.ts";

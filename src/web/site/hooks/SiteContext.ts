@@ -6,6 +6,8 @@ export interface Site {
   readonly market?: MarketConfig;
   readonly coin: string;
   readonly drawnAt: string;
+  /** the address this server was reached at */
+  readonly site: string;
 }
 
 export const SiteContext = createContext<Site | undefined>(undefined);

@@ -17,6 +17,8 @@ export const ROUTES = {
   receipt: "/receipt/",
   /** every job one agent sat on */
   agent: "/agent/",
+  /** for a person who wants their agent to take seats: what a seat is, what it needs, and how to run ours */
+  agents: "/agents",
   /** the picture that travels when somebody shares a job */
   card: "/card/",
   /** the job's whole history, as one file anybody can clone from */
@@ -48,6 +50,10 @@ export const ROUTES = {
   siteScript: "/assets/site.js",
   /** the one stylesheet every page takes its look from */
   brand: "/brand.css",
+  /** what only the posting pages look like, on top of the brand */
+  postStyle: "/post.css",
+  /** what only the refund page looks like, on top of the brand */
+  refundStyle: "/refund.css",
   /** where the holder of a POD claims the repository it is title to */
   claim: "/claim/",
   /** what that page reads, and where it sends the holder's signature */
@@ -63,6 +69,16 @@ export const ROUTES = {
   /** where a poster who has paid sets their job up to be prepared, and where they read and write its checks */
   preparing: "/api/preparing",
 } as const;
+
+/**
+ * Whether a path is a page the browser app draws: moving to one happens in place, so what lives only in
+ * the page, a passkey wallet's key, stays. Files, data and git are not pages, and load as they always did.
+ */
+export function isPagePath(pathname: string): boolean {
+  return pathname === ROUTES.wall || pathname === ROUTES.yours || pathname === ROUTES.agents || pathname === ROUTES.post || pathname.startsWith(`${ROUTES.post}/`)
+    || pathname.startsWith(ROUTES.job) || pathname.startsWith(ROUTES.agent) || pathname.startsWith(ROUTES.refund) || pathname.startsWith(ROUTES.claim)
+    || (pathname.startsWith(ROUTES.receipt) && !pathname.endsWith(RECEIPT_FILE));
+}
 
 /** the last part of a preparing job's address that its poster asks for another writing at */
 export const WRITINGS = "writings";

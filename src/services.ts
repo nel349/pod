@@ -125,7 +125,7 @@ export async function servicesFromTheEnvironment(
   return servicesFor({
     store, directory, jobs,
     publicClient: monadClient(rpc),
-    page: { chainId: MONAD_TESTNET.id, chainName: "Monad testnet", rpc, explorer: "https://testnet.monadscan.com", coin: MONAD_TESTNET.coin, registries: MONAD_REGISTRIES },
+    page: { chainId: MONAD_TESTNET.id, chainName: "Monad testnet", rpc, explorer: "https://testnet.monadscan.com", coin: MONAD_TESTNET.coin, faucet: MONAD_TESTNET.faucet, registries: MONAD_REGISTRIES },
     registries: MONAD_REGISTRIES,
     ...(earlier ? { earlier, writer: writerWallet(environment) } : {}),
     ...(tokenAddress ? { token: tokenAddress } : {}),

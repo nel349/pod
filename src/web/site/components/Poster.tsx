@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from "react";
+import { ROUTES } from "../../../routes.ts";
 import { SITE } from "../copy.ts";
 
 /** A page's layout: the bill on the left, its sheets on the right, and the line at the foot of every page. */
@@ -8,7 +9,7 @@ export function Poster({ bill, children }: { readonly bill: ReactNode; readonly 
       {bill}
       <main className="sheets">
         {children}
-        <footer className="foot"><p>{SITE.footer}</p></footer>
+        <footer className="foot"><p>{SITE.footer} <a href={ROUTES.agents}>{SITE.agents.footLink}</a></p></footer>
       </main>
     </div>
   );

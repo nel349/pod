@@ -1,6 +1,7 @@
 /**
- * The browser's half of every site page: it reads the data the server drew the page from, and takes
- * the page over with the same components, adding the wallet, which only the browser has.
+ * The browser's half of every POD page: it reads the data the server drew the page from, takes the page
+ * over with the same components, adding the wallet, which only the browser has, and from then on moves
+ * between pages in place.
  */
 import { StrictMode } from "react";
 import { hydrateRoot } from "react-dom/client";
@@ -9,7 +10,8 @@ import { WagmiProvider } from "wagmi";
 import { firstLine } from "../../errors.ts";
 import { walletConfig } from "../shared/index.ts";
 import { SITE_DATA_ID, SITE_ROOT_ID } from "./document.ts";
-import { SiteApp } from "./SiteApp.tsx";
+import type { FirstPage } from "./hooks/index.ts";
+import { IdleLock, SiteShell } from "./SiteShell.tsx";
 import { SiteDataSchema, type SiteData } from "./views/index.ts";
 
 /** The data the page was drawn from, read through its schema, or why it cannot be. */
@@ -31,14 +33,15 @@ if (!root || !carried) throw new Error("this page has no data to take over with:
 
 const data = carriedData(carried);
 const client = new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false } } });
-// made once for the page: a wallet connection made again on a later drawing would forget who connected
+// made once for the visit: every page after this one is drawn in place, with the same connection
 const wallet = data.market ? walletConfig(data.market) : undefined;
-const page = <SiteApp data={data} />;
+const first: FirstPage = { address: window.location.pathname + window.location.search, page: { title: document.title, data }, at: Date.now() };
+const shell = <SiteShell first={first} />;
 
 hydrateRoot(root, (
   <StrictMode>
     <QueryClientProvider client={client}>
-      {wallet ? <WagmiProvider config={wallet}>{page}</WagmiProvider> : page}
+      {wallet ? <WagmiProvider config={wallet}><IdleLock />{shell}</WagmiProvider> : shell}
     </QueryClientProvider>
   </StrictMode>
 ));

@@ -75,8 +75,9 @@ export const COPY = {
     stand: "Sign with the wallet that holds the title, name a GitHub account, and the repository is handed to it. Nobody signs in here: the chain says who holds it.",
   },
   loading: "Reading the title from the chain…",
+  closed: "This server answers to no chain, so nothing can be claimed here.",
   backToJob: "Back to the job",
-  noWallet: "This browser has no wallet in it. Open this page where the wallet that holds the title lives.",
+  noWallet: "Connect the wallet that holds the title at the top of the page: its passkey, or the browser wallet it lives in.",
   what: {
     title: "What you are claiming",
     pod: (tokenId: string) => `POD #${tokenId}`,

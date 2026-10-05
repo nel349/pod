@@ -93,6 +93,14 @@ afterAll(async () => {
 });
 
 /** the header's wallet, in whichever state: drawn only once the page is the browser's */
+/** Connect from the header: its button opens the two ways, and this one is the wallet in the browser. */
+async function useTheBrowserWallet(page: Browser): Promise<void> {
+  await page.click("#connect-wallet");
+  await page.until(`document.querySelector("#browser-wallet")`, "the panel to offer the browser wallet");
+  await page.click("#browser-wallet");
+  await page.until(`document.querySelector(".wallet .who")`, "the wallet to connect");
+}
+
 const TAKEN_OVER = ".wallet button, .wallet .who, .wallet .none";
 
 /** @param wallet whose wallet is in the page, if any */
@@ -145,8 +153,7 @@ describe.skipIf(!available)("the pages the server draws, in a browser", () => {
 
   test("with the poster's wallet connected, their job says it is theirs, and their own page lists it", async () => {
     const page = await openAt(jobPath("a-coat"), POSTER);
-    await page.click(".wallet button");
-    await page.until(`document.querySelector(".wallet .who")`, "the wallet to connect");
+    await useTheBrowserWallet(page);
     await page.until(`document.querySelector(".yours-marks")?.textContent.includes(${JSON.stringify(SITE.job.yourJob)})`, "the job to say it is theirs");
     expect(await text(page, "#stands")).toContain(SITE.job.money.heldYours);
 
@@ -160,8 +167,7 @@ describe.skipIf(!available)("the pages the server draws, in a browser", () => {
 
   test("with somebody else's wallet connected, the job says who paid, and that only that wallet can take the money back", async () => {
     const page = await openAt(jobPath("a-coat"), STRANGER);
-    await page.click(".wallet button");
-    await page.until(`document.querySelector(".wallet .who")`, "the wallet to connect");
+    await useTheBrowserWallet(page);
     expect(await text(page, "#stands")).toContain(`${SITE.job.money.paidFor} 0x7099…79C8`);
     await page.until(`document.querySelector(".not-their-wallet")`, "the page to say this is not the wallet that paid");
     expect(await text(page, ".not-their-wallet")).toContain(SITE.job.money.notTheirWallet("0x3C44…93BC", "0x7099…79C8"));

@@ -9,7 +9,7 @@
 import { useRef, useState } from "react";
 import { useMutation, type UseMutateFunction } from "@tanstack/react-query";
 import { useConfig, type Config } from "wagmi";
-import { connect, getBlock, getConnection, signMessage, switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
+import { getBlock, signMessage, switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { parseEventLogs, type Address } from "viem";
 import { firstLine } from "../../../errors.ts";
 import { MODES } from "../../../job.ts";
@@ -21,7 +21,7 @@ import {
   NoWallet, nextPosting, PostingStopped, type Kept, type Payment, type PostingStep, type SealedJob, type StepState,
 } from "../state/index.ts";
 import { keptPaymentStore } from "./keptPaymentStore.ts";
-import { hasWalletInTheBrowser, injectedConnector, readAnswer } from "../../shared/index.ts";
+import { connected, hasWalletInTheBrowser, readAnswer } from "../../shared/index.ts";
 
 export interface PostJobInput {
   readonly sealed: SealedJob;
@@ -128,15 +128,6 @@ async function jobMadeBy(config: Config, market: MarketConfig, hash: `0x${string
   const [posted] = parseEventLogs({ abi: podJobsAbi, eventName: "Posted", logs: receipt.logs });
   if (!posted) throw new Error("the payment went through but the contract did not say which job it made");
   return posted.args.jobId.toString();
-}
-
-/** The poster's address: the wallet's current account, connecting first if it is not connected yet. */
-async function connected(config: Config): Promise<Address> {
-  const connection = getConnection(config);
-  if (connection.status === "connected") return connection.address;
-  const [account] = (await connect(config, { connector: injectedConnector(config) })).accounts;
-  if (!account) throw new Error("the wallet did not give an address");
-  return account;
 }
 
 /** Hand the spec and checks to the server, which checks them against the chain and the signature. */

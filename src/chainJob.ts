@@ -19,9 +19,11 @@ export const ChainJobSchema = z.object({
   now: WHOLE,
   /** the contract it was read from */
   jobs: z.string().refine((value): value is Address => isAddress(value), "an address"),
+  /** the job's page on the wall, once it is on the wall here */
+  page: z.string().optional(),
 });
 export type ChainJob = z.output<typeof ChainJobSchema>;
 
-export function chainJobToTheWire(job: OnChainJob, now: bigint, jobs: Address): z.input<typeof ChainJobSchema> {
-  return { poster: job.poster, price: job.price.toString(), endsAt: job.endsAt.toString(), state: job.state, now: now.toString(), jobs };
+export function chainJobToTheWire(job: OnChainJob, now: bigint, jobs: Address, page?: string): z.input<typeof ChainJobSchema> {
+  return { poster: job.poster, price: job.price.toString(), endsAt: job.endsAt.toString(), state: job.state, now: now.toString(), jobs, ...(page ? { page } : {}) };
 }

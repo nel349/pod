@@ -1,14 +1,10 @@
 import type { Config, Connector } from "wagmi";
 import { NoWallet } from "./NoWallet.ts";
 
-/** The browser's own wallet: the one connector `walletConfig` gives this page. */
+/** The browser's own wallet, beside the passkey one `walletConfig` gives this page. */
 export function injectedConnector(config: Config): Connector {
-  const connector = config.connectors[0];
+  const connector = config.connectors.find((one) => one.type === "injected");
   if (!connector) throw new NoWallet();
   return connector;
 }
 
-/** Whether this browser has a wallet in it at all. */
-export async function hasWalletInTheBrowser(config: Config): Promise<boolean> {
-  return Boolean(await injectedConnector(config).getProvider());
-}

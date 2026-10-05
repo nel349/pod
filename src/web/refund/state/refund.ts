@@ -29,6 +29,8 @@ export interface OnChainNow {
   readonly now: bigint;
   /** the contract the job was read from, which is the one the poster's wallet is asked to call */
   readonly jobs: Address;
+  /** the job's page on the wall, once it is on the wall */
+  readonly page?: string;
 }
 
 /**
@@ -60,6 +62,9 @@ export function standingOf(job: OnChainNow, way: Way = "first", onChainId = ""):
   if (job.now < job.endsAt) return way === "prepares" && job.state === "open" ? { kind: "take back now" } : { kind: "too early", endsAt: job.endsAt };
   return { kind: "ready" };
 }
+
+/** Whether there is no money left in the job to take: it was paid out, or taken back already. */
+export const isOver = (standing: Standing): boolean => standing.kind === "settled" || standing.kind === "refunded";
 
 /** Whether the button may be pressed: while the money is the poster's to take. */
 export const canTake = (standing: Standing): boolean => standing.kind === "ready" || standing.kind === "take back now";
@@ -115,9 +120,11 @@ export const COPY = {
   loading: "Reading the job from the chain…",
   /** what a job known only by its number is called, having no idea published for it */
   unpublished: (onChainId: string) => `Job ${onChainId} on the contract, paid for and never published`,
+  onTheWall: (onChainId: string) => `Job ${onChainId} on the contract`,
+  seeItOnTheWall: "See it on the wall",
   closed: "This server answers to no chain, so there is nothing to take back here.",
   notThisContract: (jobs: string) => `This job is not on the contract this link names (${jobs}), so nothing is sent from here.`,
-  noWallet: "This browser has no wallet in it. Open this page where the wallet that posted the job lives.",
+  noWallet: "Connect the wallet that posted the job at the top of the page: its passkey, or the browser wallet it lives in.",
   stands: {
     title: "Where the job stands",
     amount: (price: bigint, coin: string) => `${formatEther(price)} ${coin}`,

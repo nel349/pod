@@ -12,7 +12,7 @@ import { formatEther } from "viem";
 import type { MarketConfig } from "../../market.ts";
 import { ApproveStep, Bill, IdeaStep, LinesStep, ProgressStrip, StepOrderContext, YourJobSheet, type Viewer } from "./components/index.ts";
 import {
-  PreparedRefused, useBusySince, useChainJobV2, useElapsed, usePointerDrift, usePosterNote, usePreparedActions, usePreparedView,
+  PreparedRefused, useBusySince, useChainJobV2, useElapsed, usePointerDrift, usePosterNote, usePreparedActions, usePreparedView, useWallPage,
 } from "./hooks/index.ts";
 import { useConfig } from "wagmi";
 import { connected, useConnectedAccount } from "../shared/index.ts";
@@ -36,6 +36,7 @@ export function PreparedJobPage({ market, onChainId }: { readonly market: Market
   const note = usePosterNote(market, onChainId, isPoster ? account : undefined);
   const prepared = usePreparedView(onChainId, note.authorization, job !== undefined && standingOf(job) === "preparing");
   const view = prepared.data;
+  const wallPage = useWallPage(market, onChainId, job !== undefined && standingOf(job) === "approved");
   const actions = usePreparedActions({
     market, onChainId, view, job, authorization: note.authorization,
     reread: async () => (await prepared.refetch()).data,
@@ -83,7 +84,7 @@ export function PreparedJobPage({ market, onChainId }: { readonly market: Market
         market={market}
         job={{
           onChainId, job, standing, viewer, view, action: actions.status, isSigning: note.isSigning,
-          problem: note.error ?? problemOf(refusal, standing, prepared.error?.message),
+          problem: note.error ?? problemOf(refusal, standing, prepared.error?.message), wallPage,
         }}
         on={{ connect: () => void connected(config).catch(() => undefined), sign: note.sign, takeBack: actions.takeBack }}
       />

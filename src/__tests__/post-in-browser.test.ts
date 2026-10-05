@@ -102,6 +102,8 @@ async function describeTheJob(page: Browser, name: string): Promise<void> {
   await page.type('[data-lines="brief"] input', WET);
   await page.type('[data-lines="exam"] input', DRY);
   await page.type("#name", name);
+  // the price the tests pay, whatever the form starts at
+  await page.type("#price", "0.1");
 }
 
 async function writeTheChecks(page: Browser): Promise<void> {
@@ -171,7 +173,7 @@ describe.skipIf(!available)("a stranger posts a job from a browser", () => {
     await describeTheJob(page, "no-wallet-here");
     await writeTheChecks(page);
     await page.click("#submit");
-    await page.until(`document.querySelector("#said").textContent.includes("no wallet")`, "the page to say there is no wallet");
+    await page.until(`document.querySelector("#said").textContent === ${JSON.stringify(COPY.pay.noWallet)}`, "the page to say there is no wallet");
     expect(await store.read("no-wallet-here")).toBeUndefined();
   }, 300_000);
 

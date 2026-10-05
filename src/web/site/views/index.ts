@@ -7,6 +7,7 @@
  * wei as a decimal string and times are ISO strings, because JSON has neither.
  */
 export * from "./agent.ts";
+export * from "./apps.ts";
 export * from "./job.ts";
 export * from "./kinds.ts";
 export * from "./money.ts";

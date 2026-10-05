@@ -23,6 +23,8 @@ export const MarketConfigSchema = z.object({
     identity: z.string().refine((value): value is Address => isAddress(value), "the identity registry is not an address"),
     validation: z.string().refine((value): value is Address => isAddress(value), "the validation registry is not an address"),
   }).optional(),
+  /** where a new, empty wallet can be sent the chain's coin, when the chain has such a place */
+  faucet: z.url().optional(),
   /**
    * What writing a job's checks costs, when the contract prepares jobs: the poster pays the job's
    * price and this many writings at once, and each writing after them on its own. Absent on a contract

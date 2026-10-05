@@ -110,6 +110,8 @@ async function describeTheJob(page: Browser, name: string): Promise<void> {
   await page.type('[data-lines="brief"] input', WET);
   await page.type('[data-lines="exam"] input', DRY);
   await page.type("#name", name);
+  // the price the tests pay, whatever the form starts at
+  await page.type("#price", "0.1");
 }
 
 const SAID = `(document.querySelector("#said")?.textContent ?? "") + " | " + [...document.querySelectorAll("#progress li")].map((l) => l.dataset.step + "=" + l.dataset.state).join(" ")`;

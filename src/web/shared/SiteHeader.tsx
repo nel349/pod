@@ -4,10 +4,12 @@ import { CHROME } from "./copy.ts";
 
 export type Place = keyof typeof CHROME.nav;
 
-const PLACES: readonly { readonly place: Place; readonly href: string }[] = [
+/** `roomy`: shown only where the header has room, leaving a phone's header to the pages a poster uses */
+const PLACES: readonly { readonly place: Place; readonly href: string; readonly roomy?: true }[] = [
   { place: "wall", href: ROUTES.wall },
   { place: "post", href: ROUTES.post },
   { place: "yours", href: ROUTES.yours },
+  { place: "agents", href: ROUTES.agents, roomy: true },
 ];
 
 /**
@@ -19,8 +21,8 @@ export function SiteHeader({ current, wallet }: { readonly current?: Place; read
     <header className="site-header">
       <a className="mark" href={ROUTES.wall} aria-label={CHROME.home}>{CHROME.mark}</a>
       <nav aria-label={CHROME.navLabel}>
-        {PLACES.map(({ place, href }) => (
-          <a key={place} href={href} aria-current={current === place ? "page" : undefined}>{CHROME.nav[place]}</a>
+        {PLACES.map(({ place, href, roomy }) => (
+          <a key={place} href={href} className={roomy ? "roomy" : undefined} aria-current={current === place ? "page" : undefined}>{CHROME.nav[place]}</a>
         ))}
       </nav>
       <div className="wallet">{wallet}</div>

@@ -3,7 +3,7 @@ import type { PaidJob } from "../../../owners.ts";
 import { preparingPagePath, refundByNumberPath } from "../../../routes.ts";
 import type { JobRecord } from "../../../store.ts";
 import { jobView, TitleViewSchema, type ChainSays } from "./job.ts";
-import { MS_IN_A_SECOND, WEI } from "./kinds.ts";
+import { MS_IN_A_SECOND, WEI, WHEN } from "./kinds.ts";
 import { MoneyViewSchema, type MoneyView } from "./money.ts";
 import { tileView, TileViewSchema } from "./tile.ts";
 
@@ -22,11 +22,18 @@ export type YoursEntry = z.infer<typeof YoursEntrySchema>;
 export const PreparingNextSchema = z.object({ kind: z.enum(["preparing", "notSetUp"]), page: z.string() });
 export type PreparingNext = z.infer<typeof PreparingNextSchema>;
 
+/**
+ * A job its poster approved, open to builders on the contract, that the server has not put on the wall
+ * yet. Nobody can have a seat on a job not on the wall, so its poster may still take the money back.
+ */
+export const ApprovedNextSchema = z.object({ kind: z.literal("approved"), endsAt: WHEN, takeBack: z.string() });
+export type ApprovedNext = z.infer<typeof ApprovedNextSchema>;
+
 /** A job a wallet paid for that is not on the wall: the contract knows it only by its number. */
 export const UnpublishedViewSchema = z.object({
   onChainId: z.string(),
   price: WEI,
-  money: z.union([MoneyViewSchema, PreparingNextSchema]),
+  money: z.union([MoneyViewSchema, PreparingNextSchema, ApprovedNextSchema]),
 });
 export type UnpublishedView = z.infer<typeof UnpublishedViewSchema>;
 
@@ -57,8 +64,10 @@ export function unpublishedView(paid: PaidJob, isSetUp = false): UnpublishedView
     return { onChainId, price: job.price.toString(), money: { kind: isSetUp ? "preparing" : "notSetUp", page: preparingPagePath(onChainId) } };
   }
   const takeBack = refundByNumberPath(onChainId, paid.jobs);
+  const endsAt = new Date(Number(job.endsAt) * MS_IN_A_SECOND).toISOString();
+  if (paid.prepares && job.state === "open") return { onChainId, price: job.price.toString(), money: { kind: "approved", endsAt, takeBack } };
   const money: MoneyView = job.state === "refunded" ? { kind: "refunded" }
     : job.state === "settled" ? { kind: "paid" }
-    : { kind: "held", endsAt: new Date(Number(job.endsAt) * MS_IN_A_SECOND).toISOString(), takeBack };
+    : { kind: "held", endsAt, takeBack };
   return { onChainId, price: job.price.toString(), money };
 }

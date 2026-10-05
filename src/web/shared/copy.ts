@@ -5,7 +5,7 @@
 export const CHROME = {
   mark: "POD",
   home: "POD, back to the wall",
-  nav: { wall: "The wall", post: "Post a job", yours: "Yours" },
+  nav: { wall: "The wall", post: "Post a job", yours: "Yours", agents: "Agents" },
   navLabel: "Where to go",
   broken: (why: string) => `This page stopped working: ${why.replace(/\.$/, "")}. Nothing has been sent. Reload the page to start again.`,
   wallet: {
@@ -20,6 +20,39 @@ export const CHROME = {
     changeLabel: "Choose another account in your wallet",
     failed: "The wallet said no",
     cannotChoose: "Your wallet would not offer a choice: switch accounts in the wallet itself",
+    /** the panel the header's wallet button opens */
+    panel: {
+      title: "Connect a wallet",
+      close: "Close",
+      passkeyTitle: "A passkey wallet",
+      passkeySays: "Made from a passkey: Face ID, Touch ID, or your phone. Its key is worked out on this page, from the passkey, and kept by nobody, us included.",
+      make: "Make a passkey wallet",
+      open: "Open my passkey wallet",
+      makeAnother: "Make a new one instead",
+      haveOne: "I already have one",
+      unsupported: "This browser cannot make a passkey wallet. Safari, or Chrome signed in to Google, can. Or use a browser wallet.",
+      cancelled: "The passkey prompt was closed, so nothing changed.",
+      failed: (why: string) => `The passkey did not open the wallet: ${why.replace(/\.$/, "")}.`,
+      browserTitle: "A browser wallet",
+      browserUse: "Use my browser wallet",
+      browserNone: "There is no browser wallet here, such as MetaMask or Rabby.",
+    },
+    /** a passkey wallet open in this tab */
+    passkey: {
+      badge: "Passkey",
+      details: "Wallet",
+      detailsLabel: "This passkey wallet: its address, what it holds, its recovery phrase",
+      address: "Its address",
+      holds: (amount: string) => `It holds ${amount}.`,
+      empty: "It is new and empty, and needs some to pay for a job: send some from another wallet, or",
+      emptyNoFaucet: "It is new and empty, and needs some to pay for a job: send some from another wallet.",
+      faucet: "get testnet MON from the faucet",
+      showPhrase: "Show my recovery phrase",
+      phraseSays: "These 24 words are this wallet: anyone who has them has it. Write them down and keep them safe. They bring the wallet back if the passkey is lost, in POD or in any other wallet. POD never sees them.",
+      hidePhrase: "Hide the words",
+      lock: "Lock the wallet",
+      lockSays: "Locked, its key is forgotten by this page; your passkey opens it again.",
+    },
   },
 } as const;
 

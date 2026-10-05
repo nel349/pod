@@ -1,11 +1,12 @@
 import type { ReactElement } from "react";
 import { Sheet } from "../../../shared/index.ts";
+import { When } from "../../components/index.ts";
 import { inCoins, SITE } from "../../copy.ts";
 import { useSite } from "../../hooks/index.ts";
 import type { UnpublishedView } from "../../views/index.ts";
 import { MoneyNext } from "./MoneyNext.tsx";
 
-/** One job not on the wall: being prepared, never sent its lines, or paid and never published. */
+/** One job not on the wall: being prepared, never sent its lines, approved and on its way, or paid and never published. */
 function NotOnTheWall({ job, coin }: { readonly job: UnpublishedView; readonly coin: string }): ReactElement {
   const price = inCoins(job.price, coin);
   const { money } = job;
@@ -14,6 +15,13 @@ function NotOnTheWall({ job, coin }: { readonly job: UnpublishedView; readonly c
       <>
         <p className="yours-idea">{SITE.yours.preparing(job.onChainId, price)}</p>
         <p><a className="primary small" href={money.page}>{SITE.yours.openPreparing}</a></p>
+      </>
+    );
+    case "approved": return (
+      <>
+        <p className="yours-idea">{SITE.yours.approved(job.onChainId, price)}</p>
+        <p className="note">{SITE.yours.approvedUntil} <When iso={money.endsAt} />. {SITE.yours.approvedIfNot}</p>
+        <p><span className="note">{SITE.yours.approvedNobodySeated}</span> <a className="quiet" href={money.takeBack}>{SITE.job.money.takeBack}</a></p>
       </>
     );
     case "notSetUp": return (

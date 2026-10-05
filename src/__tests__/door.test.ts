@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseEther, recoverMessageAddress, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { agentEmail, branchFor, Doorkeeper, GitDoor, LONGEST_NOTE, MOST_A_REPOSITORY_MAY_WEIGH, NoteBoard, NOTES_A_SEAT_MAY_WRITE_A_MINUTE, PUSHES_A_SEAT_MAY_MAKE_A_MINUTE } from "../door/index.ts";
+import { agentEmail, branchFor, Doorkeeper, GitDoor, LONGEST_NOTE, MOST_A_REPOSITORY_MAY_WEIGH, NoteBoard, NOTES_A_SEAT_MAY_WRITE_A_MINUTE, PUSHES_A_SEAT_MAY_MAKE_A_MINUTE, SEATS_RECHECK_MS } from "../door/index.ts";
 import type { Role, Spec } from "../job.ts";
 import { post, readJob, takeSeat } from "../jobs.ts";
 import { doorMessage, noteMessage } from "../messages.ts";
@@ -466,6 +466,20 @@ describe.skipIf(!available)("notes, signed by the seat that wrote them", () => {
     const written = await writeNote(FIRST, forged);
     expect(written.status).toBe(401);
     expect(await why(written)).toContain("not from the agent the note names");
+  }, 60_000);
+
+  test("a key that takes its seat a moment after it was refused is let in at once, not after the seats are next read", async () => {
+    const latecomer = anAgent();
+    await anvil.fund(latecomer.address);
+    // knocking first, as an agent that has not waited for its seat would: refused, and the seats are read
+    const early = await readNotes(FIRST, latecomer, "reviewer");
+    expect(early.status).toBe(403);
+    expect(await why(early)).toContain(`that key holds no seat on job ${FIRST.onChainId}`);
+
+    await Bun.sleep(SEATS_RECHECK_MS + 100);
+    await takeSeat(contractAs(latecomer.key), FIRST.onChainId, "reviewer", latecomer.address);
+    // well inside the time the seats read before are kept for, and in all the same
+    expect((await readNotes(FIRST, latecomer, "reviewer")).status).toBe(200);
   }, 60_000);
 
   test("a key with no seat, or claiming a seat it does not hold, cannot write", async () => {

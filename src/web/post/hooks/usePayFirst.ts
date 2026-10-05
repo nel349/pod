@@ -23,7 +23,7 @@ import { podJobsV2Abi } from "../../../jobsV2.ts";
 import { AnswerSchema, type MarketConfig } from "../../../market.ts";
 import { setUpMessage } from "../../../messages.ts";
 import { preparingPagePath, ROUTES } from "../../../routes.ts";
-import { connected, hasWalletInTheBrowser, NoWallet, readAnswer } from "../../shared/index.ts";
+import { connected, goTo, hasWalletInTheBrowser, NoWallet, readAnswer } from "../../shared/index.ts";
 import {
   asSentence, canPress, COPY, PAY_FIRST_STEPS, priceInWei, stepNumber, toWriteRequest, whatIsPaid,
   type KeptSetUp, type PayFirstStep, type PayStatus, type PostForm, type StepState,
@@ -177,7 +177,8 @@ export function usePayFirst(market: MarketConfig, form: UseFormReturn<PostForm>,
       try {
         const url = await payAndSend(valid);
         setStatus({ kind: "posted", url });
-        window.location.assign(url);
+        // in place, not a new load: a passkey wallet open on this page stays open on the job's
+        goTo(url);
       } catch (error) {
         setStatus(stoppedBy(error));
       } finally {

@@ -13,7 +13,7 @@ export function StandsSheet({ job, onChain, standing, coin, explorer }: {
 }): ReactElement {
   return (
     <Sheet number={1} id="stands" title={COPY.stands.title}>
-      <p className="lede">{job.idea}</p>
+      <p className="lede">{job.idea}{onChain.page && <> <a href={onChain.page}>{COPY.seeItOnTheWall}</a></>}</p>
       <dl className="facts">
         <dt>{COPY.stands.amount(onChain.price, coin)}</dt>
         <dd>{COPY.stands.posted} <a href={explorerAddress(explorer, onChain.poster)}><code>{onChain.poster}</code></a></dd>

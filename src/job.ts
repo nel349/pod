@@ -118,6 +118,12 @@ export interface Spec {
 /** The shares each seat is paid, as percentages that must add up to one hundred. */
 export const SHARES: Record<Role, number> = { lead: 20, builder: 40, reviewer: 15, qa: 15, security: 10 };
 
+/** The seats ours thinks for with a model. The lead and QA never ask it anything */
+export const NEEDS_A_MODEL: readonly Role[] = ["builder", "reviewer", "security"];
+
+/** A seat's deposit, as a percentage of what that seat is paid, as the contract has it (DEPOSIT_PERCENT). */
+export const DEPOSIT_PERCENT = 10;
+
 /** The seats whose approval the contract waits for. The builder's work is what they approve, so it approves nothing itself. */
 export const APPROVING_SEATS: readonly Role[] = ["lead", "reviewer", "qa", "security"];
 

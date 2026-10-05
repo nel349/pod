@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 import { isAddressEqual, type Address } from "viem";
 import { explorerTransaction } from "../../../market.ts";
 import { ChooseAccount, CHROME, Sheet } from "../../shared/index.ts";
-import { canTake, COPY, REFUND_STEPS, stepStates, type OnChainNow, type RefundStatus, type Standing } from "../state/index.ts";
+import { canTake, COPY, isOver, REFUND_STEPS, stepStates, type OnChainNow, type RefundStatus, type Standing } from "../state/index.ts";
 
 interface TakeSheetProps {
   readonly onChain: OnChainNow;
@@ -26,12 +26,12 @@ export function TakeSheet({ onChain, standing, coin, explorer, hasWallet, connec
         <p id="not-poster" className="said-status">{COPY.take.notPoster(connected, onChain.poster)} <ChooseAccount label={CHROME.wallet.chooseAnother} /></p>
       )}
       <button type="button" id="refund" className="primary" onClick={onRefund}
-        hidden={standing.kind === "preparing"}
+        hidden={standing.kind === "preparing" || isOver(standing)}
         disabled={!hasWallet || isWorking || status.kind === "sent" || !canTake(standing)} data-busy={isWorking || undefined}>
         {isWorking ? COPY.take.busy : COPY.take.button(onChain.price, coin)}
       </button>
       <p id="said" className={status.kind === "sent" ? "said-status done" : "said-status"} role="status">
-        {!hasWallet && COPY.noWallet}
+        {!hasWallet && !isOver(standing) && standing.kind !== "preparing" && COPY.noWallet}
         {status.kind === "stopped" && status.why}
         {status.kind === "sent" && <>{COPY.take.done(onChain.price, coin)} <a href={explorerTransaction(explorer, status.hash)}>{COPY.take.transaction}</a>.</>}
       </p>

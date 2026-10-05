@@ -296,6 +296,8 @@ button.add:hover { background: var(--ink); color: var(--yellow); text-decoration
   .strip .drift { transform: none; }
   .strip .shard.loose { opacity: 0; }
   .strip p { margin: 0; font: 400 14px/1.25 var(--type); }
+  /* the strip says what is next, and stays in sight as the page scrolls: the bill does not say it again */
+  .bill .next { display: none; }
   .sheets { padding-top: 0; }
   .kinds, .readback, .terms { grid-template-columns: minmax(0, 1fr); }
   .line { grid-template-columns: 26px minmax(0, 1fr) auto; }

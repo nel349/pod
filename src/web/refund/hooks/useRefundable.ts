@@ -48,5 +48,7 @@ export function useRefundable(target: Exclude<RefundTarget, { readonly by: "none
   // the job is acted on where it was read, and only there: a link naming one contract never moves money on another
   const isNamed = target.by === "name" || target.jobs !== undefined;
   if (isNamed && !isAddressEqual(job.data.jobs, onChain.data.jobs)) return { kind: "failed", why: COPY.notThisContract(job.data.jobs) };
-  return { kind: "ready", job: { ...job.data, jobs: onChain.data.jobs }, onChain: onChain.data };
+  // known only by its number, until the chain read says it reached the wall after all
+  const idea = target.by === "number" && onChain.data.page ? COPY.onTheWall(target.onChainId) : job.data.idea;
+  return { kind: "ready", job: { ...job.data, idea, jobs: onChain.data.jobs }, onChain: onChain.data };
 }

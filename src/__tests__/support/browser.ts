@@ -19,6 +19,10 @@ const LINUX_CHROME = ["/usr/bin/google-chrome", "/usr/bin/chromium-browser", "/u
 /** how long Chrome has to open its debugging port. A cold start on a shared CI machine can pass ten seconds */
 const CHROME_MAY_TAKE_MS = 30_000;
 const ASK_EVERY_MS = 100;
+/** how long a page has to finish loading */
+const PAGE_MAY_TAKE_MS = 30_000;
+/** what the pages load from outside this machine, which tests do without */
+const OUTSIDE_HOSTS = ["*fonts.googleapis.com*", "*fonts.gstatic.com*"];
 /** how much of what Chrome printed goes into the error when it never answers: the end, where the reason is */
 const LAST_OF_WHAT_IT_SAID = 1200;
 
@@ -105,7 +109,12 @@ export class Browser {
       else pending.resolve(message.result);
     });
 
-    return new Browser(process, socket, waiting);
+    const browser = new Browser(process, socket, waiting);
+    // the pages' fonts come from Google: a test waits on nothing outside this machine, so they are not
+    // fetched, and the pages fall back to the fonts their stylesheet names next
+    await browser.send("Network.enable");
+    await browser.send("Network.setBlockedURLs", { urls: OUTSIDE_HOSTS });
+    return browser;
   }
 
   /** One protocol call. Every one of them can fail, and failing loudly is the point. */
@@ -124,7 +133,8 @@ export class Browser {
   async open(url: string): Promise<void> {
     await this.send("Page.enable");
     await this.send("Page.navigate", { url });
-    for (let i = 0; i < 100; i++) {
+    const deadline = Date.now() + PAGE_MAY_TAKE_MS;
+    while (Date.now() < deadline) {
       const state = await this.evaluate<string>("document.readyState");
       if (state === "complete") return;
       await Bun.sleep(50);

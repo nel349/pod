@@ -13,7 +13,7 @@ import type { ListedJob } from "../door/index.ts";
 import { firstLine } from "../errors.ts";
 import { pause } from "../pause.ts";
 import { agentEmail } from "../door/seat.ts";
-import type { Role } from "../job.ts";
+import { NEEDS_A_MODEL, type Role } from "../job.ts";
 import { IMAGE } from "../sandbox.ts";
 import { Identity, type JobRef } from "./Identity.ts";
 import { PodServer } from "./PodServer.ts";
@@ -33,8 +33,7 @@ export const LOOK_EVERY_MS = 5_000;
  */
 export const LOOKS_FOR_THE_RECEIPT = 12;
 
-/** The seats that think with a model. The lead and QA never ask it anything */
-export const NEEDS_A_MODEL: readonly Role[] = ["builder", "reviewer", "security"];
+export { NEEDS_A_MODEL };
 
 export interface ReferenceAgentOptions {
   /** the server's address, where its public doors are */

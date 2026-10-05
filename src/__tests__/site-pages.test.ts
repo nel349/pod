@@ -2,11 +2,12 @@ import { describe, expect, test } from "bun:test";
 import type { Tile } from "../gallery.ts";
 import type { JobRecord } from "../store.ts";
 import { recordByRole } from "../agentpage.ts";
-import { claimPath, preparingPagePath, receiptFilePath, receiptPath, refundByNumberPath, refundPath } from "../routes.ts";
+import { claimPath, preparingPagePath, receiptFilePath, receiptPath, refundByNumberPath, refundPath, ROUTES } from "../routes.ts";
+import { DEPOSIT_PERCENT, SHARES } from "../job.ts";
 import {
   jobView, moneyAt, needsTheChainForMoney, receiptView, renderSite, tileView, unpublishedView, type AgentFactsView, type SiteData, type SitePage,
 } from "../web/site/index.ts";
-import { lengthOf, timeLeft, whenInUTC } from "../web/site/copy.ts";
+import { lengthOf, SITE, timeLeft, whenInUTC } from "../web/site/copy.ts";
 import type { SignedReceipt } from "../receipt.ts";
 
 const LEAD = "0x00000000000000000000000000000000000000a1";
@@ -68,8 +69,11 @@ const running = (over: Partial<JobRecord> = {}): JobRecord => record({
   ...over,
 });
 
+/** where the pages here say they were reached */
+const SITE_ADDRESS = "https://pod.example";
+
 const draw = (page: SitePage): string => {
-  const data: SiteData = { ...page, coin: "MON", drawnAt: NOW.toISOString() };
+  const data: SiteData = { ...page, coin: "MON", drawnAt: NOW.toISOString(), site: SITE_ADDRESS };
   return renderSite({ title: "a page" }, data);
 };
 const wall = (tiles: readonly Tile[]): string => draw({ page: "wall", tiles: tiles.map((one) => tileView(one, one.receiptURI !== undefined)) });
@@ -239,8 +243,19 @@ describe("one job, opened", () => {
     expect(html).toContain("could not be read from the chain just now");
   });
 
-  test("a job that passed with no title says nobody can claim it yet", () => {
-    expect(job(record({ repository: "https://github.com/pod/job-7" }))).toContain("No title was minted");
+  test("a job that passed with no title says nobody can claim it yet, and never that a title was minted", () => {
+    const html = job(record({ repository: "https://github.com/pod/job-7" }));
+    expect(html).toContain("No title was minted");
+    expect(html).toContain(SITE.job.next.passedUntitled);
+    expect(html).not.toContain("the title to the work was minted");
+    // one with a title says it was minted to its poster
+    expect(job(record({ chain: { network: "monad-testnet", jobId: "7", jobs: "0x00000000000000000000000000000000000000c1", tokenId: "4" } }))).toContain(SITE.job.next.passed);
+  });
+
+  test("the run to repeat names this site's copy of the code by the address the page was reached at", () => {
+    const html = job(record({ signed: { ...signed, receipt: { ...signed.receipt, repository: "/bundle/excuses" } } }));
+    expect(html).toContain(`${SITE_ADDRESS}/bundle/excuses`);
+    expect(html).not.toContain("this site&gt;");
   });
 
   test("a job with a receipt shows how to repeat the run, and one without simply does not", () => {
@@ -351,6 +366,25 @@ describe("a job paid for and never published", () => {
     expect(unpublishedView(paid("preparing"), false).money).toEqual({ kind: "notSetUp", page: preparingPagePath("7") });
     // whether it was set up says nothing about a job that is not preparing
     expect(unpublishedView(paid("open"), true).money.kind).toBe("held");
+  });
+
+  test("one open on the contract that prepares jobs was approved by its poster, and is on its way to the wall", () => {
+    expect(unpublishedView({ ...paid("open"), prepares: true }).money).toEqual({
+      kind: "approved", endsAt: new Date(1_790_000_000_000).toISOString(), takeBack: refundByNumberPath("7", "0x00000000000000000000000000000000000000c1"),
+    });
+    // settled or taken back, it says so on either contract
+    expect(unpublishedView({ ...paid("refunded"), prepares: true }).money).toEqual({ kind: "refunded" });
+  });
+});
+
+describe("the page for bringing an agent", () => {
+  test("says what each seat does and is paid, what a seat costs, and how to run ours against this site", () => {
+    const html = draw({ page: "agents" });
+    expect(html).toContain(`${SHARES.builder}%`);
+    expect(html).toContain(SITE.agents.deposit(DEPOSIT_PERCENT));
+    expect(html).toContain(`--server ${SITE_ADDRESS}`);
+    expect(html).toContain(`href="${ROUTES.guide}"`);
+    expect(html).toContain(`href="${ROUTES.jobList}"`);
   });
 });
 

@@ -17,7 +17,12 @@ export const SitePageSchema = z.discriminatedUnion("page", [
   z.object({ page: z.literal("agent"), agent: z.string(), record: z.array(RoleRecordSchema), facts: AgentFactsViewSchema, tiles: z.array(TileViewSchema) }),
   z.object({ page: z.literal("receipt"), receipt: ReceiptViewSchema }),
   z.object({ page: z.literal("yours") }),
+  z.object({ page: z.literal("agents") }),
   z.object({ page: z.literal("missing"), why: z.string() }),
+  // drawn by the browser: the server sends the header and the data every page carries, nothing more
+  z.object({ page: z.literal("post") }),
+  z.object({ page: z.literal("refund") }),
+  z.object({ page: z.literal("claim") }),
 ]);
 export type SitePage = z.infer<typeof SitePageSchema>;
 
@@ -28,6 +33,8 @@ export const SiteCommonSchema = z.object({
   coin: z.string(),
   /** the server's time when it drew the page, so the browser's first drawing says the same */
   drawnAt: WHEN,
+  /** the address this server was reached at, for the commands a person copies from a page */
+  site: z.string(),
 });
 export type SiteCommon = z.infer<typeof SiteCommonSchema>;
 

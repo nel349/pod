@@ -20,6 +20,8 @@ export interface PaidJob {
   readonly jobs: Address;
   readonly onChainId: bigint;
   readonly job: OnChainJob;
+  /** whether its contract prepares jobs, where an open job not on the wall is one its poster approved */
+  readonly prepares?: boolean;
 }
 
 /** One contract, read the way owners need it. */
@@ -97,7 +99,7 @@ export function ownersFrom(read: {
     // a job read just now is not read again; one known from before is, for where its money is now
     const found = await Promise.all(theirs.map(async ({ id, readNow }): Promise<PaidJob | undefined> => {
       const job = await (readNow ?? contract.job(id));
-      return job ? { jobs: contract.jobs, onChainId: id, job } : undefined;
+      return job ? { jobs: contract.jobs, onChainId: id, job, ...(contract.prepares ? { prepares: true } : {}) } : undefined;
     }));
     return found.filter((paid): paid is PaidJob => paid !== undefined);
   }

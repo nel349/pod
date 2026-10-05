@@ -3,8 +3,9 @@ import { formatEther } from "viem";
 import type { JobV2 } from "../../../jobsV2.ts";
 import type { MarketConfig } from "../../../market.ts";
 import type { PreparingView } from "../../../preparing/records.ts";
-import { jobPath, ROUTES } from "../../../routes.ts";
+import { whenHere } from "../../site/copy.ts";
 import type { ActionStatus } from "../hooks/usePreparedActions.ts";
+import { MS_IN_A_SECOND } from "../../site/views/index.ts";
 import { COPY, modeOfWindow, windowInWords, writingsLeft, type Standing } from "../state/index.ts";
 
 /** Who may see the job: nobody connected, another wallet, the poster before signing, or the poster. */
@@ -20,9 +21,10 @@ export interface YourJobView {
   readonly isSigning: boolean;
   /** why reading the job from the server failed, if it did */
   readonly problem: string | undefined;
+  /** where it is on the wall, once it is */
+  readonly wallPage: string | undefined;
 }
 
-/** The job paid for: where it stands, what is left of the money for writing, and the way out. Draws; decides nothing. */
 /** What the poster can do from the sheet. */
 export interface YourJobActions {
   readonly connect: () => void;
@@ -30,6 +32,22 @@ export interface YourJobActions {
   readonly takeBack: () => void;
 }
 
+/** An approved job, as the chain says it stands since, and where to watch it. */
+function Approved({ job, wallPage }: { readonly job: JobV2; readonly wallPage: string | undefined }): ReactElement {
+  const says = job.state === "settled" ? COPY.prepared.approved.settled
+    : job.state === "working" ? COPY.prepared.approved.working
+    : COPY.prepared.approved.open(whenHere(new Date(Number(job.endsAt) * MS_IN_A_SECOND).toISOString()));
+  return (
+    <p id="standing" className="said-status done">
+      {says}{" "}
+      {wallPage
+        ? <a href={wallPage}>{job.state === "settled" ? COPY.prepared.openFinished : COPY.prepared.openJob}</a>
+        : COPY.prepared.notOnTheWallYet}
+    </p>
+  );
+}
+
+/** The job paid for: where it stands, what is left of the money for writing, and the way out. Draws; decides nothing. */
 export function YourJobSheet({ market, job: shown, on }: {
   readonly market: MarketConfig;
   readonly job: YourJobView;
@@ -44,24 +62,21 @@ export function YourJobSheet({ market, job: shown, on }: {
       <h2 id="your-job-title">{COPY.prepared.job(onChainId)}</h2>
       {view && <p className="job-address">/job/{view.name}</p>}
       {mode && <p className="terms-plain">{COPY.prepared.terms(`${formatEther(job.price)} ${market.coin}`, windowInWords(mode))}</p>}
-      {viewer === "noWallet" && (
+      {/* until it is approved the job is the poster's alone; after, it is public, and nobody is asked for a wallet */}
+      {standing === "preparing" && viewer === "noWallet" && (
         <>
           <p>{COPY.prepared.noWallet}</p>
           <button type="button" id="connect" className="primary" onClick={on.connect}>{COPY.prepared.connect}</button>
         </>
       )}
-      {viewer === "notYours" && <p className="said-status">{COPY.prepared.notYours}</p>}
+      {standing === "preparing" && viewer === "notYours" && <p className="said-status">{COPY.prepared.notYours}</p>}
       {viewer === "unsigned" && standing === "preparing" && (
         <>
           <p>{COPY.prepared.signIn.says}</p>
           <button type="button" id="sign-in" className="primary" disabled={shown.isSigning} onClick={on.sign}>{COPY.prepared.signIn.button}</button>
         </>
       )}
-      {standing === "approved" && (
-        <p id="standing" className="said-status done">
-          {COPY.prepared.approved} <a href={view ? jobPath(view.name) : ROUTES.yours}>{view ? COPY.prepared.openJob : COPY.prepared.openYours}</a>
-        </p>
-      )}
+      {standing === "approved" && <Approved job={job} wallPage={shown.wallPage} />}
       {standing === "takenBack" && <p id="standing" className="said-status">{COPY.prepared.takenBack}</p>}
       {standing === "closed" && <p id="standing" className="said-status">{COPY.prepared.closed}</p>}
       {standing === "preparing" && view && <p id="writings-left">{COPY.prepared.left(writingsLeft(view.money))}</p>}

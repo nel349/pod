@@ -2,4 +2,6 @@
 export const SITE_QUERY_KEYS = {
   job: (jobId: string) => ["site-job", jobId] as const,
   yours: (address: string) => ["site-yours", address.toLowerCase()] as const,
+  /** what a page is drawn from, by its address, for moving there in place */
+  page: (address: string) => ["site-page", address] as const,
 };

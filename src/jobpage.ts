@@ -8,6 +8,9 @@
 import type { Receipt } from "./receipt.ts";
 import { ROUTES } from "./routes.ts";
 
+/** Where a command names this site, which only the page the reader is on knows the address of. */
+export const THIS_SITE = "<this site>";
+
 export interface Approval {
   readonly role: string;
   readonly agent: string;
@@ -27,7 +30,7 @@ function fetchTheCode(receipt: Receipt, publishedAt: string | undefined): readon
   const isBundle = where.startsWith(ROUTES.bundle) || (/^https?:\/\//.test(where) && where.includes(ROUTES.bundle));
   if (isBundle) {
     // a history named without a host is this site's own: the reader is on it
-    const from = where.startsWith(ROUTES.bundle) ? `<this site>${where}` : where;
+    const from = where.startsWith(ROUTES.bundle) ? `${THIS_SITE}${where}` : where;
     return [`curl -fsSL -o job.bundle ${from} && git clone job.bundle work && ${checkout}`];
   }
   if (/^https?:\/\//.test(where)) return [`git clone ${where} work && ${checkout}`];

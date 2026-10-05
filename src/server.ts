@@ -11,7 +11,7 @@
 import { acceptPosting, type ChainReader } from "./posting.ts";
 import type { CheckWriting, ProvenChecks } from "./checkwriting/index.ts";
 import type { MarketConfig } from "./market.ts";
-import { isAddress, isAddressEqual } from "viem";
+import { isAddress, isAddressEqual, type Address } from "viem";
 import { bodyWithin, tooLarge } from "./body.ts";
 import { NO_STORE } from "./headers.ts";
 import { firstLine } from "./errors.ts";
@@ -19,9 +19,6 @@ import { chainJobToTheWire } from "./chainJob.ts";
 import { JOBS_FOLDER_SETTING } from "./folders.ts";
 import type { Claims } from "./claims.ts";
 import type { CreditDoor, GitDoor, JobList, NoteBoard } from "./door/index.ts";
-import claimPage from "./web/claim/index.html";
-import postPage from "./web/post/index.html";
-import refundPage from "./web/refund/index.html";
 import { renderCard } from "./card.ts";
 import { isPublished, JobStore, publicRecord } from "./store.ts";
 import { cardPath, checkFilePath, isSafeName, isWallName, jobPath, preparingPath, QUERY, RECEIPT_FILE, ROUTES, WRITINGS, writingPath } from "./routes.ts";
@@ -30,7 +27,7 @@ import { preparingToTheWire, type Preparing } from "./preparing/index.ts";
 import type { AgentFactsReader } from "./agentFacts.ts";
 import { MONAD_TESTNET } from "./registry.ts";
 import { agentPage, jobData, receiptData, wallPage, yoursData } from "./sitePages.ts";
-import { renderSite, siteScript, type Head, type SitePage } from "./web/site/index.ts";
+import { appPageAt, PAGE_DATA_TYPE, renderSite, siteScript, type Head, type PageData, type SiteData, type SitePage } from "./web/site/index.ts";
 import { SITE } from "./web/site/copy.ts";
 
 const TEXT = { "content-type": "text/plain; charset=utf-8" } as const;
@@ -93,14 +90,23 @@ const BUNDLE = { "content-type": "application/x-git-bundle" } as const;
 
 const style = new URL("../public/wall.css", import.meta.url);
 const brand = new URL("./web/brand/brand.css", import.meta.url);
+const postStyle = new URL("./web/post/post.css", import.meta.url);
+const refundStyle = new URL("./web/refund/refund.css", import.meta.url);
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const guide = new URL("../public/llms.txt", import.meta.url);
 const MARKDOWN = { "content-type": "text/markdown; charset=utf-8" } as const;
 
 export async function handle(request: Request, store: JobStore, { market, door, notes, jobList, credit, claims, owners, agents, preparing }: Services = {}): Promise<Response> {
   const { pathname } = new URL(request.url);
-  const page = (head: Head, drawn: SitePage, status = 200): Response =>
-    new Response(renderSite(head, { ...drawn, ...(market ? { market: market.page } : {}), coin: market?.page.coin ?? MONAD_TESTNET.coin, drawnAt: new Date().toISOString() }), { status, headers: HTML });
+  const page = (head: Head, drawn: SitePage, status = 200): Response => {
+    const data: SiteData = {
+      ...drawn, ...(market ? { market: market.page } : {}), coin: market?.page.coin ?? MONAD_TESTNET.coin, drawnAt: new Date().toISOString(),
+      site: new URL(request.url).origin,
+    };
+    // the browser moving here in place asks for what the page is drawn from, at the page's own address
+    if (wantsPageData(request)) return Response.json({ title: head.title, data } satisfies PageData, { status, headers: NO_STORE });
+    return new Response(renderSite(head, data), { status, headers: HTML });
+  };
   const missing = (why: string): Response =>
     wantsAPage(request) ? page({ title: SITE.missing.title }, { page: "missing", why }, 404) : new Response(`${why}\n`, { status: 404, headers: TEXT });
 
@@ -173,7 +179,7 @@ export async function handle(request: Request, store: JobStore, { market, door, 
     if (asked.length === 0) return Response.json({ why: `${named} is not a contract this server answers to` }, { status: 400 });
     for (const reader of asked) {
       const [job, now] = await Promise.all([reader.job(BigInt(onChainId)), reader.now()]);
-      if (job) return Response.json(chainJobToTheWire(job, now, reader.jobs), { headers: NO_STORE });
+      if (job) return Response.json(chainJobToTheWire(job, now, reader.jobs, await wallPageOf(store, reader.jobs, onChainId)), { headers: NO_STORE });
     }
     return Response.json({ why: `there is no job ${onChainId} on the contract` }, { status: 404 });
   }
@@ -202,6 +208,8 @@ export async function handle(request: Request, store: JobStore, { market, door, 
 
   if (pathname === ROUTES.style) return new Response(await Bun.file(style).text(), { headers: CSS });
   if (pathname === ROUTES.brand) return new Response(await Bun.file(brand).text(), { headers: CSS });
+  if (pathname === ROUTES.postStyle) return new Response(await Bun.file(postStyle).text(), { headers: CSS });
+  if (pathname === ROUTES.refundStyle) return new Response(await Bun.file(refundStyle).text(), { headers: CSS });
   if (pathname === ROUTES.siteScript) {
     try {
       return new Response(await siteScript(IS_PRODUCTION), { headers: JAVASCRIPT });
@@ -219,6 +227,12 @@ export async function handle(request: Request, store: JobStore, { market, door, 
   if (pathname === ROUTES.health) {
     return new Response(`${(await store.tiles()).length} jobs\n`, { headers: TEXT });
   }
+
+  if (pathname === ROUTES.agents) return page({ title: SITE.agents.title, description: SITE.agents.stand }, { page: "agents" });
+
+  // posting, taking money back and claiming are drawn by the browser, from the wallet and what it keeps
+  const app = appPageAt(pathname);
+  if (app) return page({ title: SITE.apps[app].title }, { page: app });
 
   if (pathname.startsWith(ROUTES.job)) {
     const jobId = pathname.slice(ROUTES.job.length);
@@ -288,9 +302,20 @@ export async function handle(request: Request, store: JobStore, { market, door, 
   return missing(`Nothing at ${pathname}`);
 }
 
+/** The page on the wall of the job a contract numbered so, if it is on the wall here. */
+async function wallPageOf(store: JobStore, jobs: Address, onChainId: string): Promise<string | undefined> {
+  const record = (await store.all()).find((one) => one.chain?.jobId === onChainId && isAddressEqual(one.chain.jobs, jobs));
+  return record ? jobPath(record.jobId) : undefined;
+}
+
 /** Whether whoever asked is a browser, which is shown a page, rather than a program, which is given the thing itself. */
 function wantsAPage(request: Request): boolean {
-  return (request.headers.get("accept") ?? "").includes("text/html");
+  return (request.headers.get("accept") ?? "").includes("text/html") || wantsPageData(request);
+}
+
+/** Whether the browser, moving to a page in place, asked for the data it is drawn from rather than the page. */
+function wantsPageData(request: Request): boolean {
+  return (request.headers.get("accept") ?? "").includes(PAGE_DATA_TYPE);
 }
 
 /**
@@ -405,15 +430,13 @@ function notFound(why: string): Response {
 /**
  * Start it. The port and the directory come from the environment, and neither has a default that hides.
  *
- * The posting page is an app, not a document: Bun bundles it from its HTML entry the first time it
- * is asked for, so nothing built is ever committed. While developing it also reloads as the source
- * changes; in production it is bundled once and kept.
+ * Every page is drawn by the server first and then taken over by one browser app (site/client.tsx),
+ * which moves between pages in place from then on.
  */
 export function serve(store: JobStore, port: number, services: Services = {}): ReturnType<typeof Bun.serve> {
   return Bun.serve({
     port,
-    development: process.env.NODE_ENV === "production" ? false : { hmr: true, console: true },
-    routes: { [ROUTES.post]: postPage, [`${ROUTES.post}/*`]: postPage, [`${ROUTES.claim}*`]: claimPage, [`${ROUTES.refund}*`]: refundPage },
+    development: process.env.NODE_ENV !== "production",
     fetch: (request) => handle(request, store, services),
   });
 }

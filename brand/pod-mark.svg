@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="title desc">
+  <title id="title">POD</title>
+  <desc id="desc">Proof of Development. A geometric P of one stroke. The counter is a circle, and the five-seat seal is centred in it.</desc>
+  <defs>
+    <radialGradient id="field" cx="50%" cy="42%" r="65%">
+      <stop offset="0%" stop-color="#141b24"/>
+      <stop offset="62%" stop-color="#07080d"/>
+      <stop offset="100%" stop-color="#10060c"/>
+    </radialGradient>
+    <filter id="phosphor" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="2.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" fill="url(#field)"/>
+  <path fill="#f4fffb" fill-rule="evenodd" d="M 138.00 442.00 L 192.00 442.00 L 192.00 306.00 L 256.00 306.00 A 118.00 118.00 0 0 0 256.00 70.00 L 138.00 70.00 Z M 256.00 124.00 A 64.00 64.00 0 1 1 256.00 252.00 A 64.00 64.00 0 1 1 256.00 124.00 Z"/>
+  <g filter="url(#phosphor)">
+      <path d="M 230.86,149.48 A 46.0 46.0 0 0 1 281.14,149.48 L 271.85,163.72 A 29.0 29.0 0 0 0 240.15,163.72 Z" fill="#3ee8c0"><title>lead</title></path>
+      <path d="M 284.86,152.18 A 46.0 46.0 0 0 1 300.40,200.01 L 283.99,195.57 A 29.0 29.0 0 0 0 274.20,165.42 Z" fill="#3ee8c0"><title>builder</title></path>
+      <path d="M 298.98,204.38 A 46.0 46.0 0 0 1 258.30,233.94 L 257.45,216.96 A 29.0 29.0 0 0 0 283.10,198.33 Z" fill="#3ee8c0"><title>reviewer</title></path>
+      <path d="M 253.70,233.94 A 46.0 46.0 0 0 1 213.02,204.38 L 228.90,198.33 A 29.0 29.0 0 0 0 254.55,216.96 Z" fill="#3ee8c0"><title>qa</title></path>
+      <path d="M 211.60,200.01 A 46.0 46.0 0 0 1 227.14,152.18 L 237.80,165.42 A 29.0 29.0 0 0 0 228.01,195.57 Z" fill="#3ee8c0"><title>security</title></path>
+  </g>
+</svg>

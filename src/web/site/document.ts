@@ -9,6 +9,18 @@ import type { SiteData } from "./views/index.ts";
 export const SITE_DATA_ID = "pod-data";
 export const SITE_ROOT_ID = "root";
 
+/**
+ * What the browser asks a page's address for when it moves there in place: the data the page is drawn
+ * from, not the page. The same address, so a page and its data can never be found in two places.
+ */
+export const PAGE_DATA_TYPE = "application/vnd.pod.page+json";
+
+/** A page's data as the browser reads it when it moves there in place: its title, and what it is drawn from. */
+export interface PageData {
+  readonly title: string;
+  readonly data: SiteData;
+}
+
 const escape = (text: string): string =>
   text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
 
@@ -39,6 +51,8 @@ ${meta}
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="${ROUTES.brand}">
 <link rel="stylesheet" href="${ROUTES.style}">
+<link rel="stylesheet" href="${ROUTES.postStyle}">
+<link rel="stylesheet" href="${ROUTES.refundStyle}">
 </head>
 <body>
 <div id="${SITE_ROOT_ID}">${body}</div>
