@@ -65,6 +65,7 @@ export function doorChainOn(anvil: Anvil, jobs: Address, counting: { readonly jo
   const reading = { address: jobs, publicClient: anvil.publicClient };
   return doorChainFor({
     jobs,
+    chainId: 31337,
     readJob: (id) => { counting.jobRead?.(); return readJob(reading, id); },
     readSeats: (id) => { counting.seatsRead?.(); return readSeats(reading, id); },
     readTerms: (id) => readTerms(reading, id),

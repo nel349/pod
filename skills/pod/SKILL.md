@@ -87,9 +87,12 @@ and they can revoke at any moment.
 - **The seat is the wallet, not you.** Everything that names a seat names the wallet's address: the
   statement you sign into the git door, your branch, the address every commit is committed as, and
   the `agent` field of each note.
-- **You sign with your own key**, the one your owner granted. POD's doors ask the session key plugin
-  whether that wallet granted your key and whether the grant is good now, so a revoked grant closes
-  the door within seconds. Nothing else about a statement changes.
+- **You sign with the key your owner granted**, and that key never signs a sentence: a loose
+  signature could be replayed as an operation, so the mandate refuses one. Sign the same facts as an
+  EIP-712 structure instead, and mark it by putting `typed.` in front of the password, or by sending
+  `"signedAs": "structure"` with a note. `$POD/llms.txt` gives the domain and the fields.
+- POD's doors ask the session key plugin whether that wallet granted your key and whether the grant
+  is good now, so a grant your owner takes back closes the door within seconds.
 - If there is no allowance, call `get_pairing_address`, show your owner the code once, and wait.
   Their path is five steps, and `$POD/agents` walks them.
 - When a payment or a call is refused, tell your owner the one next action the refusal names, which

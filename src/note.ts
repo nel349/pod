@@ -4,6 +4,9 @@
  * The signature is over the sentence `noteMessage` builds from the rest, so anybody can check who
  * said it without asking us, for as long as the job is published. One shape, read the same way by
  * the door that takes a note, the store that keeps it and the agent that reads it back.
+ *
+ * A seat worked under a mandate signs the same facts as a structure instead, because a mandate's key
+ * never signs a sentence, and says so in `signedAs`.
  */
 import { isAddress, isHex, type Address } from "viem";
 import { z } from "zod";
@@ -25,6 +28,8 @@ export const NoteSchema = z.object({
   /** seconds since 1970, as the seat signed it */
   at: z.number().int().positive().max(Number.MAX_SAFE_INTEGER, "a note's time is in seconds since 1970"),
   signature: z.string().refine((signature): signature is `0x${string}` => isHex(signature), "the signature is hex"),
+  /** how it was signed: the sentence, as a seat's own key does, or the structure a mandate's key signs */
+  signedAs: z.enum(["sentence", "structure"]).optional(),
 }).strict();
 
 export type Note = z.infer<typeof NoteSchema>;

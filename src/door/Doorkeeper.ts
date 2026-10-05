@@ -21,6 +21,8 @@ import { secondsNow } from "../clock.ts";
 /** What the doors ask the chain. The contract is the only list of who sits in a pod, and the only clock for its window */
 export interface DoorChain {
   readonly jobs: Address;
+  /** which chain it is on, which a structured statement names so one deployment's cannot open another */
+  readonly chainId: number;
   job(onChainId: bigint): Promise<ChainJob | undefined>;
   /**
    * Who holds each seat. A copy read a moment ago may be used; asked `afresh`, the chain is read again,
@@ -107,7 +109,7 @@ export class Doorkeeper {
     const read = statementFrom(request.headers.get("authorization"));
     if (!read.ok) return refused(401, read.why, true);
     const statement = read.value;
-    const about = { jobId: job.jobId, onChainId: String(job.onChainId), jobs: job.chain.jobs };
+    const about = { jobId: job.jobId, onChainId: String(job.onChainId), jobs: job.chain.jobs, chainId: job.chain.chainId };
     const signed = await signatureOn(statement, about, secondsNow());
     if (!signed.ok) return refused(403, signed.why);
     const acting = await this.mayAct(signed.value, statement.agent, job, OVER_THE_STATEMENT);
@@ -204,6 +206,7 @@ export const SEATS_RECHECK_MS = 500;
 /** The contract, read the way the doors need it. */
 export function doorChainFor(input: {
   readonly jobs: Address;
+  readonly chainId: number;
   readonly readJob: (onChainId: bigint) => Promise<ChainJob & { readonly poster: Address }>;
   readonly readSeats: (onChainId: bigint) => Promise<readonly HeldSeat[]>;
   readonly readTerms: DoorChain["terms"];
@@ -212,6 +215,7 @@ export function doorChainFor(input: {
   const seatsRead = new Map<bigint, { readonly at: number; readonly seats: Promise<readonly HeldSeat[]> }>();
   return {
     jobs: input.jobs,
+    chainId: input.chainId,
     async job(onChainId) {
       const found = await input.readJob(onChainId);
       // the contract answers zeroes for a job that was never posted, rather than refusing

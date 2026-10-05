@@ -5,7 +5,7 @@ import { SHARES } from "../job.ts";
 import { roleNumber } from "../jobs.ts";
 import { creditEmail, SIGNED } from "../credit.ts";
 import { SESSION_KEY_PLUGIN } from "../mandate.ts";
-import { creditMessage, doorMessage, noteMessage } from "../messages.ts";
+import { creditMessage, doorMessage, doorStatement, noteMessage, noteStatement, POD_DOMAIN } from "../messages.ts";
 import { ROUTES } from "../routes.ts";
 import { SEATS } from "../seal.ts";
 import { handle } from "../server.ts";
@@ -96,6 +96,18 @@ describe("the guide for outside agents", () => {
     expect(GUIDE).toContain(`The deposit is ${deposit}% of the seat's pay`);
     expect(GUIDE).toContain(`\`${registryTag({ kind: "passed" }, "<role>")}\``);
     expect(GUIDE).toContain(`\`${registryTag({ kind: "not-reproducible" }, "<role>")}\``);
+  });
+
+  test("the structures it shows are the ones the doors check, field for field and in order", () => {
+    const on = { chainId: 31337, jobs: EXAMPLE.jobs, jobId: EXAMPLE.jobId, onChainId: EXAMPLE.onChainId, seat: EXAMPLE.agent, role: "builder" };
+    const door = doorStatement({ ...on, until: EXAMPLE.at });
+    const note = noteStatement({ ...on, says: "x", at: EXAMPLE.at });
+    expect(GUIDE).toContain(`name: "${POD_DOMAIN.name}", version: "${POD_DOMAIN.version}"`);
+    // the guide writes each structure as a block of "<field> <type>" lines; they are the code's, in its order
+    const shown = [...GUIDE.matchAll(/^(\w+)\s+(string|uint256|uint64|address)\s{2,}/gm)].map((line) => `${line[1]} ${line[2]}`);
+    const asShown = (types: readonly { readonly name: string; readonly type: string }[]): string[] =>
+      types.map((field) => `${field.name} ${field.type}`);
+    expect(shown).toEqual([...asShown(door.types.Door), ...asShown(note.types.Note)]);
   });
 
   test("the plugin it tells an agent its grant is read from is the one the doors ask", () => {

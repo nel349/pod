@@ -8,26 +8,37 @@
  *
  *   name       0x…                                the seat's key
  *   password   <role>.<until>.<signature>         until is seconds since 1970
+ *   password   typed.<role>.<until>.<signature>   the same facts as a structure, for a mandate's key
  *
  * The name is the seat, which is an address on the contract. The signature is from that address, or
  * from a key its wallet granted: an agent working under a mandate signs with a key of its owner's
  * wallet, and the chain, not this server, says whether it may.
  */
-import { isAddress, isHex, recoverMessageAddress, type Address, type Hex } from "viem";
+import { isAddress, isHex, recoverMessageAddress, recoverTypedDataAddress, type Address, type Hex } from "viem";
 import type { Role } from "../job.ts";
 import type { GrantWindow, Grants } from "../mandate.ts";
-import { doorMessage } from "../messages.ts";
+import { doorMessage, doorStatement, type SignedOn } from "../messages.ts";
 import { SEATS } from "../seal.ts";
 import { branchFor } from "./seat.ts";
 
 /** How long a statement may be good for. Long enough for a slow push, short enough that a copy is soon worth nothing */
 export const MOST_A_STATEMENT_MAY_LAST_SECONDS = 60 * 60;
 
+/**
+ * How the statement was signed. A key of its own signs the sentence; a key a wallet granted signs the
+ * same facts as a structure, because a mandate's key never signs a sentence.
+ */
+export type SignedAs = "sentence" | "structure";
+
+/** What the password says: the structure's marker, when it is one */
+export const STRUCTURE = "typed";
+
 export interface Statement {
   readonly agent: Address;
   readonly role: Role;
   readonly until: number;
   readonly signature: Hex;
+  readonly signedAs: SignedAs;
 }
 
 export type Checked<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly why: string };
@@ -71,12 +82,17 @@ export function statementFrom(header: string | null): Checked<Statement> {
   if (!credentials) return { ok: false, why: "sign in with your seat: your address as the name, your signed statement as the password" };
   if (!credentials.ok) return credentials;
   const agent = credentials.value.name;
-  const [role = "", until = "", signature = "", ...more] = credentials.value.password.split(".");
+  const parts = credentials.value.password.split(".");
+  const signedAs: SignedAs = parts[0] === STRUCTURE ? "structure" : "sentence";
+  const [role = "", until = "", signature = "", ...more] = signedAs === "structure" ? parts.slice(1) : parts;
   if (!isAddress(agent)) return { ok: false, why: "the name is the address of the key that holds your seat" };
   if (more.length > 0 || !isRole(role) || !/^[0-9]+$/.test(until) || !isHex(signature)) {
-    return { ok: false, why: "the password is <role>.<until>.<signature>: your seat, when the statement runs out, and your signature" };
+    return {
+      ok: false,
+      why: `the password is <role>.<until>.<signature>: your seat, when the statement runs out, and your signature. A signature over the structure instead of the sentence says so: ${STRUCTURE}.<role>.<until>.<signature>`,
+    };
   }
-  return { ok: true, value: { agent, role, until: Number(until), signature } };
+  return { ok: true, value: { agent, role, until: Number(until), signature, signedAs } };
 }
 
 /**
@@ -86,14 +102,18 @@ export function statementFrom(header: string | null): Checked<Statement> {
  */
 export async function signatureOn(
   statement: Statement,
-  about: { readonly jobId: string; readonly onChainId: string; readonly jobs: Address },
+  about: SignedOn & { readonly jobId: string; readonly onChainId: string },
   nowSeconds: number,
 ): Promise<Checked<Address>> {
   const inTime = isGoodNow(statement.until, nowSeconds);
   if (!inTime.ok) return inTime;
-  const message = doorMessage({ ...about, role: statement.role, branch: branchFor(statement.role, statement.agent), until: statement.until });
+  const { role, until, signature } = statement;
   try {
-    return { ok: true, value: await recoverMessageAddress({ message, signature: statement.signature }) };
+    if (statement.signedAs === "structure") {
+      return { ok: true, value: await recoverTypedDataAddress({ ...doorStatement({ ...about, seat: statement.agent, role, until }), signature }) };
+    }
+    const message = doorMessage({ ...about, role, branch: branchFor(role, statement.agent), until });
+    return { ok: true, value: await recoverMessageAddress({ message, signature }) };
   } catch {
     return { ok: false, why: "that signature could not be read" };
   }

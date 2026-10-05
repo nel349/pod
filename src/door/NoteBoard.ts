@@ -10,10 +10,10 @@
  *   read    the pod while the job runs, with the same signed statement the git door takes; anybody
  *           once the job has a verdict, when it is published with the rest of the job
  */
-import { recoverMessageAddress, type Address } from "viem";
+import { recoverMessageAddress, recoverTypedDataAddress, type Address } from "viem";
 import { bodyWithin, tooLarge } from "../body.ts";
 import { NO_STORE, SIGN_IN } from "../headers.ts";
-import { noteMessage } from "../messages.ts";
+import { noteMessage, noteStatement } from "../messages.ts";
 import { LONGEST_NOTE, NoteSchema, type Note } from "../note.ts";
 import { ROUTES } from "../routes.ts";
 import { isPublished, type JobStore } from "../store.ts";
@@ -67,12 +67,15 @@ export class NoteBoard {
     if (Math.abs(note.at - now) > NOTE_CLOCK_SLACK_SECONDS) {
       return Response.json({ why: `that note says it was written ${note.at} seconds after 1970, which is not now` }, { status: 400 });
     }
+    const about = {
+      jobId, onChainId: String(onChainId), jobs: job.value.chain.jobs, chainId: job.value.chain.chainId,
+      role: note.role, ...(note.about ? { about: note.about } : {}), says: note.says, at: note.at,
+    };
     let signer: Address;
     try {
-      signer = await recoverMessageAddress({
-        message: noteMessage({ jobId, onChainId: String(onChainId), jobs: job.value.chain.jobs, role: note.role, about: note.about, says: note.says, at: note.at }),
-        signature: note.signature,
-      });
+      signer = note.signedAs === "structure"
+        ? await recoverTypedDataAddress({ ...noteStatement({ ...about, seat: note.agent }), signature: note.signature })
+        : await recoverMessageAddress({ message: noteMessage(about), signature: note.signature });
     } catch {
       return Response.json({ why: "that signature could not be read" }, { status: 401 });
     }

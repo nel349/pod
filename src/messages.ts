@@ -126,3 +126,96 @@ export function claimToSign(input: {
     `Transfer its repository to the GitHub account "${input.toAccount}".`,
   ].join("\n");
 }
+
+/**
+ * The structured statements an agent signs when it works a seat under a mandate.
+ *
+ * A mandate's key never signs a sentence. An operation is authorised by a plain signature over its
+ * hash, so a key that will sign any text handed to it hands out something that can be replayed as an
+ * operation; the mandate refuses that, and the only thing it signs besides an operation is structured
+ * data bound to a domain, which is how it consents to its identity and how it pays an x402 seller.
+ *
+ * So the same facts the sentences carry are said again here as EIP-712 structures. The domain names
+ * POD, the chain and the job contract, so a statement for one deployment cannot be used on another,
+ * and the shapes are the smallest that say who is knocking: what is derivable, such as a seat's
+ * branch, is derived by the door rather than signed twice.
+ */
+export const POD_DOMAIN = { name: "POD", version: "1" } as const;
+
+/** Where a structured statement is good: the chain it is on, and the contract the seat is on. */
+export interface SignedOn {
+  readonly chainId: number;
+  readonly jobs: Address;
+}
+
+const domainFor = (on: SignedOn) => ({ ...POD_DOMAIN, chainId: on.chainId, verifyingContract: on.jobs }) as const;
+
+/** What an agent signs to be let into its job's repository, when its key cannot sign a sentence. */
+export function doorStatement(input: SignedOn & {
+  readonly jobId: string;
+  readonly onChainId: string;
+  readonly seat: Address;
+  readonly role: string;
+  /** seconds since 1970, when this stops opening the door */
+  readonly until: number;
+}) {
+  return {
+    domain: domainFor(input),
+    types: {
+      Door: [
+        { name: "job", type: "string" },
+        { name: "number", type: "uint256" },
+        { name: "seat", type: "address" },
+        { name: "role", type: "string" },
+        { name: "until", type: "uint64" },
+      ],
+    },
+    primaryType: "Door",
+    message: {
+      job: input.jobId,
+      number: BigInt(input.onChainId),
+      seat: input.seat,
+      role: input.role,
+      until: BigInt(input.until),
+    },
+  } as const;
+}
+
+/** What a seat signs to say something to its pod, when its key cannot sign a sentence. */
+export function noteStatement(input: SignedOn & {
+  readonly jobId: string;
+  readonly onChainId: string;
+  readonly seat: Address;
+  readonly role: string;
+  /** the commit it is about, or nothing when it is about the job as a whole */
+  readonly about?: string;
+  readonly says: string;
+  /** seconds since 1970 */
+  readonly at: number;
+}) {
+  return {
+    domain: domainFor(input),
+    types: {
+      Note: [
+        { name: "job", type: "string" },
+        { name: "number", type: "uint256" },
+        { name: "seat", type: "address" },
+        { name: "role", type: "string" },
+        { name: "about", type: "string" },
+        { name: "says", type: "string" },
+        { name: "at", type: "uint64" },
+      ],
+    },
+    primaryType: "Note",
+    message: {
+      job: input.jobId,
+      number: BigInt(input.onChainId),
+      seat: input.seat,
+      role: input.role,
+      // a note about the job as a whole names no commit, which is said as nothing rather than left out
+      about: input.about ?? "",
+      says: input.says,
+      at: BigInt(input.at),
+    },
+  } as const;
+}

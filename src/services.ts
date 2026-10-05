@@ -70,8 +70,8 @@ export async function servicesFor(input: ServicesInput): Promise<Services> {
   // one doorkeeper for both of an agent's doors, so a seat is the same seat at each
   const keeper = new Doorkeeper({
     store,
-    chain: doorChainAt(jobs, publicClient),
-    ...(input.earlier ? { earlier: [doorChainAt(input.earlier, publicClient)] } : {}),
+    chain: doorChainAt(jobs, publicClient, input.page.chainId),
+    ...(input.earlier ? { earlier: [doorChainAt(input.earlier, publicClient, input.page.chainId)] } : {}),
     ...(grants ? { grants } : {}),
   });
   const book = new CreditBook(join(directory, CREDIT_FOLDER));
@@ -169,10 +169,11 @@ function ownedAt(jobs: Address, publicClient: PublicClient): OwnedContract & { r
 }
 
 /** A contract, read the way the doors need it. */
-function doorChainAt(jobs: Address, publicClient: PublicClient): DoorChain {
+function doorChainAt(jobs: Address, publicClient: PublicClient, chainId: number): DoorChain {
   const at = { address: jobs, publicClient };
   return doorChainFor({
     jobs,
+    chainId,
     readJob: (id) => readJob(at, id),
     readSeats: (id) => readSeats(at, id),
     readTerms: (id) => readTerms(at, id),
