@@ -27,7 +27,7 @@ export const CHROME = {
       title: "Connect a wallet",
       close: "Close",
       passkeyTitle: "A passkey wallet",
-      passkeySays: "Made from a passkey: Face ID, Touch ID, or your phone. Its key is worked out on this page, from the passkey, and kept by nobody, us included.",
+      passkeySays: "Made from a passkey: Face ID, Touch ID, or your phone. Its key is worked out on this page, from the passkey, and kept by this tab until you close it or lock the wallet. Never by us.",
       make: "Make a passkey wallet",
       open: "Open my passkey wallet",
       makeAnother: "Make a new one instead",
@@ -53,7 +53,7 @@ export const CHROME = {
       phraseSays: "These 24 words are this wallet: anyone who has them has it. Write them down and keep them safe. They bring the wallet back if the passkey is lost, in POD or in any other wallet. POD never sees them.",
       hidePhrase: "Hide the words",
       lock: "Lock the wallet",
-      lockSays: "Locked, its key is forgotten by this page; your passkey opens it again.",
+      lockSays: "Locked, and its key is forgotten by this tab; your passkey opens it again.",
       /** the header, when this browser has a passkey wallet and the page does not hold its key */
       openMine: "Open my wallet",
       openMineLabel: "Open your passkey wallet: its key is never stored, so opening it asks your passkey",

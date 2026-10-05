@@ -10,6 +10,7 @@
  * Pure: the same bytes always make the same phrase and the same accounts.
  */
 import { createSecp256k1SigningSession, getEvmAddress, type EvmAddress, type Secp256k1SigningSession } from "@category-labs/mera";
+import { hexToBytes, toHex, type Hex } from "viem";
 import { HDKey } from "@scure/bip32";
 import { entropyToMnemonic, mnemonicToSeedSync } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
@@ -28,19 +29,39 @@ export function recoveryPhraseOf(prfOutput: Uint8Array): string {
 /** The Ethereum account at this number on the standard path, from the phrase. */
 export const accountPath = (index: number): string => `m/44'/60'/0'/0/${index}`;
 
+/** An account made from a phrase: its signing session, its address, and the key the session holds. */
+export interface Derived {
+  readonly session: Secp256k1SigningSession;
+  readonly address: EvmAddress;
+  /** this account's own key, which the tab keeps so a reload does not ask for the passkey again */
+  readonly key: Hex;
+}
+
 /**
  * A signing session for the account at this number. The key lives in the session, which zeroes it
  * when ended; the seed it came from is zeroed here as soon as the key is taken from it.
  */
-export function accountAt(phrase: string, index: number): { readonly session: Secp256k1SigningSession; readonly address: EvmAddress } {
+export function accountAt(phrase: string, index: number): Derived {
   const seed = mnemonicToSeedSync(phrase);
   try {
     const node = HDKey.fromMasterSeed(seed).derive(accountPath(index));
     if (!node.privateKey) throw new Error("the path gave no key");
+    const key = toHex(node.privateKey);
     const session = createSecp256k1SigningSession({ privateKey: node.privateKey });
     node.wipePrivateData();
-    return { session, address: getEvmAddress(session.publicKey) };
+    return { session, address: getEvmAddress(session.publicKey), key };
   } finally {
     seed.fill(0);
+  }
+}
+
+/** The same account again, from the key a tab kept, with no passkey asked for. */
+export function accountFromKey(key: Hex): { readonly session: Secp256k1SigningSession; readonly address: EvmAddress } {
+  const bytes = hexToBytes(key);
+  try {
+    const session = createSecp256k1SigningSession({ privateKey: bytes });
+    return { session, address: getEvmAddress(session.publicKey) };
+  } finally {
+    bytes.fill(0);
   }
 }

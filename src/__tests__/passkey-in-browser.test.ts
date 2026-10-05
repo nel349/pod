@@ -191,12 +191,20 @@ describe.skipIf(!available)("a stranger with no browser wallet makes one from a 
     await openMine(page);
     expect(await shownAddress(page)).toBe(address);
 
-    // a reload connects nothing on its own: the key lived only in the page. The approved job is public, so
-    // its page says where it stands without asking for a wallet, and the header asks the passkey again
+    // a reload in the same tab keeps the wallet open: the key it worked out is this tab's until it is
+    // closed or the wallet is locked, so the page comes back as it was, with no passkey asked for
     await page.open(`${base}${ROUTES.post}/${id}`);
-    await page.until(`document.querySelector("#open-wallet")`, "the header to offer opening the wallet after a reload", 30, HEADER);
     await page.until(`document.querySelector("#standing")?.textContent.startsWith("Approved")`, "the job's page to say where it stands", 30, SHOWN);
-    expect(await page.evaluate<boolean>(`document.querySelector("#connect") === null`)).toBe(true);
+    expect(await shownAddressWhenOpen(page)).toBe(address);
+    expect(await page.evaluate<boolean>(`document.querySelector("#open-wallet") === null && document.querySelector("#connect-wallet") === null`)).toBe(true);
+    // what it keeps is the account's own key, never the words that are the whole wallet
+    const keptNow = await page.evaluate<string>(`JSON.stringify({ ...localStorage, ...sessionStorage })`);
+    expect(keptNow).not.toContain(phrase.split(" ").slice(0, 3).join(" "));
+
+    // locking forgets it, and then a reload does ask again
+    await lock(page);
+    await page.open(`${base}${ROUTES.post}/${id}`);
+    await page.until(`document.querySelector("#open-wallet")`, "the header to offer opening the wallet after it was locked", 30, HEADER);
     await openMine(page);
     expect(await shownAddress(page)).toBe(address);
   }, 480_000);

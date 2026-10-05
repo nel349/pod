@@ -8,7 +8,7 @@ import { hydrateRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider } from "wagmi";
 import { firstLine } from "../../errors.ts";
-import { walletConfig } from "../shared/index.ts";
+import { holdPasskeyWallet, walletConfig, walletThisTabKept } from "../shared/index.ts";
 import { SITE_DATA_ID, SITE_ROOT_ID } from "./document.ts";
 import type { FirstPage } from "./hooks/index.ts";
 import { IdleLock, SiteShell } from "./SiteShell.tsx";
@@ -26,6 +26,11 @@ function carriedData(carried: HTMLElement): SiteData {
   if (!parsed.success) throw new Error(`this page's data cannot be read: ${parsed.error.issues[0]?.message}`);
   return parsed.data;
 }
+
+// a passkey wallet this tab had open before it was reloaded is held again before anything draws, so
+// the page comes back as it was rather than asking for their face to show them where they already were
+const kept = walletThisTabKept();
+if (kept) holdPasskeyWallet(kept);
 
 const root = document.getElementById(SITE_ROOT_ID);
 const carried = document.getElementById(SITE_DATA_ID);

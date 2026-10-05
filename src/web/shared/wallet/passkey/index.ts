@@ -2,5 +2,6 @@
 export * from "./ceremony.ts";
 export * from "./derive.ts";
 export * from "./held.ts";
+export * from "./kept.ts";
 export * from "./passkeyConnector.ts";
 export * from "./passkeyProvider.ts";

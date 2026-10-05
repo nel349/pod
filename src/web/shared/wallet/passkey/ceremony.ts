@@ -9,7 +9,8 @@ import { createPasskeyWithPrfOutput, getPasskeyPrfOutput, type PasskeyCredential
 import { toViemAccount } from "@category-labs/mera/viem";
 import type { LocalAccount } from "viem";
 import { z } from "zod";
-import { accountAt, PERSON_ACCOUNT, recoveryPhraseOf } from "./derive.ts";
+import { accountAt, accountFromKey, PERSON_ACCOUNT, recoveryPhraseOf } from "./derive.ts";
+import { forgetForThisTab, keepForThisTab, keptForThisTab } from "./kept.ts";
 
 /** what the passkey is called in the person's password manager */
 const PASSKEY_NAME = "POD wallet";
@@ -52,10 +53,29 @@ export interface OpenPasskeyWallet {
 /** The person's wallet from a passkey's output, which is zeroed once the key is taken from it. */
 function walletFrom(prfOutput: Uint8Array): OpenPasskeyWallet {
   try {
-    const { session } = accountAt(recoveryPhraseOf(prfOutput), PERSON_ACCOUNT);
-    return { account: toViemAccount(session), end: () => session.end() };
+    const { session, key } = accountAt(recoveryPhraseOf(prfOutput), PERSON_ACCOUNT);
+    // kept for this tab, so a reload does not ask for their face to show them the page they were on
+    keepForThisTab(key);
+    return { account: toViemAccount(session), end: () => { forgetForThisTab(); session.end(); } };
   } finally {
     prfOutput.fill(0);
+  }
+}
+
+/**
+ * The wallet this tab had open before it was reloaded, if it is still the same tab. No passkey is
+ * asked for: what it is made from was derived by one, in this tab, and kept only until it closes.
+ */
+export function walletThisTabKept(): OpenPasskeyWallet | undefined {
+  const key = keptForThisTab();
+  if (key === undefined) return undefined;
+  try {
+    const { session } = accountFromKey(key);
+    return { account: toViemAccount(session), end: () => { forgetForThisTab(); session.end(); } };
+  } catch {
+    // whatever is there is not a key this page can use; it is no use keeping it
+    forgetForThisTab();
+    return undefined;
   }
 }
 
