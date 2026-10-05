@@ -107,6 +107,16 @@ export interface WorkerOptions {
 }
 
 
+/**
+ * Whether a job that passed still has to be published, asked by what its repository opens on.
+ *
+ * Never by whether it has one: a job is published once before it is graded, so the receipt can name
+ * somewhere anybody can clone it, and that copy opens on the lead's branch because no work has passed
+ * yet. Asking for the address instead left every passing job on GitHub with no main at all, opening
+ * on a seat's branch, which is the branch GitHub would have counted its contributions on.
+ */
+export const stillToPublish = (record: JobRecord): boolean => record.opensOnMain !== true;
+
 export class Worker {
   private readonly grading = new Map<string, Promise<void>>();
   /** when each job's last grading failed, so a job that keeps failing is not graded again every look */
@@ -421,8 +431,14 @@ export class Worker {
       if (minted) this.say(`${record.jobId}: POD #${tokenId} minted to whoever paid`);
     }
     // last, and apart from the money and the title: GitHub having a bad moment holds up neither, and
-    // publishing is tried again on the next look until it is done
-    if (this.options.publishTo && record.repository === undefined) await this.publish(record.jobId, record.tile.idea, this.options.publishTo.owner);
+    // publishing is tried again on the next look until it is done.
+    //
+    // Asked by what the repository opens on, never by whether it exists: a job is published once
+    // before it is graded, so the receipt can name somewhere anybody can clone, and that one opens on
+    // the lead's branch because there is no passed work yet. Reading `repository` here instead left
+    // every passing job on GitHub with no main at all, opening on a seat's branch, which is also the
+    // branch GitHub would have counted its contributions on.
+    if (this.options.publishTo && stillToPublish(record)) await this.publish(record.jobId, record.tile.idea, this.options.publishTo.owner);
   }
 
   /** The job's whole repository on GitHub, opening on the work that passed, and where it is kept on the record. */

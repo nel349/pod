@@ -8,6 +8,7 @@ import { agentEmail, branchFor } from "../door/index.ts";
 import { sealSpec, type Role, type Spec } from "../job.ts";
 import { approve, MOST_BLOCKS_A_LOG_READ_COVERS, post, readJob, readValidator, takeSeat } from "../jobs.ts";
 import { openJob } from "../publish.ts";
+import type { JobRecord } from "../store.ts";
 import { agentFactsFrom } from "../agentFacts.ts";
 import { commitToBytes32, commitWork, head, openRepository } from "../repo.ts";
 import { record, registerAgent, requestValidation, verdictOnChain, type Registries } from "../registry.ts";
@@ -17,7 +18,7 @@ import { IMAGE } from "../sandbox.ts";
 import { SEATS } from "../seal.ts";
 import { isPublished, JobStore } from "../store.ts";
 import { podTokenAbi, tokenOfJob } from "../token.ts";
-import { Worker } from "../worker/index.ts";
+import { stillToPublish, Worker } from "../worker/index.ts";
 import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
 import { COAT_IDEA, DRY, good, serverSaying, WET, WORKING } from "./support/coat.ts";
 import { aPod, anAgent, type Agent } from "./support/podServer.ts";
@@ -640,4 +641,27 @@ describe.skipIf(!available)("the worker", () => {
     await worker.tick();
     expect(said.filter((line) => line.includes(`${leftAlone.jobId}: its poster took the money back`))).toHaveLength(1);
   }, 300_000);
+});
+
+describe("publishing what passed", () => {
+  const record = (over: Partial<JobRecord> = {}): JobRecord => ({
+    jobId: "a-coat", poster: "0x1111111111111111111111111111111111111111", seal: toHex("seal", { size: 32 }),
+    brief: "", checksSaid: [], approvals: [], signed: "", tile: { idea: "a coat", pod: [] },
+    ...over,
+  } as unknown as JobRecord);
+
+  test("a job published before it was graded is published again, because that copy opens on a seat's branch", () => {
+    // the first publish names somewhere anybody can clone, and sets the address on the record; it
+    // opens on the lead's branch because nothing has passed yet. Asking for the address here is what
+    // left live jobs on GitHub with no main at all
+    expect(stillToPublish(record({ repository: "https://github.com/an-owner/pod-a-coat" }))).toBe(true);
+  });
+
+  test("a job whose repository opens on the work that passed is done", () => {
+    expect(stillToPublish(record({ repository: "https://github.com/an-owner/pod-a-coat", opensOnMain: true }))).toBe(false);
+  });
+
+  test("a job never published at all is published", () => {
+    expect(stillToPublish(record())).toBe(true);
+  });
 });
