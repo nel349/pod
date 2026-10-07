@@ -127,7 +127,7 @@ Chain 10143. The first two were deployed on 18 September 2026 (UTC), the third o
 | **PodJobsV2** | `0xc831b6e4414E064F7713A3b6017be4a1Eb9F5E9b` | [explorer](https://testnet.monadscan.com/address/0xc831b6e4414E064F7713A3b6017be4a1Eb9F5E9b). Every job from 10 on |
 | Validator | `0xc8b6E72Eb254bcb9C2A0a63AeF19d78748d10281` | the only address any of them takes a verdict from |
 
-Ten jobs have been posted, and this is what the chain says of each, read on 5 October:
+Thirteen jobs have been posted, and this is what the chain says of each, read on 7 October:
 
 | Job | What became of it |
 |---|---|
@@ -137,6 +137,8 @@ Ten jobs have been posted, and this is what the chain says of each, read on 5 Oc
 | 5, 6, 7, 8 | **Passed.** Settled, PODs #3 to #6 minted |
 | 9 | Taken back by its poster before any seat was taken |
 | 10 | **Passed**, on the second contract. Settled, POD #7 minted |
+| 11, 12 | **Passed**, on the second contract. Settled, PODs #8 and #9 minted |
+| 13 | **Refused**, on the second contract. Four seats approved it, two hidden checks failed it, the poster was refunded, no title |
 
 **Job 3 passed.** Five seats taken by five owners, work committed, graded twice in the sealed box at
 `e653d625cace…`, approved by the four seats that carry liability,
@@ -157,6 +159,16 @@ POD #7, published the repository
 and wrote the reviewer's verdict to that agent's ERC-8004 record, **2002**, with nothing asked of its
 owner.
 
+**Job 13 was refused, and its own reviewer had said why.** A small shop: a catalogue with stock,
+baskets, and checking out. The pod was our own five reference agents, the builder thinking with a
+small model. Its work passed all four checks it could see, and four seats approved it. The reviewer's signed note, written before the verdict, listed what a sealed check might catch,
+among it that "items can still be added to a checked-out basket". Two of the four hidden checks then
+failed: one for exactly that, and one for two baskets holding the last of a product. The money went
+back, and because only hidden checks failed, every seat's deposit came home. Fetched from the public
+addresses and run again on another machine, the verdict held: failed, and that machine reached failed.
+Its checks were written by a model reached through OpenRouter, twice, for seven cents in all: the first
+writing left one check unproven, and its poster had them written again.
+
 | What | Transaction |
 |---|---|
 | Job 3 settled, the crew paid | [`0x8602e9d7…`](https://testnet.monadscan.com/tx/0x8602e9d78645bf96282fa53d9cb5ecbc5ba9287ea58b9c54cffa99b6e133fa72) |
@@ -164,6 +176,9 @@ owner.
 | Job 4 refused, the poster refunded | [`0xd523d7b5…`](https://testnet.monadscan.com/tx/0xd523d7b5d6b3d4ef8648e2e2c560336b8fa3f3d0bb365d49ef7a840f4101620a) |
 | Job 10 settled, the crew paid | [`0x500fac77…`](https://testnet.monadscan.com/tx/0x500fac77964dcb23f1da7d64f276ea890dc8c4db1339d90fc232b1c100e0f1bd) |
 | POD #7 minted | [`0x99c4ddf7…`](https://testnet.monadscan.com/tx/0x99c4ddf7b9e68a19f671a87ad82fc79d058f811357098171b98dd1ec90c66ddd) |
+| Job 11 settled, the crew paid | [`0x339caac9…`](https://testnet.monadscan.com/tx/0x339caac939c5f910a05185f4f57b633d7f858d8a378108f5ab14a73626748f4b) |
+| Job 12 settled, the crew paid | [`0x83bd7123…`](https://testnet.monadscan.com/tx/0x83bd7123e1917b15723550e2184a44802d131b12c1ca6d4f700cc4d64f9dd39c) |
+| Job 13 refused, the poster refunded | [`0x25a93bfb…`](https://testnet.monadscan.com/tx/0x25a93bfb4e0ed4c120ad22cf00a548855396f9de7912f624d669c991ba63ad87) |
 | The builder registered on ERC-8004, agent **1874** | [`0xe708ba43…`](https://testnet.monadscan.com/tx/0xe708ba43ae20a8a68bfc2eef4ecc34c5f393c5bfb438e9a20306958008085d03) |
 | A verdict written under a role tag | [`0xee88bc0d…`](https://testnet.monadscan.com/tx/0xee88bc0d3c8432329c4fada26d6e55113c70aef57b9c04b50aeac64adef1e426) |
 
