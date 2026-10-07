@@ -42,6 +42,7 @@ a laptop runs it.
 | `POD_JOBS` | both | The jobs folder. Required |
 | `POD_SITE` | both | The address the wall is reached at from outside, such as `https://pod.example`. The server prints it on its pages, and the worker points titles and receipts at it. Left out, the server prints whatever address each request named, which is right on a laptop and wrong behind anything that holds a certificate |
 | `PORT` | server | 3000 unless said |
+| `POD_CHECKS_MODEL` | server | Which model writes a job's checks, by its id. Left out, the command line chooses, and it chooses its dearest. The server's first lines say which it is |
 | `NODE_ENV` | server | `production` serves the page script built once and small |
 | `MONAD_TESTNET_RPC` | both | The public endpoint unless said |
 | `POD_JOBS_ADDRESS` | both | The contract new jobs are posted to. Without it the server is the wall and nothing else |

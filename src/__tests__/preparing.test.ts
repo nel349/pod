@@ -276,6 +276,35 @@ describe.skipIf(!available)("a paid job, prepared", () => {
     expect(read.money).toMatchObject({ balance: 3n * WRITING, reserved: 0n, kept: 0 });
   }, 120_000);
 
+  test("what the model's answers cost is kept with the writing, written or failed, and with none when it was never reached", async () => {
+    // a model that answers as another does, and says what the answer cost, as the real one does
+    const billing = (answers: Model): Model => async (prompt, signal, spent) => {
+      const answer = await answers(prompt, signal);
+      spent?.({ model: "claude-of-some-kind", calls: 1, tokensIn: 1000, tokensOut: 400, dollars: 0.03 });
+      return answer;
+    };
+    const written = await service(billing(replying(GOOD_REPLY).model));
+    const first = await aPaidJob();
+    await written.preparing.setUp(await asPoster(first, uniqueName()));
+    expect((await whenWritten(written.preparing, first)).writings[0]).toMatchObject({
+      isCharged: true, outcome: { kind: "written" },
+      spent: { model: "claude-of-some-kind", calls: 1, tokensIn: 1000, tokensOut: 400, dollars: 0.03 },
+    });
+
+    // two useless answers cost two answers: the writing failed, and what it cost is what its price has to cover
+    const failed = await service(billing(USELESS));
+    const second = await aPaidJob();
+    await failed.preparing.setUp(await asPoster(second, uniqueName()));
+    expect((await whenWritten(failed.preparing, second)).writings[0]).toMatchObject({
+      isCharged: true, outcome: { kind: "failed" }, spent: { calls: 2, dollars: 0.06 },
+    });
+
+    const unreached = await service(UNREACHABLE);
+    const third = await aPaidJob();
+    await unreached.preparing.setUp(await asPoster(third, uniqueName()));
+    expect((await whenWritten(unreached.preparing, third)).writings[0]?.spent).toBeUndefined();
+  }, 240_000);
+
   test("three writings are paid for with the job; the fourth needs one more paid for", async () => {
     const { preparing } = await service(USELESS);
     const id = await aPaidJob();

@@ -13,16 +13,20 @@ export interface TrialView {
   readonly says: string;
   /** what the check printed, shown only when the trial failed, because then it is the explanation */
   readonly saw: string | undefined;
+  /** what else is worth knowing about a trial that held, when there is anything */
+  readonly also: string | undefined;
 }
 
 /** The three trials of a written check, in the order they are run. */
 export function trialsOf(check: TriedCheck): readonly TrialView[] {
   const words = COPY.checks.trials;
-  const view = (name: TrialView["name"], hasHeld: boolean, held: string, broke: string): TrialView =>
-    ({ name, hasHeld, says: hasHeld ? held : broke, saw: hasHeld ? undefined : words.saw(check.saw[name]) });
+  const view = (name: TrialView["name"], hasHeld: boolean, held: string, broke: string, also?: string): TrialView =>
+    ({ name, hasHeld, says: hasHeld ? held : broke, saw: hasHeld ? undefined : words.saw(check.saw[name]), also: hasHeld ? also : undefined });
+  const alsoBroke = check.nearMissAlsoBroke ?? [];
   return [
     view("working", check.proof.working, words.working.held, words.working.broke),
-    view("nearMiss", check.proof.nearMiss, words.nearMiss.held(check.nearMiss), words.nearMiss.broke(check.nearMiss)),
+    view("nearMiss", check.proof.nearMiss, words.nearMiss.held(check.nearMiss), words.nearMiss.broke(check.nearMiss),
+      alsoBroke.length > 0 ? words.nearMiss.alsoBroke(alsoBroke) : undefined),
     view("nothing", check.proof.nothing, words.nothing.held, words.nothing.broke),
   ];
 }

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmod, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { claudeOnThisMachine, openBroker, SENSIBLE, type Broker } from "../broker.ts";
+import { claudeOnThisMachine, ONLY_ANSWERS, openBroker, SENSIBLE, type Broker, type Spent } from "../broker.ts";
 import { runSeat } from "../agent.ts";
 import { openRepository } from "../repo.ts";
 import { dockerAvailable } from "./support/tools.ts";
@@ -148,21 +148,57 @@ describe("the model, when the program behind it misbehaves", () => {
     return cli;
   }
 
+  /** What the real CLI prints for one answer: a line of JSON, with the answer and its bill. */
+  const printing = (answer: Record<string, unknown>): string => `cat <<'JSON'\n${JSON.stringify(answer)}\nJSON`;
+
   test("an answer of nothing is a failure, not an answer", async () => {
-    const silent = claudeOnThisMachine({ cli: await aStandIn("exit 0") });
+    const silent = claudeOnThisMachine({ cli: await aStandIn(printing({ result: "" })) });
     await expect(silent("say something", AbortSignal.timeout(10_000))).rejects.toThrow("the model answered with nothing");
-    const blank = claudeOnThisMachine({ cli: await aStandIn("printf '  \\n\\n'") });
+    const blank = claudeOnThisMachine({ cli: await aStandIn(printing({ result: "  \n\n" })) });
     await expect(blank("say something", AbortSignal.timeout(10_000))).rejects.toThrow("the model answered with nothing");
+    // and a program that finishes having printed nothing at all, or something that is not an answer
+    const mute = claudeOnThisMachine({ cli: await aStandIn("exit 0") });
+    await expect(mute("say something", AbortSignal.timeout(10_000))).rejects.toThrow("the model answered in a shape that could not be read");
+    const chatty = claudeOnThisMachine({ cli: await aStandIn("echo 'a coat, today'") });
+    await expect(chatty("say something", AbortSignal.timeout(10_000))).rejects.toThrow("could not be read: a coat, today");
   });
 
   test("a program that fails says why", async () => {
     const failing = claudeOnThisMachine({ cli: await aStandIn("echo 'not signed in' >&2; exit 1") });
     await expect(failing("say something", AbortSignal.timeout(10_000))).rejects.toThrow("the model would not answer: not signed in");
+    // the CLI says why where its answer would have been, and may warn about something else beside it,
+    // in colour: the reason is what is passed on, first and in plain text (6 Oct, an account out of credit)
+    const broke = claudeOnThisMachine({ cli: await aStandIn("echo 'Credit balance is too low'; printf '\\033[33mconnectors are disabled\\033[39m' >&2; exit 1") });
+    await expect(broke("say something", AbortSignal.timeout(10_000))).rejects.toThrow("the model would not answer: Credit balance is too low · connectors are disabled");
+    // the same refusal inside the JSON it answers with, whatever it exits with
+    const refused = claudeOnThisMachine({ cli: await aStandIn(printing({ result: "Credit balance is too low", is_error: true })) });
+    await expect(refused("say something", AbortSignal.timeout(10_000))).rejects.toThrow("the model would not answer: Credit balance is too low");
   });
 
-  test("a real answer comes back as it was said, without the space around it", async () => {
-    const answering = claudeOnThisMachine({ cli: await aStandIn("printf '\\n  a coat, today  \\n'") });
-    expect(await answering("say something", AbortSignal.timeout(10_000))).toBe("a coat, today");
+  test("a real answer comes back as it was said, without the space around it, and with what it cost", async () => {
+    const answering = claudeOnThisMachine({ cli: await aStandIn(printing({
+      result: "\n  a coat, today  \n", is_error: false, total_cost_usd: 0.0123,
+      usage: { input_tokens: 9, output_tokens: 41, cache_creation_input_tokens: 500, cache_read_input_tokens: 70 },
+      modelUsage: { "claude-of-some-kind": { costUSD: 0.0123 } },
+    })) });
+    const cost: Spent[] = [];
+    expect(await answering("say something", AbortSignal.timeout(10_000), (spent) => cost.push(spent))).toBe("a coat, today");
+    // everything it was sent counts as sent, kept from an earlier call or not
+    expect(cost).toEqual([{ model: "claude-of-some-kind", calls: 1, tokensIn: 579, tokensOut: 41, dollars: 0.0123 }]);
+    // an answer that carries no bill is still an answer, and nothing is made up for it
+    const unbilled = claudeOnThisMachine({ cli: await aStandIn(printing({ result: "a coat, today" })) });
+    expect(await unbilled("say something", AbortSignal.timeout(10_000), (spent) => cost.push(spent))).toBe("a coat, today");
+    expect(cost).toHaveLength(1);
+  });
+
+  test("it is started with its own instructions replaced, and with the model its runner named, or none", async () => {
+    // a stand-in that answers with how it was started
+    const echoing = `printf '{"result":"%s"}' "$*"`;
+    const named = await claudeOnThisMachine({ cli: await aStandIn(echoing), model: "claude-of-some-kind" })("say something", AbortSignal.timeout(10_000));
+    expect(named).toContain(`--system-prompt ${ONLY_ANSWERS}`);
+    expect(named).toEndWith("--model claude-of-some-kind");
+    const unnamed = await claudeOnThisMachine({ cli: await aStandIn(echoing) })("say something", AbortSignal.timeout(10_000));
+    expect(unnamed).not.toContain("--model");
   });
 });
 

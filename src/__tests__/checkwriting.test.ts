@@ -17,7 +17,7 @@ import { dockerAvailable } from "./support/tools.ts";
 import { checkout } from "./support/checkout.ts";
 import { prove } from "../checkwriting/prove.ts";
 import { DockerFailed } from "../docker/index.ts";
-import type { Model } from "../broker.ts";
+import type { Model, Spent } from "../broker.ts";
 
 /**
  * An image Docker refuses to start any box from. Malformed on purpose: a well-formed name that no
@@ -159,13 +159,27 @@ describe.skipIf(!withDocker)("every check is tried before it can be sealed", () 
     expect(first.checkable && [first.asks, first.nearMiss]).toEqual(["Asks while it is raining, hard", "It never says take a coat, ever"]);
   }, 240_000);
 
-  test("a near miss that breaks everything is no near miss, so it proves nothing about its check", async () => {
-    // a check that catches this proves only that something is broken, which "nothing built" already shows
-    const breaksEverything = { ...good(1), nearMissServer: serverSaying("null", "null") };
-    const { checks: written } = await writeChecks(COAT_REQUEST, writerWith(replying({ working: WORKING, checks: [good(0), breaksEverything] }).model));
+  test("a near miss that fails another check too still proves its own, and the other sentence is named", async () => {
+    // sentences lean on each other, so a mistake in one often shows in another. Refusing the check for
+    // that made a sentence other sentences depend on impossible to prove, whoever wrote its near miss
+    const breaksBoth = { ...good(1), nearMissServer: serverSaying("null", "null") };
+    const { checks: written } = await writeChecks(COAT_REQUEST, writerWith(replying({ working: WORKING, checks: [good(0), breaksBoth] }).model));
+
+    expect(proven(written[1]!)).toEqual({ working: true, nearMiss: true, nothing: true });
+    expect(written[1]!.checkable && written[1]!.nearMissAlsoBroke).toEqual([WET]);
+    // the other check's own near miss broke nothing else, and says so by naming nothing
+    expect(written[0]!.checkable && written[0]!.nearMissAlsoBroke).toEqual([]);
+    expect(readyToSeal(written)).toBe(true);
+  }, 240_000);
+
+  test("a check that passes its near miss is not proven, whatever else that near miss broke", async () => {
+    // the softer rule lets a near miss break other checks. It never lets a check off catching its own:
+    // here the near miss for dry weather is wrong only about rain, so the dry check passes against it
+    const missesItsOwn = { ...good(1), nearMissServer: serverSaying("false", "false") };
+    const { checks: written } = await writeChecks(COAT_REQUEST, writerWith(replying({ working: WORKING, checks: [good(0), missesItsOwn] }).model));
 
     expect(proven(written[1]!)).toEqual({ working: true, nearMiss: false, nothing: true });
-    expect(written[1]!.checkable && written[1]!.saw.nearMiss).toBe(`the near miss breaks more than one thing: "${WET}" fails against it too`);
+    expect(written[1]!.checkable && written[1]!.nearMissAlsoBroke).toEqual([WET]);
     expect(readyToSeal(written)).toBe(false);
   }, 240_000);
 
@@ -175,6 +189,55 @@ describe.skipIf(!withDocker)("every check is tried before it can be sealed", () 
 
     expect(proven(written[1]!)).toEqual({ working: true, nearMiss: false, nothing: true });
     expect(written[1]!.checkable && written[1]!.saw.nearMiss).toBe("the near miss is the working version, unchanged");
+  }, 240_000);
+
+  test("a near miss given as the change that makes it is made, tried, and proves its check as a whole one does", async () => {
+    // the working version's own line for dry weather, and what a hurried builder would have written
+    const byChange = (i: 0 | 1) => {
+      const { nearMissServer: _whole, ...entry } = good(i);
+      return { ...entry, nearMissChanges: [i === 0 ? { replace: `rain === "yes" ? true`, with: `rain === "yes" ? false` } : { replace: ": false }));", with: ": true }));" }] };
+    };
+    const { checks: written } = await writeChecks(COAT_REQUEST, writerWith(replying({ working: WORKING, checks: [byChange(0), byChange(1)] }).model));
+
+    expect(written.map(proven)).toEqual([
+      { working: true, nearMiss: true, nothing: true },
+      { working: true, nearMiss: true, nothing: true },
+    ]);
+    expect(readyToSeal(written)).toBe(true);
+  }, 240_000);
+
+  test("a change that names a piece the working version does not hold exactly once is said, and the writer asked again", async () => {
+    const { nearMissServer: _whole, ...entry } = good(1);
+    // not in the program at all, and then in it twice: either way nobody could say which piece was meant
+    const absent = { ...entry, nearMissChanges: [{ replace: "a line that was never written", with: "x" }] };
+    const twice = { ...entry, nearMissChanges: [{ replace: "response", with: "x" }] };
+
+    const first = replyingInTurn({ working: WORKING, checks: [good(0), absent] }, GOOD_REPLY);
+    const { checks: written } = await writeChecks(COAT_REQUEST, writerWith(first.model));
+    expect(first.asked()).toBe(2);
+    expect(first.prompts()[1]).toContain(`the near miss for check 2 replaces a piece that is in the working version 0 times, and it has to be there exactly once: "a line that was never written"`);
+    expect(readyToSeal(written)).toBe(true);
+
+    // a writer that cannot manage it twice has written nothing, and is charged for having answered
+    const stuck = replying({ working: WORKING, checks: [good(0), twice] });
+    const failed = writeChecks(COAT_REQUEST, writerWith(stuck.model));
+    await expect(failed).rejects.toThrow("is in the working version 3 times");
+    expect(stuck.asked()).toBe(2);
+  }, 240_000);
+
+  test("what the model's answers cost reaches whoever asked for the writing, however it ended", async () => {
+    const billing = (reply: unknown): Model => async (_prompt, _signal, spent) => {
+      spent?.({ model: "claude-of-some-kind", calls: 1, tokensIn: 100, tokensOut: 40, dollars: 0.02 });
+      return typeof reply === "string" ? reply : JSON.stringify(reply);
+    };
+    const cost: Spent[] = [];
+    await writeChecks(COAT_REQUEST, writerWith(billing(GOOD_REPLY)), undefined, (spent) => cost.push(spent));
+    expect(cost).toEqual([{ model: "claude-of-some-kind", calls: 1, tokensIn: 100, tokensOut: 40, dollars: 0.02 }]);
+
+    // a writing that failed after two answers cost two answers, and says so once
+    await expect(writeChecks(COAT_REQUEST, writerWith(billing("I would be happy to help!")), undefined, (spent) => cost.push(spent))).rejects.toBeInstanceOf(WritingFailed);
+    expect(cost[1]).toEqual({ model: "claude-of-some-kind", calls: 2, tokensIn: 200, tokensOut: 80, dollars: 0.04 });
+    expect(cost).toHaveLength(2);
   }, 240_000);
 
   test("a writer whose first answer is unusable is told why, and its second, good answer is used", async () => {

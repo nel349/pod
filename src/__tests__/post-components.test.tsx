@@ -49,6 +49,17 @@ describe("a written check", () => {
     expect(trials[0]?.textContent).toBe(COPY.checks.trials.working.held);
   });
 
+  test("a check whose near miss failed another line too is still proven, and says which line under the trial", () => {
+    const other = "When it is raining, it tells me to take one";
+    render(<ul><WrittenCheck check={{ ...SHAKY, proof: { working: true, nearMiss: true, nothing: true }, nearMissAlsoBroke: [other] }} /></ul>);
+    const [check] = screen.getAllByRole("listitem").filter((item) => item.classList.contains("written-check"));
+    expect(check?.className).toBe("written-check");
+    const trials = screen.getAllByRole("listitem").filter((item) => item.classList.contains("trial"));
+    expect(trials.map((item) => item.className)).toEqual(["trial held", "trial held", "trial held"]);
+    expect(trials[1]?.querySelector(".also")?.textContent).toBe(COPY.checks.trials.nearMiss.alsoBroke([other]));
+    expect(trials[0]?.querySelector(".also")).toBeNull();
+  });
+
   test("the program itself is there, folded away, for anybody who wants to read it", () => {
     render(<ul><WrittenCheck check={SHAKY} /></ul>);
     const source = screen.getByText(COPY.checks.showSource).closest("details");

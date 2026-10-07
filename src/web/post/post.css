@@ -178,11 +178,12 @@ button.add:hover { background: var(--ink); color: var(--yellow); text-decoration
 .trial:nth-child(2) { animation-delay: 140ms; }
 .trial:nth-child(3) { animation-delay: 280ms; }
 .trial::before { position: absolute; left: 0; top: -2px; font: 900 22px/1 var(--shout); }
-.trial.held { background: linear-gradient(transparent 52%, var(--yellow) 52%, var(--yellow) 92%, transparent 92%); }
+/* the marker is drawn on the trial's own words, from under its tick, so a note beneath them is left plain */
+.trial.held .words { margin-left: -30px; padding-left: 30px; background: linear-gradient(transparent 52%, var(--yellow) 52%, var(--yellow) 92%, transparent 92%); }
 .trial.held::before { content: "✓"; }
 .trial.broke { color: var(--pink); }
 .trial.broke::before { content: "✕"; }
-.trial .saw { display: block; margin-top: 2px; font: 400 13px/1.4 var(--type); color: var(--grey); }
+.trial .saw, .trial .also { display: block; margin-top: 2px; font: 400 13px/1.4 var(--type); color: var(--grey); }
 @keyframes stampIn { 0% { transform: scale(1.35) rotate(-3deg); opacity: 0; } 100% { transform: none; opacity: 1; } }
 
 .cannot-why { margin: 0; color: var(--pink); font-weight: 600; max-width: 60ch; }

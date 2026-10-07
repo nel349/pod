@@ -5,3 +5,5 @@ export * from "./held.ts";
 export * from "./kept.ts";
 export * from "./passkeyConnector.ts";
 export * from "./passkeyProvider.ts";
+export * from "./sending.ts";
+export * from "./waiting.ts";

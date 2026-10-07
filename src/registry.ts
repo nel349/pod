@@ -33,6 +33,19 @@ export const MONAD_TESTNET = {
   coin: "MON",
   /** where anybody can be sent testnet MON, linked from a wallet that is new and empty */
   faucet: "https://faucet.monad.xyz",
+  /**
+   * How a wallet has to treat the public endpoint above, measured on 2026-10-06 with throwaway
+   * wallets. Asked to send for a wallet the instant its money landed, it refuses ("Signer had
+   * insufficient balance") and goes on refusing that wallet: still, after five minutes of quiet. A
+   * wallet whose first send came five seconds or more after its money was taken at once, four times
+   * of four. And a wallet it was refusing had the same payment taken at once by the other endpoint
+   * here, after which the first took its next one too.
+   */
+  sending: {
+    settledAfterBlocks: 25,
+    settledAfterSeconds: 10,
+    otherRpc: "https://rpc.ankr.com/monad_testnet",
+  },
   identityRegistry: "0x8004A818BFB912233c491871b3d84c89A494BD9e" as Address,
   validationRegistry: "0x8004Cb1BF31DAf7788923b405b754f57acEB4272" as Address,
   /** version 2.0.0, wired to the identity registry above, checked on chain 2026-10-05 */

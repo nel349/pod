@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import { runInBox } from "../agent.ts";
 import type { CheckToRun } from "../blackbox.ts";
-import { openBroker, type Broker, type Model } from "../broker.ts";
+import { openBroker, type Broker, type Model, type Spent } from "../broker.ts";
 import { checkCommand, PORT, type HowItIsAsked } from "../job.ts";
 import { writableByTheBox } from "../sandbox.ts";
 import { firstLine } from "../errors.ts";
@@ -79,11 +79,14 @@ interface Planned {
  * Throws WritingFailed when the writer could not write anything, with the reason it gave, and whether
  * the writing is charged all the same. A check that was written but did not prove itself is not an
  * error: it comes back with its proof, so the poster can see which trial failed and say it differently.
+ *
+ * @param onSpent told what the model's answers cost, once, however the writing ended, when the model said
  */
 export async function writeChecks(
   request: WriteRequest,
   writer: CheckWriter,
   onStage: (stage: Stage) => void = () => {},
+  onSpent: (spent: Spent) => void = () => {},
 ): Promise<WrittenSet> {
   const made: string[] = [];
   let broker: Broker | undefined;
@@ -119,13 +122,14 @@ export async function writeChecks(
       return {
         checkable: true, says, secret,
         asks: plainDashes(entry.asks), expects: plainDashes(entry.expects), nearMiss: plainDashes(entry.nearMiss),
-        file, source, proof: trial.proof, saw: trial.saw,
+        file, source, proof: trial.proof, saw: trial.saw, nearMissAlsoBroke: trial.nearMissAlsoBroke,
       };
     }));
     return howItIsAsked ? { checks: written, howItIsAsked } : { checks: written };
   } catch (error) {
     throw new WritingFailed(firstLine(error), isChargedFor(error, broker?.answered ?? 0));
   } finally {
+    if (broker?.spent) onSpent(broker.spent);
     await broker?.stop();
     await Promise.all(made.map((folder) => rm(folder, { recursive: true, force: true })));
   }

@@ -12,7 +12,7 @@ import { z } from "zod";
 export const ProofSchema = z.object({
   /** it passed a version that does everything asked, so it can be passed at all */
   working: z.boolean(),
-  /** it failed a version with exactly its one thing wrong, so it catches that mistake */
+  /** it failed a version with its one thing wrong, so it catches that mistake */
   nearMiss: z.boolean(),
   /** it failed when nothing was built, so it does not pay for no work */
   nothing: z.boolean(),
@@ -43,6 +43,12 @@ export const WrittenSchema = z.discriminatedUnion("checkable", [
     proof: ProofSchema,
     /** what the check printed each time, which is what a poster reads when a trial fails */
     saw: SawSchema,
+    /**
+     * The other sentences whose checks failed against this one's near miss as well. Said to the poster,
+     * and never a reason to refuse the check: sentences that lean on each other break together.
+     * Absent on a writing kept from before this was recorded.
+     */
+    nearMissAlsoBroke: z.array(z.string()).readonly().optional(),
   }),
 ]);
 

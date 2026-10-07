@@ -89,6 +89,7 @@ export const COPY = {
       nearMiss: {
         held: (mistake: string) => `Fails a near miss: ${inASentence(mistake)}`,
         broke: (mistake: string) => `Let a near miss through: ${inASentence(mistake)}.`,
+        alsoBroke: (lines: readonly string[]) => `The same mistake also fails ${theLinesNamed(lines)}.`,
       },
       nothing: { held: "Fails when nothing is built", broke: "Passed when nothing was built." },
       saw: (said: string) => `It said: ${said}`,
@@ -253,6 +254,17 @@ export const COPY = {
 } as const;
 
 /** A clause the writer phrased as its own sentence, fitted into ours: "It never…" becomes "it never…". */
+/** how many of the poster's lines are quoted back before the rest are only counted */
+const LINES_NAMED = 2;
+
+/** Some of the poster's own lines, quoted, and a count of the rest: a long brief would fill the page. */
+function theLinesNamed(lines: readonly string[]): string {
+  const named = lines.slice(0, LINES_NAMED).map((line) => `"${line.trim().replace(/\.$/, "")}"`);
+  const more = lines.length - named.length;
+  if (more > 0) return `${named.join(", ")} and ${more} more of your lines`;
+  return named.join(" and ");
+}
+
 function inASentence(clause: string): string {
   const trimmed = clause.trim().replace(/\.$/, "");
   return /^[A-Z][a-z]/.test(trimmed) ? trimmed.charAt(0).toLowerCase() + trimmed.slice(1) : trimmed;

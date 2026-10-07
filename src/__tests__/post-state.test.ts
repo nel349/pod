@@ -117,13 +117,36 @@ describe("what the checks step says", () => {
 
   test("a failed trial shows what the check printed, and a passed one shows nothing extra", () => {
     const [working, nearMiss, nothing] = trialsOf(SHAKY_DRY_CHECK);
-    expect(working).toEqual({ name: "working", hasHeld: true, says: COPY.checks.trials.working.held, saw: undefined });
+    expect(working).toEqual({ name: "working", hasHeld: true, says: COPY.checks.trials.working.held, saw: undefined, also: undefined });
     expect(nearMiss).toEqual({
       name: "nearMiss", hasHeld: false,
       says: "Let a near miss through: it never says take a coat.",
       saw: COPY.checks.trials.saw("it let the near miss through"),
+      also: undefined,
     });
-    expect(nothing).toEqual({ name: "nothing", hasHeld: true, says: COPY.checks.trials.nothing.held, saw: undefined });
+    expect(nothing).toEqual({ name: "nothing", hasHeld: true, says: COPY.checks.trials.nothing.held, saw: undefined, also: undefined });
+  });
+
+  test("a near miss that failed other checks too still proves its own, and the poster is told which lines", () => {
+    const [, alone] = trialsOf(WET_CHECK);
+    expect(alone?.also).toBeUndefined();
+
+    const [, withOne] = trialsOf({ ...WET_CHECK, nearMissAlsoBroke: [DRY] });
+    expect(withOne).toEqual({
+      name: "nearMiss", hasHeld: true, says: "Fails a near miss: it never says take a coat", saw: undefined,
+      also: `The same mistake also fails "${DRY}".`,
+    });
+
+    // a long brief is not quoted back whole: two lines are named and the rest are counted
+    const [, withMany] = trialsOf({ ...WET_CHECK, nearMissAlsoBroke: [DRY, "It says so in words.", "A third", "A fourth"] });
+    expect(withMany?.also).toBe(`The same mistake also fails "${DRY}", "It says so in words" and 2 more of your lines.`);
+  });
+
+  test("what else a near miss broke is not said of a check that let its near miss through", () => {
+    // the line under a failed trial is what the check printed, which is the thing to act on
+    const [, nearMiss] = trialsOf({ ...SHAKY_DRY_CHECK, nearMissAlsoBroke: [WET] });
+    expect(nearMiss?.hasHeld).toBe(false);
+    expect(nearMiss?.also).toBeUndefined();
   });
 
   test("out of date wins over everything else, because those checks are for a different job", () => {

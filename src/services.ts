@@ -34,6 +34,18 @@ import type { JobStore } from "./store.ts";
 export { JOBS_ADDRESS_SETTING } from "./contracts.ts";
 /** The setting naming the title contract */
 export const TOKEN_ADDRESS_SETTING = "POD_TOKEN_ADDRESS";
+/**
+ * The setting naming the model that writes a job's checks, as the CLI names models. Every writing is
+ * billed for what this model answers, so which one it is belongs to whoever runs the server. Left out,
+ * the CLI chooses, which on an account billed by use has been its most expensive.
+ */
+export const CHECKS_MODEL_SETTING = "POD_CHECKS_MODEL";
+
+/** The model the settings name for writing checks, if they name one. */
+function modelNamed(environment: Record<string, string | undefined>): { readonly model?: string } {
+  const model = environment[CHECKS_MODEL_SETTING]?.trim();
+  return model ? { model } : {};
+}
 
 export interface ServicesInput {
   readonly store: JobStore;
@@ -127,11 +139,11 @@ export async function servicesFromTheEnvironment(
   return servicesFor({
     store, directory, jobs,
     publicClient: monadClient(rpc),
-    page: { chainId: MONAD_TESTNET.id, chainName: "Monad testnet", rpc, explorer: "https://testnet.monadscan.com", coin: MONAD_TESTNET.coin, faucet: MONAD_TESTNET.faucet, registries: MONAD_REGISTRIES },
+    page: { chainId: MONAD_TESTNET.id, chainName: "Monad testnet", rpc, explorer: "https://testnet.monadscan.com", coin: MONAD_TESTNET.coin, faucet: MONAD_TESTNET.faucet, sending: MONAD_TESTNET.sending, registries: MONAD_REGISTRIES },
     registries: MONAD_REGISTRIES,
     ...(earlier ? { earlier, writer: writerWallet(environment) } : {}),
     ...(tokenAddress ? { token: tokenAddress } : {}),
-    checkWriter: { model: claudeOnThisMachine(), image: IMAGE, agents: new URL("../agents", import.meta.url).pathname },
+    checkWriter: { model: claudeOnThisMachine(modelNamed(environment)), image: IMAGE, agents: new URL("../agents", import.meta.url).pathname },
   });
 }
 

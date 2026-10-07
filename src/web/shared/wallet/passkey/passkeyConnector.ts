@@ -10,6 +10,7 @@ import { createConnector } from "wagmi";
 import { SwitchChainError, type Address } from "viem";
 import { endPasskeyWallet, heldPasskeyWallet } from "./held.ts";
 import { passkeyProvider, type PasskeyProvider } from "./passkeyProvider.ts";
+import type { Sending } from "./sending.ts";
 
 /** the connector's name among wagmi's */
 export const PASSKEY_CONNECTOR_ID = "pod-passkey";
@@ -21,10 +22,11 @@ export class NoPasskeyWalletOpen extends Error {
   }
 }
 
-export function passkeyConnector() {
+/** @param sending what the chain's endpoint needs allowing for, when the market says it needs any */
+export function passkeyConnector(sending?: Sending) {
   return createConnector<PasskeyProvider>((config) => {
     const chain = config.chains[0];
-    const provider = passkeyProvider(chain);
+    const provider = passkeyProvider(chain, sending);
     const addressOfTheHeld = (): Address => {
       const held = heldPasskeyWallet();
       if (!held) throw new NoPasskeyWalletOpen();

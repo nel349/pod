@@ -5,5 +5,6 @@ export * from "./openWallet.ts";
 export * from "./useChooseAccount.ts";
 export * from "./useLockPasskeyWhenIdle.ts";
 export * from "./usePasskeyWallet.ts";
+export * from "./useWalletWaits.ts";
 export * from "./passkey/index.ts";
 export * from "./walletConfig.ts";

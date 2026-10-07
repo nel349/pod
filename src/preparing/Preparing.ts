@@ -18,6 +18,7 @@
  */
 import { isAddressEqual, recoverMessageAddress, type Address, type Hex } from "viem";
 import { readyToSeal, WriteRequestSchema, WritingFailed, writeChecks, type CheckWriter, type Stage, type WriteRequest, type WrittenSet } from "../checkwriting/index.ts";
+import type { Spent } from "../broker.ts";
 import { sealWritten } from "../checkwriting/sealWritten.ts";
 import { secondsNow } from "../clock.ts";
 import { firstLine } from "../errors.ts";
@@ -83,6 +84,8 @@ interface Ending {
   readonly asked: Asked;
   readonly number: number;
   readonly isCharged: boolean;
+  /** what the model's answers cost, when it answered and said */
+  readonly spent?: Spent;
   readonly outcome: Outcome;
   /** true when no money was ever set aside for it, so there is nothing to keep or release */
   readonly isSettled: boolean;
@@ -383,17 +386,20 @@ export class Preparing {
 
     this.running.set(onChainId, "writing");
     let set: WrittenSet;
+    // what the model's answers cost, kept with the writing however it ends: a writing that failed cost us too
+    let spent: Spent | undefined;
+    const cost = (): { readonly spent?: Spent } => (spent ? { spent } : {});
     try {
-      const write = (): Promise<WrittenSet> => writeChecks(asked.request, this.options.checkWriter, (stage) => this.running.set(onChainId, stage));
+      const write = (): Promise<WrittenSet> => writeChecks(asked.request, this.options.checkWriter, (stage) => this.running.set(onChainId, stage), (what) => { spent = what; });
       set = this.options.boxes ? await this.options.boxes.inASlot(write) : await write();
     } catch (error) {
       // anything that is not the writing's own failure happened on our side, and is not charged
       const isCharged = error instanceof WritingFailed && error.isCharged;
-      await this.finish(onChainId, { asked, number, isCharged, isSettled: false, outcome: { kind: "failed", why: firstLine(error) } });
+      await this.finish(onChainId, { asked, number, isCharged, ...cost(), isSettled: false, outcome: { kind: "failed", why: firstLine(error) } });
       return;
     }
     // the model answered: from here the writing is charged, whatever happens to sealing it
-    await this.finish(onChainId, { asked, number, isCharged: true, isSettled: false, outcome: await this.outcomeOf(onChainId, setUp, asked.request, set, job.price) });
+    await this.finish(onChainId, { asked, number, isCharged: true, ...cost(), isSettled: false, outcome: await this.outcomeOf(onChainId, setUp, asked.request, set, job.price) });
   }
 
   /**
@@ -431,7 +437,8 @@ export class Preparing {
   private async finish(onChainId: string, ending: Ending): Promise<void> {
     const finished: Finished = {
       number: ending.number, request: ending.asked.request, askedAt: ending.asked.askedAt,
-      finishedAt: new Date().toISOString(), isCharged: ending.isCharged, isSettled: ending.isSettled, outcome: ending.outcome,
+      finishedAt: new Date().toISOString(), isCharged: ending.isCharged, isSettled: ending.isSettled,
+      ...(ending.spent ? { spent: ending.spent } : {}), outcome: ending.outcome,
     };
     await this.options.store.saveWriting(onChainId, finished);
     if (!finished.isSettled) await this.settle(onChainId, finished);

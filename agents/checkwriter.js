@@ -8,6 +8,10 @@
 //   a near miss         one per sentence: the working version with that one thing wrong, which
 //                       that sentence's check has to fail
 //
+// A near miss is asked for as the change that makes it, not as the whole program again: a program
+// written out once for every sentence is most of what an answer costs, and all of it is the same
+// program. A writer that cannot say it as a change may still hand the whole near miss over.
+//
 // It decides nothing. Whether a check passes or fails is found out afterwards, by running it, in a
 // box this program never touches. The model is a socket, not a route: there is no network in here.
 const fs = require("fs");
@@ -70,7 +74,7 @@ function prompt(job) {
     '      "expects": "<what a good answer looks like, in everyday words>",',
     '      "check": "<an ES module, see below>",',
     '      "nearMiss": "<one sentence: the plausible mistake the near miss makes>",',
-    '      "nearMissServer": "<the whole of the working server.js with only that mistake in it>" }',
+    '      "nearMissChanges": [ { "replace": "<a piece of your working server.js, copied exactly>", "with": "<what that piece becomes>" } ] }',
     '    or, only when a program truly cannot decide the sentence from outside (taste, looks, anything needing the internet):',
     '    { "checkable": false, "why": "<one or two sentences the person can act on, see below>" }',
     "  ]",
@@ -83,6 +87,9 @@ function prompt(job) {
     "- tests the behaviour the sentence describes, not how it is built. Tolerate reasonable variation:",
     "  compare words case-insensitively, and do not require exact wording the person did not ask for",
     "- must pass against your working version and fail against that sentence's near miss",
+    "- must fail against a server that has built nothing and answers every address with not found. So a check that",
+    "  something is refused, or is not found, first shows that the thing itself works (for example it makes a short",
+    "  code and follows it) and only then asks for what must be refused: otherwise an empty server would pass it",
     "",
     "Things that change on their own, such as the time of day, the date or chance, are not a reason to refuse.",
     "A check cannot wait for night or for a six, so it asks for one: choose the obvious way to ask, the same for every",
@@ -98,6 +105,9 @@ function prompt(job) {
     "",
     "Each near miss changes the working version so that one sentence no longer holds while everything else",
     "still works. Make it the mistake a hurried builder would really make, not a crash.",
+    "Give a near miss as its changes, not as the program again: each change names a piece of your working server.js",
+    "to replace and what it becomes. Copy the piece exactly, spaces and line breaks included, and make it long enough",
+    "that it appears in the working version only once. One change is usually all a near miss needs.",
     "",
     "Write asks, expects, nearMiss, why and howItIsAsked in plain sentences, with commas and full stops. Do not use em dashes.",
   ].join("\n");
@@ -117,9 +127,31 @@ function parse(answer) {
   return parsed;
 }
 
+const isAChange = (change) => change && typeof change.replace === "string" && change.replace !== "" && typeof change.with === "string";
+
 function wellFormed(entry) {
   if (entry && entry.checkable === false) return typeof entry.why === "string";
-  return entry && ["asks", "expects", "check", "nearMiss", "nearMissServer"].every((key) => typeof entry[key] === "string");
+  if (!entry || !["asks", "expects", "check", "nearMiss"].every((key) => typeof entry[key] === "string")) return false;
+  // the near miss, as its changes or, from a writer that could not say it that way, whole
+  return typeof entry.nearMissServer === "string"
+    || (Array.isArray(entry.nearMissChanges) && entry.nearMissChanges.length > 0 && entry.nearMissChanges.every(isAChange));
+}
+
+/**
+ * The near miss a check is tried against: the working version with its changes made. A change has to
+ * name a piece that is in the program exactly once, or nobody could say which piece it meant, and a
+ * change that is not there at all would leave a near miss that is not one.
+ */
+function nearMissOf(working, entry, number) {
+  if (typeof entry.nearMissServer === "string") return entry.nearMissServer;
+  return entry.nearMissChanges.reduce((server, change) => {
+    const times = server.split(change.replace).length - 1;
+    if (times !== 1) {
+      throw new Error(`the near miss for check ${number} replaces a piece that is in the working version ${times} times, and it has to be there exactly once: ${JSON.stringify(change.replace.slice(0, 80))}`);
+    }
+    // a function, so nothing in what it becomes is read as a pattern
+    return server.replace(change.replace, () => change.with);
+  }, working);
 }
 
 (async () => {
@@ -139,7 +171,9 @@ function wellFormed(entry) {
         }
         const broken = parsed.checks.findIndex((entry) => !wellFormed(entry));
         if (broken !== -1) throw new Error(`check ${broken + 1} was missing a part`);
-        written = parsed;
+        // made now, so a change that cannot be made is something the writer is told and may put right
+        const nearMisses = parsed.checks.map((entry, i) => (entry.checkable === false ? undefined : nearMissOf(parsed.working, entry, i + 1)));
+        written = { ...parsed, nearMisses };
       } catch (error) {
         problem = error.message;
       }
@@ -150,7 +184,7 @@ function wellFormed(entry) {
     const checks = written.checks.map((entry, i) => {
       if (entry.checkable === false) return { checkable: false, why: entry.why };
       write(`/work/checks/check-${i + 1}.mjs`, entry.check);
-      write(`/work/near-miss/${i + 1}/server.js`, entry.nearMissServer);
+      write(`/work/near-miss/${i + 1}/server.js`, written.nearMisses[i]);
       return { checkable: true, asks: entry.asks, expects: entry.expects, nearMiss: entry.nearMiss };
     });
     const asked = written.howItIsAsked;

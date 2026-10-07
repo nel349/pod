@@ -5,6 +5,7 @@
  */
 import { isAddress, type Address, type Hex } from "viem";
 import { z } from "zod";
+import type { Spent } from "../broker.ts";
 import { WriteRequestSchema, type WriteRequest } from "../checkwriting/request.ts";
 import { HowItIsAskedSchema, WrittenSchema } from "../checkwriting/written.ts";
 import type { WritingMoney } from "../jobsV2.ts";
@@ -66,6 +67,15 @@ export const ApprovalSchema = z.object({
   signature: HexSchema,
 });
 
+/** What a writing's model calls cost: see Spent in broker.ts, which this has to match. */
+export const SpentSchema = z.object({
+  model: z.string(),
+  calls: z.number().int().nonnegative(),
+  tokensIn: z.number().nonnegative(),
+  tokensOut: z.number().nonnegative(),
+  dollars: z.number().nonnegative(),
+}) satisfies z.ZodType<Spent>;
+
 export const OutcomeSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("written"),
@@ -92,6 +102,11 @@ export const FinishedSchema = z.object({
   isSettled: z.boolean(),
   /** what happened to its money other than as judged, such as the poster releasing it after a day */
   note: z.string().optional(),
+  /**
+   * What the model's answers for this writing cost us, as the model's own account says: what a
+   * writing's price has to cover. Absent when the model was never reached, or did not say.
+   */
+  spent: SpentSchema.optional(),
   outcome: OutcomeSchema,
 });
 

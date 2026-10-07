@@ -27,6 +27,19 @@ export const MarketConfigSchema = z.object({
   /** where a new, empty wallet can be sent the chain's coin, when the chain has such a place */
   faucet: z.url().optional(),
   /**
+   * What a wallet in the page has to allow for when it sends through this chain's endpoint, where
+   * the endpoint needs it: one that refuses a wallet whose money it has not caught up with, and then
+   * keeps refusing it. Absent on a chain reached through a single node, which knows what it mined.
+   */
+  sending: z.object({
+    /** how many blocks old a wallet's money has to be before the endpoint takes a payment from it */
+    settledAfterBlocks: z.number().int().positive(),
+    /** how long that is to wait */
+    settledAfterSeconds: z.number().positive(),
+    /** another endpoint to the same chain, which takes a payment the first is refusing */
+    otherRpc: z.url().optional(),
+  }).optional(),
+  /**
    * What a wallet's allowance has to name for its agent to work a seat here, as the wallet's connector
    * takes it: an agent passes it on untouched, so one scan covers the whole seat.
    */

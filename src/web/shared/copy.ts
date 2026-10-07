@@ -39,6 +39,11 @@ export const CHROME = {
       browserUse: "Use my browser wallet",
       browserNone: "There is no browser wallet here, such as MetaMask or Rabby.",
     },
+    /** why a payment from the passkey wallet is taking a moment, said while it does */
+    waits: {
+      settling: "The money in this wallet has only just arrived. Waiting a few seconds for the network to know it.",
+      "another way": "The network has not caught up with the money in this wallet. Sending the payment another way.",
+    },
     /** a passkey wallet open in this tab */
     passkey: {
       badge: "Passkey",

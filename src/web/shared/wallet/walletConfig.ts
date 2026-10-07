@@ -20,7 +20,7 @@ export function walletConfig(market: MarketConfig): Config {
   });
   return createConfig({
     chains: [chain],
-    connectors: [injected(), passkeyConnector()],
+    connectors: [injected(), passkeyConnector(market.sending)],
     transports: { [chain.id]: http(market.rpc) },
   });
 }

@@ -7,12 +7,13 @@
  * market's node. So every page, and every way wagmi asks, works with either wallet unchanged.
  */
 import {
-  createWalletClient, hexToBigInt, hexToNumber, http, isAddress, isAddressEqual, isHex, numberToHex,
+  hexToBigInt, hexToNumber, http, isAddress, isAddressEqual, isHex, numberToHex,
   SwitchChainError, UnauthorizedProviderError, UnsupportedProviderMethodError,
   type Address, type Chain, type EIP1193Parameters, type Hex, type LocalAccount,
 } from "viem";
 import { z } from "zod";
 import { heldPasskeyWallet } from "./held.ts";
+import { sendWithCare, type Sending } from "./sending.ts";
 
 /** Asked to sign as an address that is not the open passkey wallet's, or with none open. */
 export class NotThisPasskeyWallet extends Error {
@@ -51,10 +52,13 @@ export interface PasskeyProvider {
   readonly request: (asked: EIP1193Parameters) => Promise<unknown>;
 }
 
-/** The wallet in the page for this chain, reading through its node. */
-export function passkeyProvider(chain: Chain): PasskeyProvider {
+/**
+ * The wallet in the page for this chain, reading through its node.
+ *
+ * @param sending what the chain's endpoint needs allowing for when a payment is sent through it
+ */
+export function passkeyProvider(chain: Chain, sending?: Sending): PasskeyProvider {
   const node = http(chain.rpcUrls.default.http[0])({ chain, retryCount: 0 });
-  const sending = (signer: LocalAccount) => createWalletClient({ account: signer, chain, transport: http(chain.rpcUrls.default.http[0]) });
 
   return {
     async request(asked) {
@@ -74,7 +78,7 @@ export function passkeyProvider(chain: Chain): PasskeyProvider {
         }
         case "eth_sendTransaction": {
           const [sent] = SendSchema.parse(params);
-          return sending(signerFor(sent.from)).sendTransaction({
+          return sendWithCare(signerFor(sent.from), chain, {
             to: sent.to,
             data: sent.data,
             value: sent.value === undefined ? undefined : hexToBigInt(sent.value),
@@ -82,7 +86,7 @@ export function passkeyProvider(chain: Chain): PasskeyProvider {
             nonce: sent.nonce === undefined ? undefined : hexToNumber(sent.nonce),
             maxFeePerGas: sent.maxFeePerGas === undefined ? undefined : hexToBigInt(sent.maxFeePerGas),
             maxPriorityFeePerGas: sent.maxPriorityFeePerGas === undefined ? undefined : hexToBigInt(sent.maxPriorityFeePerGas),
-          });
+          }, sending);
         }
         case "personal_sign": {
           const [message, address] = SignSchema.parse(params);

@@ -40,6 +40,8 @@ export interface Versions {
 export interface Tried {
   readonly proof: Proof;
   readonly saw: { readonly working: string; readonly nearMiss: string; readonly nothing: string };
+  /** the other sentences whose checks failed against this check's near miss too, in their own words */
+  readonly nearMissAlsoBroke: readonly string[];
 }
 
 /**
@@ -60,9 +62,13 @@ const NOTHING_BUILT = `require("http").createServer((request, response) => {
  *   the working version runs twice, and the check must pass both times: a check that passes by luck
  *   would pass here one time in a few and then fail at the verdict
  *
- *   a near miss must really be one: its own check has to fail against it, and every other check has
- *   to pass, because a "near miss" that breaks everything would be caught by any check at all. And
- *   one identical to the working version cannot be missing anything
+ *   a near miss must really be one: it has to start and answer, its own check has to fail against
+ *   it, and one identical to the working version cannot be missing anything
+ *
+ * A near miss may fail other checks as well, and that is kept and said rather than held against it.
+ * Sentences lean on each other: a list that adds tasks wrongly also lists them wrongly, and nothing
+ * that breaks signing up leaves the sentences that need somebody signed in standing. Asking that
+ * every other check still pass made such a sentence impossible to prove, whoever wrote the near miss.
  */
 export async function prove(
   checks: string, toRun: readonly CheckToRun[], versions: Versions, image: string,
@@ -86,10 +92,11 @@ export async function prove(
       tried.set(check.command, {
         proof: {
           working: first.hasHeld && second.hasHeld,
-          nearMiss: missed.hasRun && !missed.hasHeld,
+          nearMiss: missed.own.hasRun && !missed.own.hasHeld,
           nothing: empty.hasRun && !empty.hasHeld,
         },
-        saw: { working: first.hasHeld ? second.said : first.said, nearMiss: missed.said, nothing: empty.said },
+        saw: { working: first.hasHeld ? second.said : first.said, nearMiss: missed.own.said, nothing: empty.said },
+        nearMissAlsoBroke: missed.alsoBroke,
       });
     }
     return tried;
@@ -98,29 +105,37 @@ export async function prove(
   }
 }
 
+/** How a check did against its own near miss, and which other sentences that near miss broke as well. */
+interface Missed {
+  readonly own: Outcome;
+  readonly alsoBroke: readonly string[];
+}
+
 /**
- * How one check did against its near miss, counted only if the near miss is a near miss: different
- * from the working version, and with every other check still passing against it.
+ * How one check did against its near miss, counted only if the near miss is one: there, and different
+ * from the working version. Every check is run against it, so that what else it broke can be said.
  */
 async function tryNearMiss(
   check: CheckToRun, toRun: readonly CheckToRun[], directory: string | undefined,
   workingSource: string | undefined, checks: string, image: string,
-): Promise<Outcome> {
+): Promise<Missed> {
   if (!directory) return notTried("there was no near miss to try it against");
   const nearMissSource = await textFromTheBox(join(directory, WORK_FILE));
   if (nearMissSource === undefined) return notTried("the near miss could not be read");
   if (nearMissSource === workingSource) return notTried("the near miss is the working version, unchanged");
 
   const against = await tryAgainst(directory, checks, toRun, image);
-  const target = against(check.command);
-  // a near miss that never started is reported as that, which is the more useful thing to know
-  if (!target.hasRun) return target;
-  const [alsoBroken] = toRun.filter((other) => other.command !== check.command && !against(other.command).hasHeld);
-  if (alsoBroken) return notTried(`the near miss breaks more than one thing: "${alsoBroken.says}" fails against it too`);
-  return target;
+  const own = against(check.command);
+  // a near miss that never started broke nothing that can be named: no check ran against it at all
+  if (!own.hasRun) return { own, alsoBroke: [] };
+  const alsoBroke = toRun
+    .filter((other) => other.command !== check.command)
+    .filter((other) => { const did = against(other.command); return did.hasRun && !did.hasHeld; })
+    .map((other) => other.says);
+  return { own, alsoBroke };
 }
 
-const notTried = (said: string): Outcome => ({ hasRun: false, hasHeld: false, said });
+const notTried = (said: string): Missed => ({ own: { hasRun: false, hasHeld: false, said }, alsoBroke: [] });
 
 /**
  * Exit codes that mean the check never really ran: the command could not be run or found (126, 127),
