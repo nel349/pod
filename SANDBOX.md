@@ -50,7 +50,10 @@ grade what comes back, so code that goes looking for them finds nothing on its o
 **The model call is locked down too**, though it is not a box. The check writer's model is the Claude
 CLI on the machine, started with no tools, no MCP servers, no settings and no saved
 session, in an empty folder, with the prompt on standard input (`LOCKED_DOWN_FLAGS` in
-`src/broker.ts`). A stranger's sentence reaches a model that can only answer in text.
+`src/broker.ts`). A stranger's sentence reaches a model that can only answer in text. When the settings
+name a model of OpenRouter's, the call is one request over HTTPS (`src/openrouter.ts`): the prompt
+goes out with no tools offered, and text comes back. Either way the key stays in the server's own
+process and never enters a box.
 
 **Checking a verdict yourself** runs the same `grade`, from `src/repeat.ts`, on your machine: it
 checks the receipt's signature, holds your copy of the code against the tree the receipt names,

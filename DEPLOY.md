@@ -42,7 +42,8 @@ a laptop runs it.
 | `POD_JOBS` | both | The jobs folder. Required |
 | `POD_SITE` | both | The address the wall is reached at from outside, such as `https://pod.example`. The server prints it on its pages, and the worker points titles and receipts at it. Left out, the server prints whatever address each request named, which is right on a laptop and wrong behind anything that holds a certificate |
 | `PORT` | server | 3000 unless said |
-| `POD_CHECKS_MODEL` | server | Which model writes a job's checks, by its id. Left out, the command line chooses, and it chooses its dearest. The server's first lines say which it is |
+| `POD_CHECKS_MODEL` | server | Which model writes a job's checks. A plain id is the Claude CLI's (`claude-sonnet-5-5`). An id that starts `openrouter:` is asked through OpenRouter (`openrouter:google/gemini-3.8-flash`) and needs `OPENROUTER_API_KEY`. Left out, the CLI chooses, and it chooses its dearest. The server's first lines say which it is |
+| `POD_CHECKS_THINKING` | server | How hard that model thinks before it answers: `low`, `medium` or `high`. Thinking is billed as output and is most of what a writing costs. Left out, the model decides |
 | `NODE_ENV` | server | `production` serves the page script built once and small |
 | `MONAD_TESTNET_RPC` | both | The public endpoint unless said |
 | `POD_JOBS_ADDRESS` | both | The contract new jobs are posted to. Without it the server is the wall and nothing else |
@@ -51,6 +52,7 @@ a laptop runs it.
 | `POD_VALIDATOR_ADDRESS` | worker | The address the validator's key has to be the key for. The worker refuses to start with any other |
 | `POD_WRITER_KEY` | server | Secret |
 | `ANTHROPIC_API_KEY` | server | Secret. What the Claude CLI answers with. Left out, the CLI uses whatever it is signed in with on the machine |
+| `OPENROUTER_API_KEY` | server | Secret. Needed only when `POD_CHECKS_MODEL` names a model of OpenRouter's; the server refuses to start without it then |
 | `POD_VALIDATOR_KEY` | worker | Secret |
 | `POD_GITHUB_OWNER` | worker | The GitHub organisation work that passes is published under |
 | `POD_GITHUB_TOKEN` | both | Secret. The worker publishes with it, and the server hands a repository to its title's holder with it. Left out, each falls back to whatever `gh` is signed in with |
@@ -111,7 +113,7 @@ set by the boxes: an agent's box is given 2 GB, and three pieces of box work may
 | The code | `/opt/pod`, a clone of this repository |
 | The jobs folder | `/var/lib/pod/jobs` |
 | Settings that are not secret | `/etc/pod/common.env` |
-| The writer's key and the Anthropic API key | `/etc/pod/server.env`, readable by root only |
+| The writer's key and the model keys (Anthropic's, OpenRouter's) | `/etc/pod/server.env`, readable by root only |
 | The validator's key | `/etc/pod/worker.env`, readable by root only |
 | The GitHub token | `/etc/pod/github.env`, readable by root only |
 | The two processes | `pod-server.service` and `pod-worker.service`, under systemd |

@@ -458,7 +458,7 @@ if (import.meta.main) {
   if (!directory) throw new Error(`${JOBS_FOLDER_SETTING} has to name the directory the runner writes jobs to`);
   const port = Number(process.env.PORT ?? 3000);
   const store = new JobStore(directory);
-  const { servicesFromTheEnvironment, JOBS_ADDRESS_SETTING, CHECKS_MODEL_SETTING } = await import("./services.ts");
+  const { servicesFromTheEnvironment, JOBS_ADDRESS_SETTING, checksModelNamed, checksModelInWords } = await import("./services.ts");
   const site = siteFromTheEnvironment();
   const services = { ...(await servicesFromTheEnvironment(store, directory)), ...(site ? { site } : {}) };
   const { market } = services;
@@ -468,7 +468,7 @@ if (import.meta.main) {
     ? `its pages print ${site} as their own address`
     : `its pages print whatever address they were asked at: ${SITE_SETTING} names none`);
   console.log(market
-    ? `posting is open, against ${market.page.jobs}; checks are written by ${process.env[CHECKS_MODEL_SETTING]?.trim() || `whichever model the CLI chooses (${CHECKS_MODEL_SETTING} names none)`}, through the CLI on this machine`
+    ? `posting is open, against ${market.page.jobs}; checks are written by ${checksModelInWords(checksModelNamed())}`
     : `posting is closed: no ${JOBS_ADDRESS_SETTING}`);
   if (services.preparing) console.log(`jobs are prepared on ${services.preparing.jobs}: their checks are written before a pod can start`);
   if (services.door) console.log(`agents push their work to http://localhost:${port}${ROUTES.git}<job>.git, and write notes to ${ROUTES.notes}<job>. Open jobs are listed at ${ROUTES.jobList}, and owners link GitHub accounts at ${ROUTES.credit}`);

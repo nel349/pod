@@ -35,16 +35,46 @@ export { JOBS_ADDRESS_SETTING } from "./contracts.ts";
 /** The setting naming the title contract */
 export const TOKEN_ADDRESS_SETTING = "POD_TOKEN_ADDRESS";
 /**
- * The setting naming the model that writes a job's checks, as the CLI names models. Every writing is
- * billed for what this model answers, so which one it is belongs to whoever runs the server. Left out,
- * the CLI chooses, which on an account billed by use has been its most expensive.
+ * The setting naming the model that writes a job's checks. Every writing is billed for what this
+ * model answers, so which one it is belongs to whoever runs the server. A name is the Claude CLI's
+ * (`claude-sonnet-5-5`); a name that starts `openrouter:` is OpenRouter's (`openrouter:google/gemini-3.8-flash`)
+ * and needs its key. Left out, the CLI chooses, which on an account billed by use has been its most
+ * expensive.
  */
 export const CHECKS_MODEL_SETTING = "POD_CHECKS_MODEL";
+/** How hard that model thinks before answering (`low`, `medium`, `high`). Left out, the model decides. */
+export const CHECKS_THINKING_SETTING = "POD_CHECKS_THINKING";
+/** The key OpenRouter is asked with, when the model is one of its. */
+export const OPENROUTER_KEY_SETTING = "OPENROUTER_API_KEY";
+/** how a model's name says it is reached through OpenRouter and not the CLI */
+const THROUGH_OPENROUTER = "openrouter:";
 
-/** The model the settings name for writing checks, if they name one. */
-function modelNamed(environment: Record<string, string | undefined>): { readonly model?: string } {
-  const model = environment[CHECKS_MODEL_SETTING]?.trim();
-  return model ? { model } : {};
+/** Which model the settings name for writing checks, how it is reached and how hard it thinks. */
+export type ChecksModel =
+  | { readonly through: "cli"; readonly model?: string; readonly thinking?: string }
+  | { readonly through: "openrouter"; readonly model: string; readonly key: string; readonly thinking?: string };
+
+/**
+ * Read the settings for who writes the checks. A model of OpenRouter's with no key is refused here,
+ * when the server starts, and not when the first poster has already paid for a writing.
+ */
+export function checksModelNamed(environment: Record<string, string | undefined> = process.env): ChecksModel {
+  const named = environment[CHECKS_MODEL_SETTING]?.trim();
+  const thinking = environment[CHECKS_THINKING_SETTING]?.trim();
+  const how = thinking ? { thinking } : {};
+  if (!named?.startsWith(THROUGH_OPENROUTER)) return { through: "cli", ...(named ? { model: named } : {}), ...how };
+  const model = named.slice(THROUGH_OPENROUTER.length);
+  if (!model) throw new Error(`${CHECKS_MODEL_SETTING} says ${THROUGH_OPENROUTER} and names no model after it`);
+  const key = environment[OPENROUTER_KEY_SETTING]?.trim();
+  if (!key) throw new Error(`${CHECKS_MODEL_SETTING} names a model of OpenRouter's, and ${OPENROUTER_KEY_SETTING} holds no key to ask it with`);
+  return { through: "openrouter", model, key, ...how };
+}
+
+/** Who writes the checks, in words for the server's first lines. The key is never among them. */
+export function checksModelInWords(chosen: ChecksModel): string {
+  const thinking = chosen.thinking ? `, thinking ${chosen.thinking}` : "";
+  if (chosen.through === "openrouter") return `${chosen.model}${thinking}, through OpenRouter`;
+  return `${chosen.model ?? `whichever model the CLI chooses (${CHECKS_MODEL_SETTING} names none)`}${thinking}, through the CLI on this machine`;
 }
 
 export interface ServicesInput {
@@ -134,6 +164,12 @@ export async function servicesFromTheEnvironment(
   const { monadClient, writerWallet } = await import("./live.ts");
   const { MONAD_REGISTRIES, MONAD_TESTNET } = await import("./registry.ts");
   const { claudeOnThisMachine } = await import("./broker.ts");
+  const { modelThroughOpenRouter } = await import("./openrouter.ts");
+  const chosen = checksModelNamed(environment);
+  const thinking = chosen.thinking ? { thinking: chosen.thinking } : {};
+  const model = chosen.through === "openrouter"
+    ? modelThroughOpenRouter({ key: chosen.key, model: chosen.model, ...thinking })
+    : claudeOnThisMachine({ ...(chosen.model ? { model: chosen.model } : {}), ...(chosen.thinking ? { effort: chosen.thinking } : {}) });
   const { IMAGE } = await import("./sandbox.ts");
   const rpc = environment.MONAD_TESTNET_RPC ?? MONAD_TESTNET.rpc;
   return servicesFor({
@@ -143,7 +179,7 @@ export async function servicesFromTheEnvironment(
     registries: MONAD_REGISTRIES,
     ...(earlier ? { earlier, writer: writerWallet(environment) } : {}),
     ...(tokenAddress ? { token: tokenAddress } : {}),
-    checkWriter: { model: claudeOnThisMachine(modelNamed(environment)), image: IMAGE, agents: new URL("../agents", import.meta.url).pathname },
+    checkWriter: { model, image: IMAGE, agents: new URL("../agents", import.meta.url).pathname },
   });
 }
 
