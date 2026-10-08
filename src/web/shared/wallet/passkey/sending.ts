@@ -22,6 +22,7 @@ import {
   type Address, type Chain, type Hex, type LocalAccount, type SendTransactionParameters,
 } from "viem";
 import { firstLine } from "../../../../errors.ts";
+import { gasAskedPlainly } from "../../../../gas.ts";
 import type { MarketConfig } from "../../../../market.ts";
 import { sayTheWalletWaits } from "./waiting.ts";
 
@@ -66,8 +67,13 @@ export async function sendWithCare(signer: LocalAccount, chain: Chain, asked: As
   const holds = (): Promise<bigint> => reads.getBalance({ address: signer.address });
   try {
     // filling in what the page left out asks the node what it would cost, which sends nothing. A wallet
-    // that cannot cover it is refused here, and is told so in its own terms
-    const fill = (): ReturnType<typeof wallet.prepareTransactionRequest<Asked>> => wallet.prepareTransactionRequest(asked);
+    // that cannot cover it is refused here, and is told so in its own terms. The gas is asked of the call
+    // alone and then stated: left to be asked with the fee, the node answers a call that pays its caller
+    // with many times what it needs, and then holds all of that back (see gas.ts)
+    const fill = async (): Promise<Awaited<ReturnType<typeof wallet.prepareTransactionRequest<Asked>>>> => {
+      const gas = asked.gas ?? await gasAskedPlainly(reads, { account: signer.address, to: asked.to, data: asked.data, value: asked.value });
+      return wallet.prepareTransactionRequest({ ...asked, gas });
+    };
     let request;
     try {
       request = await fill();

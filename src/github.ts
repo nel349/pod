@@ -18,19 +18,21 @@ import type { Repository } from "./repo.ts";
 /** The setting that names the GitHub account or organisation passing work is published under */
 export const GITHUB_OWNER_SETTING = "POD_GITHUB_OWNER";
 
+/** The setting that holds the server's GitHub token */
+export const GITHUB_TOKEN_SETTING = "POD_GITHUB_TOKEN";
 /** GitHub's API, which every call here, and the credit check's read of a gist, goes to */
 export const GITHUB_API = "https://api.github.com";
 /** Where a GitHub account is seen by a person */
 export const GITHUB_WEB = "https://github.com";
 
 async function token(): Promise<string> {
-  const fromEnvironment = process.env.POD_GITHUB_TOKEN;
+  const fromEnvironment = process.env[GITHUB_TOKEN_SETTING];
   if (fromEnvironment) return fromEnvironment;
 
   const gh = Bun.spawn(["gh", "auth", "token"], { stdout: "pipe", stderr: "ignore" });
   const said = (await new Response(gh.stdout).text()).trim();
   if ((await gh.exited) !== 0 || !said) {
-    throw new Error("no GitHub credential: set POD_GITHUB_TOKEN, or sign in with gh");
+    throw new Error(`no GitHub credential: set ${GITHUB_TOKEN_SETTING}, or sign in with gh`);
   }
   return said;
 }

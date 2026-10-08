@@ -33,7 +33,11 @@ interface Endpoint {
  * A node, as far as a wallet asks one: what the wallet holds now and held some blocks ago, what a
  * payment would cost, and whether it takes a raw transaction or says the signer is short.
  */
-function endpoint(state: { holdsNow: bigint; heldBefore: bigint; takes: boolean; pricesIt?: () => boolean }): Endpoint {
+function endpoint(state: {
+  holdsNow: bigint; heldBefore: bigint; takes: boolean; pricesIt?: () => boolean;
+  /** what it answers when asked for a call's gas with the fee stated, as Monad's does for a call that pays its caller */
+  withTheFeeStatedSays?: bigint;
+}): Endpoint {
   const asked: Hex[] = [];
   const server = Bun.serve({
     port: 0,
@@ -47,7 +51,12 @@ function endpoint(state: { holdsNow: bigint; heldBefore: bigint; takes: boolean;
         case "eth_getTransactionCount": return answer("0x0");
         case "eth_maxPriorityFeePerGas": return answer(numberToHex(2_000_000_000n));
         case "eth_getBlockByNumber": return answer({ number: numberToHex(LATEST), baseFeePerGas: numberToHex(BASE_FEE), timestamp: "0x1", transactions: [] });
-        case "eth_estimateGas": return state.pricesIt?.() === false ? Response.json({ jsonrpc: "2.0", id, error: { code: -32000, message: "insufficient balance" } }) : answer(numberToHex(GAS));
+        case "eth_estimateGas": {
+          if (state.pricesIt?.() === false) return Response.json({ jsonrpc: "2.0", id, error: { code: -32000, message: "insufficient balance" } });
+          const call = params[0] as { maxFeePerGas?: string; gasPrice?: string };
+          const isWithTheFee = call.maxFeePerGas !== undefined || call.gasPrice !== undefined;
+          return answer(numberToHex(isWithTheFee && state.withTheFeeStatedSays !== undefined ? state.withTheFeeStatedSays : GAS));
+        }
         case "eth_getBalance": return answer(numberToHex(params[1] === numberToHex(LATEST) || params[1] === "latest" ? state.holdsNow : state.heldBefore));
         case "eth_sendRawTransaction": {
           asked.push(params[0] as Hex);
@@ -83,6 +92,31 @@ let heard: ReturnType<typeof listening> | undefined;
 afterEach(() => { heard?.stop(); heard = undefined; });
 
 describe("a payment from the passkey wallet, through an endpoint that has to be allowed for", () => {
+  test("a call that pays its caller is sent with the gas it needs, not the many times more the node says when the fee is stated", async () => {
+    // measured on Monad on 8 October 2026, taking a job's money back: 56,742 asked of the call alone and
+    // 1,183,207 with the fee stated. The node then holds the whole limit back, so a poster holding 0.06 MON
+    // was refused a call costing 0.007, for "insufficient balance"
+    const A_LITTLE = parseEther("0.06");
+    const node = an({ holdsNow: A_LITTLE, heldBefore: A_LITTLE, takes: true, withTheFeeStatedSays: 1_183_207n });
+    const takeBack = { to: PAYEE, data: "0x1234abcd" } as const;
+
+    await sendWithCare(signer, chainThrough(node.url), takeBack, SETTLES);
+
+    expect(node.asked).toHaveLength(1);
+    const [raw] = node.asked;
+    if (raw === undefined) throw new Error("nothing was sent");
+    // what the call needs and a quarter over, which this wallet can cover many times
+    expect(parseTransaction(raw).gas).toBe((GAS * 5n) / 4n);
+  });
+
+  test("gas the page states is used as it is, and the node is not asked again", async () => {
+    const node = an({ holdsNow: PLENTY, heldBefore: PLENTY, takes: true, withTheFeeStatedSays: 1_183_207n });
+    await sendWithCare(signer, chainThrough(node.url), { ...PAYMENT, gas: 90_000n }, SETTLES);
+    const [raw] = node.asked;
+    if (raw === undefined) throw new Error("nothing was sent");
+    expect(parseTransaction(raw).gas).toBe(90_000n);
+  });
+
   test("a wallet that has held the money a while is sent at once, and says nothing", async () => {
     const node = an({ holdsNow: PLENTY, heldBefore: PLENTY, takes: true });
     heard = listening();

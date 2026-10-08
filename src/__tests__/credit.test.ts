@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { creditEmail, gistIdFrom, linkIn, readGist, SIGNED } from "../credit.ts";
 import { CreditBook, CreditDoor } from "../door/index.ts";
+import { GITHUB_TOKEN_SETTING } from "../github.ts";
 import { creditMessage } from "../messages.ts";
 import { creditPath, ROUTES } from "../routes.ts";
 
@@ -22,7 +23,9 @@ const OCTOCAT = { login: "octocat", githubId: 583231 };
 
 let real: Record<string, unknown>;
 beforeAll(async () => {
-  const read = await readGist(OCTOCATS_GIST);
+  // signed in where a token is to hand, as CI is: GitHub counts everybody behind one address together
+  // when they do not sign in, and refused a CI machine on 8 October for what others had asked
+  const read = await readGist(OCTOCATS_GIST, { token: process.env.GITHUB_TOKEN ?? process.env[GITHUB_TOKEN_SETTING] });
   if (typeof read !== "object" || read === null) throw new Error("GitHub described no gist");
   real = { ...read };
 });
@@ -103,5 +106,46 @@ describe("the credit door", () => {
     const door = new CreditDoor({ book: new CreditBook(await mkdtemp(join(tmpdir(), "pod-credit-"))) });
     const asked = await door.handle(new Request(`http://pod.test${ROUTES.credit}`, { method: "POST", body: JSON.stringify({ gist: "https://evil.example/x" }) }));
     expect(asked.status).toBe(400);
+  });
+});
+
+describe("reading a gist from GitHub", () => {
+  /** A stand-in for GitHub's API on a real port, which keeps how it was asked. */
+  function gitHubSaying(status: number, body: unknown): { readonly api: string; readonly asked: { path: string; authorization: string | null }[]; readonly stop: () => void } {
+    const asked: { path: string; authorization: string | null }[] = [];
+    const server = Bun.serve({
+      port: 0,
+      fetch(request) {
+        // kept as it arrives: a request is not to be read once it has been answered
+        asked.push({ path: new URL(request.url).pathname, authorization: request.headers.get("authorization") });
+        return Response.json(body, { status });
+      },
+    });
+    return { api: `http://127.0.0.1:${server.port}`, asked, stop: () => void server.stop(true) };
+  }
+
+  test("is signed with a token when there is one, and is not when there is none", async () => {
+    const gitHub = gitHubSaying(200, { id: OCTOCATS_GIST });
+    try {
+      await readGist(OCTOCATS_GIST, { api: gitHub.api, token: " a-token " });
+      await readGist(OCTOCATS_GIST, { api: gitHub.api });
+      await readGist(OCTOCATS_GIST, { api: gitHub.api, token: "" });
+      expect(gitHub.asked.map((request) => request.path)).toEqual(Array(3).fill(`/gists/${OCTOCATS_GIST}`));
+      expect(gitHub.asked.map((request) => request.authorization)).toEqual(["Bearer a-token", null, null]);
+    } finally {
+      gitHub.stop();
+    }
+  });
+
+  test("a refusal for asking too often says so, and a gist that is not there says that instead", async () => {
+    const refusing = gitHubSaying(403, { message: "API rate limit exceeded" });
+    const without = gitHubSaying(404, { message: "Not Found" });
+    try {
+      await expect(readGist(OCTOCATS_GIST, { api: refusing.api })).rejects.toThrow("GitHub would not show that gist just now (403). Try again in a while");
+      await expect(readGist(OCTOCATS_GIST, { api: without.api })).rejects.toThrow("GitHub has no public gist by that name");
+    } finally {
+      refusing.stop();
+      without.stop();
+    }
   });
 });

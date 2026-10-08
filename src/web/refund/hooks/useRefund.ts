@@ -1,13 +1,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useConfig } from "wagmi";
-import { BaseError, ContractFunctionRevertedError } from "viem";
+import { BaseError, ContractFunctionRevertedError, encodeFunctionData, type Hex } from "viem";
 import { getConnection, simulateContract, switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { firstLine } from "../../../errors.ts";
 import { podJobsAbi } from "../../../jobs.ts";
 import { podJobsV2Abi } from "../../../jobsV2.ts";
 import type { MarketConfig } from "../../../market.ts";
-import { connected, SHARED_QUERY_KEYS } from "../../shared/index.ts";
+import { connected, gasToState, SHARED_QUERY_KEYS } from "../../shared/index.ts";
 import { refusalWords, type Refundable, type RefundStatus, type RefundStep, type Standing, type Way } from "../state/index.ts";
 import { REFUND_QUERY_KEYS } from "./queryKeys.ts";
 
@@ -35,11 +35,22 @@ export function useRefund(job: Refundable, market: MarketConfig, way: Way, stand
       doing("send");
       // asked first without sending, so a refusal comes back with the contract's reason, not a failed transaction
       const at = { account, address: job.jobs, args: [BigInt(job.onChainId)] as const, chainId: market.chainId };
+      // every way out pays whoever takes it, so its gas is stated and not left to the wallet (see gas.ts)
+      const gasFor = (data: Hex): Promise<bigint> => gasToState(config, market.chainId, { account, to: job.jobs, data });
       const hash = way === "first"
-        ? await writeContract(config, (await simulateContract(config, { ...at, abi: podJobsAbi, functionName: "reclaim" })).request)
+        ? await writeContract(config, {
+          ...(await simulateContract(config, { ...at, abi: podJobsAbi, functionName: "reclaim" })).request,
+          gas: await gasFor(encodeFunctionData({ abi: podJobsAbi, functionName: "reclaim", args: at.args })),
+        })
         : standing.kind === "take back now"
-          ? await writeContract(config, (await simulateContract(config, { ...at, abi: podJobsV2Abi, functionName: "takeBack" })).request)
-          : await writeContract(config, (await simulateContract(config, { ...at, abi: podJobsV2Abi, functionName: "close" })).request);
+          ? await writeContract(config, {
+            ...(await simulateContract(config, { ...at, abi: podJobsV2Abi, functionName: "takeBack" })).request,
+            gas: await gasFor(encodeFunctionData({ abi: podJobsV2Abi, functionName: "takeBack", args: at.args })),
+          })
+          : await writeContract(config, {
+            ...(await simulateContract(config, { ...at, abi: podJobsV2Abi, functionName: "close" })).request,
+            gas: await gasFor(encodeFunctionData({ abi: podJobsV2Abi, functionName: "close", args: at.args })),
+          });
       doing("confirm");
       const receipt = await waitForTransactionReceipt(config, { hash, chainId: market.chainId });
       if (receipt.status !== "success") throw new Error("the chain refused it, so no money moved");

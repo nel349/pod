@@ -70,10 +70,23 @@ export function gistIdFrom(pointedAt: string): string | undefined {
   return GIST_ID.test(last) ? last : undefined;
 }
 
+/** Where a gist is read with a credential, when there is one to read it with. */
+export interface GistReading {
+  /**
+   * A GitHub token to sign the reading with. GitHub answers an address that does not sign in 60 times
+   * an hour, and counts every caller behind that address together, so a shared machine is refused
+   * for what others asked. Signed in, the limit is the token's own. A public gist needs no permission.
+   */
+  readonly token?: string | undefined;
+  /** somewhere else to ask, which is GitHub everywhere but in the test of what is sent */
+  readonly api?: string;
+}
+
 /** A gist, read from GitHub. Nothing about it is trusted until `linkIn` has checked it. */
-export async function readGist(id: string): Promise<unknown> {
-  const answer = await fetch(`${GITHUB_API}/gists/${id}`, {
-    headers: { accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28" },
+export async function readGist(id: string, reading: GistReading = {}): Promise<unknown> {
+  const token = reading.token?.trim();
+  const answer = await fetch(`${reading.api ?? GITHUB_API}/gists/${id}`, {
+    headers: { accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", ...(token ? { authorization: `Bearer ${token}` } : {}) },
   });
   if (answer.status === 404) throw new Error("GitHub has no public gist by that name");
   if (!answer.ok) throw new Error(`GitHub would not show that gist just now (${answer.status}). Try again in a while`);

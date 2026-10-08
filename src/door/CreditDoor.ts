@@ -12,14 +12,16 @@ import { z } from "zod";
 import { bodyWithin, tooLarge } from "../body.ts";
 import { creditEmail, gistIdFrom, linkIn, readGist } from "../credit.ts";
 import { firstLine } from "../errors.ts";
+import { GITHUB_TOKEN_SETTING } from "../github.ts";
 import { NO_STORE } from "../headers.ts";
 import { ROUTES } from "../routes.ts";
 import type { CreditBook } from "./CreditBook.ts";
 import { PerMinute } from "./Doorkeeper.ts";
 
 /**
- * How many gists are read from GitHub a minute, from everybody together. GitHub answers a server that
- * does not sign in 60 times an hour; this keeps a flood of asking from spending that on nothing.
+ * How many gists are read from GitHub a minute, from everybody together. GitHub answers any one
+ * caller only so often (60 times an hour to an address that does not sign in, far more to a token);
+ * this keeps a flood of asking from spending that on nothing.
  */
 export const GISTS_READ_A_MINUTE = 10;
 /** A gist's address, and room to spare */
@@ -62,7 +64,8 @@ export class CreditDoor {
 
     let gist: unknown;
     try {
-      gist = await readGist(gistId);
+      // signed with the server's GitHub token when it has one, so the limit is its own and not its address's
+      gist = await readGist(gistId, { token: process.env[GITHUB_TOKEN_SETTING] });
     } catch (error) {
       return Response.json({ why: firstLine(error) }, { status: 502 });
     }

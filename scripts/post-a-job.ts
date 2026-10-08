@@ -14,9 +14,10 @@
  * The poster's key is POD_DEPLOYER_KEY. It prints each step, and the job's page at the end.
  */
 import { parseArgs } from "node:util";
-import { createPublicClient, createWalletClient, http, isHex, parseEventLogs } from "viem";
+import { createPublicClient, createWalletClient, encodeFunctionData, http, isHex, parseEventLogs } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { WriteRequestSchema } from "../src/checkwriting/request.ts";
+import { gasAskedPlainly } from "../src/gas.ts";
 import { DEFAULT_MODE, MODES } from "../src/job.ts";
 import { podJobsV2Abi } from "../src/jobsV2.ts";
 import { monadTestnet } from "../src/live.ts";
@@ -69,9 +70,13 @@ const poster = privateKeyToAccount(key);
 const publicClient = createPublicClient({ chain: monadTestnet, transport: http(market.rpc) });
 const wallet = createWalletClient({ account: poster, chain: monadTestnet, transport: http(market.rpc) });
 const paid = whatIsPaid(price, market.writing);
+// each call's gas is asked of the call alone and stated: left to the wallet library, the approval, which
+// returns the writings not used, is given many times what it needs on Monad and refused for it (see gas.ts)
+const gasFor = (data: `0x${string}`, value?: bigint): Promise<bigint> => gasAskedPlainly(publicClient, { account: poster.address, to: market.jobs, data, value });
+const window = [BigInt(MODES[form.mode].windowMinutes * 60), REVIEWER_SEATS] as const;
 const hash = await wallet.writeContract({
-  address: market.jobs, abi: podJobsV2Abi, functionName: "post",
-  args: [BigInt(MODES[form.mode].windowMinutes * 60), REVIEWER_SEATS], value: paid.total,
+  address: market.jobs, abi: podJobsV2Abi, functionName: "post", args: window, value: paid.total,
+  gas: await gasFor(encodeFunctionData({ abi: podJobsV2Abi, functionName: "post", args: window }), paid.total),
 });
 const receipt = await publicClient.waitForTransactionReceipt({ hash });
 if (receipt.status !== "success") throw new Error(`the chain refused the payment: ${hash}`);
@@ -111,8 +116,10 @@ if (!writing || whyNot) throw new Error(`the checks cannot be approved: ${whyNot
 const job = await publicClient.readContract({ address: market.jobs, abi: podJobsV2Abi, functionName: "jobs", args: [BigInt(onChainId)] });
 const toApprove = await sealToApprove({ writing, view, price: job[1] });
 if (!toApprove.ok) throw new Error(toApprove.why);
+const approval = [BigInt(onChainId), toApprove.seal, toApprove.approval.signature] as const;
 const approved = await wallet.writeContract({
-  address: market.jobs, abi: podJobsV2Abi, functionName: "approveChecks", args: [BigInt(onChainId), toApprove.seal, toApprove.approval.signature],
+  address: market.jobs, abi: podJobsV2Abi, functionName: "approveChecks", args: approval,
+  gas: await gasFor(encodeFunctionData({ abi: podJobsV2Abi, functionName: "approveChecks", args: approval })),
 });
 if ((await publicClient.waitForTransactionReceipt({ hash: approved })).status !== "success") throw new Error(`the chain refused the approval: ${approved}`);
 say(`approved in ${approved}; the worker puts it on the wall`);

@@ -4,6 +4,7 @@ export * from "./ClientOnly.tsx";
 export * from "./Copyable.tsx";
 export * from "./ErrorBoundary.tsx";
 export * from "./connected.ts";
+export * from "./gasToState.ts";
 export * from "./copy.ts";
 export * from "./SiteHeader.tsx";
 export * from "./WalletStatus.tsx";

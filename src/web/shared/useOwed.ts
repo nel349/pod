@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useConfig } from "wagmi";
 import { getConnection, getPublicClient, simulateContract, switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
-import type { Address } from "viem";
+import { encodeFunctionData, type Address } from "viem";
 import { firstLine } from "../../errors.ts";
 import { podJobsV2Abi } from "../../jobsV2.ts";
 import type { MarketConfig } from "../../market.ts";
+import { gasToState } from "./gasToState.ts";
 import { SHARED_QUERY_KEYS } from "./queryKeys.ts";
 
 export type WithdrawStatus =
@@ -42,7 +43,11 @@ export function useOwed(market: MarketConfig, wallet: Address | undefined): {
       const { request } = await simulateContract(config, {
         account: wallet, address: market.jobs, abi: podJobsV2Abi, functionName: "withdraw", args: [wallet], chainId: market.chainId,
       });
-      const receipt = await waitForTransactionReceipt(config, { hash: await writeContract(config, request), chainId: market.chainId });
+      // a withdrawal pays whoever asks for it, so its gas is stated (see gas.ts)
+      const gas = await gasToState(config, market.chainId, {
+        account: wallet, to: market.jobs, data: encodeFunctionData({ abi: podJobsV2Abi, functionName: "withdraw", args: [wallet] }),
+      });
+      const receipt = await waitForTransactionReceipt(config, { hash: await writeContract(config, { ...request, gas }), chainId: market.chainId });
       if (receipt.status !== "success") throw new Error("the chain refused it, so nothing moved");
     },
     onMutate: () => setStatus({ kind: "working" }),
