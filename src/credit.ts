@@ -75,19 +75,28 @@ export interface GistReading {
   /**
    * A GitHub token to sign the reading with. GitHub answers an address that does not sign in 60 times
    * an hour, and counts every caller behind that address together, so a shared machine is refused
-   * for what others asked. Signed in, the limit is the token's own. A public gist needs no permission.
+   * for what others asked. Signed in, the limit is the token's own.
+   *
+   * Not every token may read a gist: the one GitHub hands a workflow is refused every time, though the
+   * gist is public (seen on 8 October 2026). So a signed reading that is refused is asked again
+   * unsigned, and a token can only ever make this better than having none.
    */
   readonly token?: string | undefined;
   /** somewhere else to ask, which is GitHub everywhere but in the test of what is sent */
   readonly api?: string;
 }
 
+/** What GitHub answers a token it will not take for this: not signed in, or not allowed */
+const REFUSES_THE_TOKEN: ReadonlySet<number> = new Set([401, 403]);
+
 /** A gist, read from GitHub. Nothing about it is trusted until `linkIn` has checked it. */
 export async function readGist(id: string, reading: GistReading = {}): Promise<unknown> {
   const token = reading.token?.trim();
-  const answer = await fetch(`${reading.api ?? GITHUB_API}/gists/${id}`, {
-    headers: { accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+  const ask = (signedWith: string | undefined): Promise<Response> => fetch(`${reading.api ?? GITHUB_API}/gists/${id}`, {
+    headers: { accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", ...(signedWith ? { authorization: `Bearer ${signedWith}` } : {}) },
   });
+  const signed = await ask(token);
+  const answer = token && REFUSES_THE_TOKEN.has(signed.status) ? await ask(undefined) : signed;
   if (answer.status === 404) throw new Error("GitHub has no public gist by that name");
   if (!answer.ok) throw new Error(`GitHub would not show that gist just now (${answer.status}). Try again in a while`);
   return answer.json();

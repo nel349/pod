@@ -23,9 +23,9 @@ const OCTOCAT = { login: "octocat", githubId: 583231 };
 
 let real: Record<string, unknown>;
 beforeAll(async () => {
-  // signed in where a token is to hand, as CI is: GitHub counts everybody behind one address together
-  // when they do not sign in, and refused a CI machine on 8 October for what others had asked
-  const read = await readGist(OCTOCATS_GIST, { token: process.env.GITHUB_TOKEN ?? process.env[GITHUB_TOKEN_SETTING] });
+  // signed in where the server's own token is to hand: GitHub counts everybody behind one address
+  // together when they do not sign in, and refused a CI machine on 8 October for what others had asked
+  const read = await readGist(OCTOCATS_GIST, { token: process.env[GITHUB_TOKEN_SETTING] });
   if (typeof read !== "object" || read === null) throw new Error("GitHub described no gist");
   real = { ...read };
 });
@@ -134,6 +134,25 @@ describe("reading a gist from GitHub", () => {
       expect(gitHub.asked.map((request) => request.authorization)).toEqual(["Bearer a-token", null, null]);
     } finally {
       gitHub.stop();
+    }
+  });
+
+  test("a token GitHub will not take for gists is not held against the reading: it is asked again unsigned", async () => {
+    // the token GitHub hands a workflow is refused for every gist, public or not
+    const asked: (string | null)[] = [];
+    const server = Bun.serve({
+      port: 0,
+      fetch(request) {
+        const authorization = request.headers.get("authorization");
+        asked.push(authorization);
+        return authorization ? Response.json({ message: "Resource not accessible by integration" }, { status: 403 }) : Response.json({ id: OCTOCATS_GIST });
+      },
+    });
+    try {
+      expect(await readGist(OCTOCATS_GIST, { api: `http://127.0.0.1:${server.port}`, token: "a-workflow-token" })).toEqual({ id: OCTOCATS_GIST });
+      expect(asked).toEqual(["Bearer a-workflow-token", null]);
+    } finally {
+      void server.stop(true);
     }
   });
 
