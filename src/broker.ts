@@ -76,6 +76,9 @@ export function spentTogether(one: Spent | undefined, other: Spent): Spent {
   };
 }
 
+/** The whole of what a model is told about itself, in place of a coding agent's instructions. */
+export const ONLY_ANSWERS = "You answer what you are asked, in text, and nothing else.";
+
 /**
  * How the CLI is started, so that it is a model and nothing more.
  *
@@ -100,7 +103,6 @@ export function spentTogether(one: Spent | undefined, other: Spent): Spent {
  *
  * It answers as JSON, which carries what the answer cost beside the answer.
  */
-export const ONLY_ANSWERS = "You answer what you are asked, in text, and nothing else.";
 export const LOCKED_DOWN_FLAGS = [
   "-p", "--tools", "", "--strict-mcp-config", "--setting-sources", "", "--no-session-persistence",
   "--system-prompt", ONLY_ANSWERS, "--output-format", "json",

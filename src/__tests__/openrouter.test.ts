@@ -124,6 +124,13 @@ describe("which model writes the checks, from the settings", () => {
     expect(checksModelInWords(chosen)).not.toContain("sk-or-secret");
   });
 
+  test("a way of thinking nothing takes is refused when the server starts, whichever way the model is reached", () => {
+    // the CLI and OpenRouter would each refuse it only when asked, which is after a poster has paid
+    expect(() => checksModelNamed({ [CHECKS_MODEL_SETTING]: "claude-sonnet-5-5", [CHECKS_THINKING_SETTING]: "lo" })).toThrow(`${CHECKS_THINKING_SETTING}=lo is not a way of thinking`);
+    expect(() => checksModelNamed({ [CHECKS_MODEL_SETTING]: `openrouter:${MODEL}`, [CHECKS_THINKING_SETTING]: "none", [OPENROUTER_KEY_SETTING]: "k" })).toThrow("low, medium, high");
+    expect(checksModelNamed({ [CHECKS_THINKING_SETTING]: " high " })).toEqual({ through: "cli", thinking: "high" });
+  });
+
   test("a model of OpenRouter's with no key is refused when the server starts, not when a poster has paid", () => {
     expect(() => checksModelNamed({ [CHECKS_MODEL_SETTING]: `openrouter:${MODEL}` })).toThrow(`${OPENROUTER_KEY_SETTING} holds no key`);
     expect(() => checksModelNamed({ [CHECKS_MODEL_SETTING]: "openrouter:", [OPENROUTER_KEY_SETTING]: "k" })).toThrow("names no model after it");

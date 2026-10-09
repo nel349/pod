@@ -7,14 +7,14 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useConfig, type Config } from "wagmi";
 import { getConnection, simulateContract, switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
-import { encodeFunctionData, type Hex } from "viem";
+import type { Hex } from "viem";
 import { WriteRequestSchema } from "../../../checkwriting/request.ts";
 import { firstLine } from "../../../errors.ts";
 import { podJobsV2Abi, type JobV2 } from "../../../jobsV2.ts";
 import { AnswerSchema, type MarketConfig } from "../../../market.ts";
 import type { PreparingView } from "../../../preparing/records.ts";
 import { preparingWritingsPath } from "../../../routes.ts";
-import { connected, gasToState, readAnswer } from "../../shared/index.ts";
+import { connected, readAnswer, withStatedGas } from "../../shared/index.ts";
 import { asSentence, COPY, latestWriting, needsTopUp, sealToApprove, type DraftRequest } from "../state/index.ts";
 import { QUERY_KEYS } from "./queryKeys.ts";
 
@@ -123,19 +123,12 @@ async function sent(
   at: { readonly account: `0x${string}`; readonly address: `0x${string}`; readonly abi: typeof podJobsV2Abi; readonly chainId: number },
   call: Call,
 ): Promise<Hex> {
-  const gasFor = (data: Hex, value?: bigint): Promise<bigint> => gasToState(config, at.chainId, { account: at.account, to: at.address, data, value });
   switch (call.functionName) {
-    case "topUp": {
-      const { request } = await simulateContract(config, { ...at, functionName: "topUp", args: call.args, value: call.value });
-      return writeContract(config, { ...request, gas: await gasFor(encodeFunctionData({ abi: podJobsV2Abi, functionName: "topUp", args: call.args }), call.value) });
-    }
-    case "takeBack": {
-      const { request } = await simulateContract(config, { ...at, functionName: "takeBack", args: call.args });
-      return writeContract(config, { ...request, gas: await gasFor(encodeFunctionData({ abi: podJobsV2Abi, functionName: "takeBack", args: call.args })) });
-    }
-    case "approveChecks": {
-      const { request } = await simulateContract(config, { ...at, functionName: "approveChecks", args: call.args });
-      return writeContract(config, { ...request, gas: await gasFor(encodeFunctionData({ abi: podJobsV2Abi, functionName: "approveChecks", args: call.args })) });
-    }
+    case "topUp":
+      return writeContract(config, await withStatedGas(config, at.chainId, (await simulateContract(config, { ...at, functionName: "topUp", args: call.args, value: call.value })).request));
+    case "takeBack":
+      return writeContract(config, await withStatedGas(config, at.chainId, (await simulateContract(config, { ...at, functionName: "takeBack", args: call.args })).request));
+    case "approveChecks":
+      return writeContract(config, await withStatedGas(config, at.chainId, (await simulateContract(config, { ...at, functionName: "approveChecks", args: call.args })).request));
   }
 }

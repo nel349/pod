@@ -201,6 +201,14 @@ describe("a payment from the passkey wallet, through an endpoint that has to be 
     expect(heard.said).toEqual([]);
     expect(node.asked).toHaveLength(1);
   });
+
+  test("and its gas is still asked of the call alone, since a node may overstate it wherever it is", async () => {
+    const node = an({ holdsNow: PLENTY, heldBefore: PLENTY, takes: true, withTheFeeStatedSays: 1_183_207n });
+    await sendWithCare(signer, chainThrough(node.url), { to: PAYEE, data: "0x1234abcd" }, undefined);
+    const [raw] = node.asked;
+    if (raw === undefined) throw new Error("nothing was sent");
+    expect(parseTransaction(raw).gas).toBe((GAS * 5n) / 4n);
+  });
 });
 
 /** An endpoint that takes no payment and gives its own reason, which is not about money. */

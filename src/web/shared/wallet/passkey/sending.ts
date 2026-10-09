@@ -60,20 +60,21 @@ const wait = (seconds: number): Promise<void> => new Promise((resolve) => setTim
 export async function sendWithCare(signer: LocalAccount, chain: Chain, asked: Asked, sending: Sending | undefined): Promise<Hex> {
   const endpoint = http(chain.rpcUrls.default.http[0]);
   const wallet = createWalletClient({ account: signer, chain, transport: endpoint });
-  if (!sending) return wallet.sendTransaction(asked);
-
   const reads = createPublicClient({ chain, transport: endpoint });
+  // The gas is asked of the call alone and then stated, whatever else the chain needs allowing for:
+  // left to be asked with the fee, Monad's node answers a call that pays its caller with many times
+  // what it needs, and then holds all of that back (see gas.ts)
+  const gasNeeded = async (): Promise<bigint> =>
+    asked.gas ?? await gasAskedPlainly(reads, { account: signer.address, to: asked.to, data: asked.data, value: asked.value });
+  if (!sending) return wallet.sendTransaction({ ...asked, gas: await gasNeeded() });
+
   const coin = chain.nativeCurrency.symbol;
   const holds = (): Promise<bigint> => reads.getBalance({ address: signer.address });
   try {
     // filling in what the page left out asks the node what it would cost, which sends nothing. A wallet
-    // that cannot cover it is refused here, and is told so in its own terms. The gas is asked of the call
-    // alone and then stated: left to be asked with the fee, the node answers a call that pays its caller
-    // with many times what it needs, and then holds all of that back (see gas.ts)
-    const fill = async (): Promise<Awaited<ReturnType<typeof wallet.prepareTransactionRequest<Asked>>>> => {
-      const gas = asked.gas ?? await gasAskedPlainly(reads, { account: signer.address, to: asked.to, data: asked.data, value: asked.value });
-      return wallet.prepareTransactionRequest({ ...asked, gas });
-    };
+    // that cannot cover it is refused here, and is told so in its own terms
+    const fill = async (): Promise<Awaited<ReturnType<typeof wallet.prepareTransactionRequest<Asked>>>> =>
+      wallet.prepareTransactionRequest({ ...asked, gas: await gasNeeded() });
     let request;
     try {
       request = await fill();

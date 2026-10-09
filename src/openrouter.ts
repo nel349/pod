@@ -17,7 +17,10 @@ import { ONLY_ANSWERS, type Model, type Spent } from "./broker.ts";
 export const OPENROUTER = "https://openrouter.ai/api/v1";
 const ANSWERS = "/chat/completions";
 
-/** the most an answer may run to: the largest exam measured was under half of this */
+/**
+ * The most an answer may run to, its thinking included. The largest measured was about 25,000 tokens,
+ * from a model left to think as it pleased; asked to think a little, the same exam took 6,000.
+ */
 const LONGEST_ANSWER_TOKENS = 32_000;
 /** how much of a refusal is passed on */
 const LONGEST_REFUSAL = 300;

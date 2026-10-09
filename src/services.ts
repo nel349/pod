@@ -42,8 +42,10 @@ export const TOKEN_ADDRESS_SETTING = "POD_TOKEN_ADDRESS";
  * expensive.
  */
 export const CHECKS_MODEL_SETTING = "POD_CHECKS_MODEL";
-/** How hard that model thinks before answering (`low`, `medium`, `high`). Left out, the model decides. */
+/** How hard that model thinks before answering, as one of THINKING. Left out, the model decides. */
 export const CHECKS_THINKING_SETTING = "POD_CHECKS_THINKING";
+/** The ways of saying how hard to think that both the Claude CLI and OpenRouter take */
+export const THINKING = ["low", "medium", "high"] as const;
 /** The key OpenRouter is asked with, when the model is one of its. */
 export const OPENROUTER_KEY_SETTING = "OPENROUTER_API_KEY";
 /** how a model's name says it is reached through OpenRouter and not the CLI */
@@ -55,12 +57,16 @@ export type ChecksModel =
   | { readonly through: "openrouter"; readonly model: string; readonly key: string; readonly thinking?: string };
 
 /**
- * Read the settings for who writes the checks. A model of OpenRouter's with no key is refused here,
- * when the server starts, and not when the first poster has already paid for a writing.
+ * Read the settings for who writes the checks. A model of OpenRouter's with no key, or a way of
+ * thinking nothing takes, is refused here, when the server starts, and not when the first poster has
+ * already paid for a writing.
  */
 export function checksModelNamed(environment: Record<string, string | undefined> = process.env): ChecksModel {
   const named = environment[CHECKS_MODEL_SETTING]?.trim();
   const thinking = environment[CHECKS_THINKING_SETTING]?.trim();
+  if (thinking && !THINKING.some((way) => way === thinking)) {
+    throw new Error(`${CHECKS_THINKING_SETTING}=${thinking} is not a way of thinking a model takes. It is one of ${THINKING.join(", ")}, or left out`);
+  }
   const how = thinking ? { thinking } : {};
   if (!named?.startsWith(THROUGH_OPENROUTER)) return { through: "cli", ...(named ? { model: named } : {}), ...how };
   const model = named.slice(THROUGH_OPENROUTER.length);
