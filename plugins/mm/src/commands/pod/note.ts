@@ -2,7 +2,7 @@ import { CommandError, type CommandIO, InputFieldType, type InputSchema, PluginC
 import type { Address } from "viem";
 import { secondsNow } from "../../../../../src/clock.ts";
 import { noteMessage } from "../../../../../src/messages.ts";
-import { inWords, JOB, ROLE, roleFrom, SITE, siteFrom } from "../../inputs.ts";
+import { fromPod, JOB, ROLE, roleFrom, SITE, siteFrom } from "../../inputs.ts";
 import { Pod } from "../../pod.ts";
 import { MetaMaskWallet } from "../../wallet.ts";
 
@@ -42,16 +42,12 @@ export default class PodNote extends PluginCommand<NoteLeft> {
       throw new CommandError("NOT_A_COMMIT", `"${told.about}" is not a full commit id.`, "A note is about a commit named in full, 40 characters, or about the job as a whole with --about left out.");
     }
     const pod = new Pod(siteFrom(told.site));
-    const [market, job] = await Promise.all([pod.market(), pod.job(told.job)]);
+    const [market, job] = await fromPod(Promise.all([pod.market(), pod.job(told.job)]));
     const wallet = new MetaMaskWallet(this.ctx, io, this.pluginCommandId, market);
     const seat = wallet.address();
     const at = secondsNow();
     const signature = await wallet.sign(noteMessage({ jobId: job.jobId, onChainId: String(job.onChainId), jobs: job.jobs, role, about, says: told.says, at }));
-    try {
-      await pod.writeNote(job.jobId, { agent: seat, role, ...(about === undefined ? {} : { about }), says: told.says, at, signature });
-    } catch (error) {
-      throw new CommandError("NOTE_REFUSED", `${inWords(error)}.`, "Only a seat on the job may write to its notes, and only while its window is open.");
-    }
+    await fromPod(pod.writeNote(job.jobId, { agent: seat, role, ...(about === undefined ? {} : { about }), says: told.says, at, signature }));
     return { job: job.jobId, role, seat, about: about ?? "the job as a whole", at: new Date(at * 1000).toISOString() };
   }
 }

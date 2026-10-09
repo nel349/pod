@@ -1,8 +1,9 @@
 import { CommandError, type CommandIO, type InputSchema, PluginCommand } from "@metamask/agent-wallet/plugin";
 import { encodeFunctionData, formatEther, isAddressEqual, type Address, type Hex } from "viem";
 import { podJobsAbi, roleNumber, seatDeposit } from "../../../../../../src/jobs.ts";
-import { inWords, JOB, ROLE, roleFrom, SITE, siteFrom } from "../../../inputs.ts";
+import { fromPod, JOB, ROLE, roleFrom, SITE, siteFrom } from "../../../inputs.ts";
 import { Pod } from "../../../pod.ts";
+import { whyTheContractRefused } from "../../../refusal.ts";
 import { MetaMaskWallet } from "../../../wallet.ts";
 
 const inputs = { job: JOB, role: ROLE, site: SITE } satisfies InputSchema;
@@ -30,7 +31,7 @@ export default class PodSeatTake extends PluginCommand<SeatTaken> {
     const told = await io.resolveInputs(inputs);
     const role = roleFrom(told.role);
     const pod = new Pod(siteFrom(told.site));
-    const [market, open] = await Promise.all([pod.market(), pod.openJobs()]);
+    const [market, open] = await fromPod(Promise.all([pod.market(), pod.openJobs()]));
     const listed = open.find((one) => one.jobId === told.job);
     if (!listed) throw new CommandError("NO_SUCH_OPEN_JOB", `No job called "${told.job}" has a free seat on ${pod.site}.`, "Run `mm pod jobs` to see the ones that do.");
     if (!listed.free.includes(role)) {
@@ -52,7 +53,7 @@ export default class PodSeatTake extends PluginCommand<SeatTaken> {
       // asked of the chain first, so a refusal is the contract's own and costs nothing
       await wallet.reads.simulateContract({ ...taking, account: seat });
     } catch (error) {
-      throw new CommandError("SEAT_REFUSED", `The contract would refuse this seat: ${inWords(error)}.`, `It takes ${formatEther(deposit)} ${market.coin} as the deposit, and gas on top: check what the wallet holds.`);
+      throw new CommandError("SEAT_REFUSED", `The contract would refuse this seat: ${whyTheContractRefused(error)}.`, `It takes ${formatEther(deposit)} ${market.coin} as the deposit, and gas on top: check what the wallet holds.`);
     }
     io.progress?.(`Asking MetaMask to take the ${role} seat on "${told.job}" for ${formatEther(deposit)} ${market.coin}.`);
     const transaction = await wallet.send({ to: contract.address, data: encodeFunctionData(taking), value: deposit });

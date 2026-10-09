@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { commitToApprove } from "../../plugins/mm/src/candidate.ts";
 import { startPassThrough, type PassThrough } from "../../plugins/mm/src/passThrough.ts";
-import { Pod } from "../../plugins/mm/src/pod.ts";
+import { BaseError, ContractFunctionExecutionError, ContractFunctionRevertedError, encodeErrorResult } from "viem";
+import { Pod, PodDidNotAnswer, withASeatToTake } from "../../plugins/mm/src/pod.ts";
+import { whyTheContractRefused } from "../../plugins/mm/src/refusal.ts";
+import { ListedJobSchema, type ListedJob } from "../door/JobList.ts";
+import { podJobsAbi } from "../jobs.ts";
 import { jobApiPath, ROUTES } from "../routes.ts";
 
 /**
@@ -150,9 +154,18 @@ describe("POD, read through its public doors", () => {
     expect(await pod.job("a-to-do-list")).toEqual({ jobId: "a-to-do-list", onChainId: 18n, jobs: JOBS });
   });
 
-  test("a job the site does not have is said so by name", async () => {
+  test("a job the site does not have is said so by name, as that and not as a failure to reach it", async () => {
     const { pod } = aSite();
-    expect(pod.job("nowhere")).rejects.toThrow('has no job called "nowhere"');
+    const refused = await pod.job("nowhere").catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(PodDidNotAnswer);
+    expect(refused).toMatchObject({ problem: "NO_SUCH_JOB", message: `${pod.site} has no job called "nowhere"` });
+  });
+
+  test("a site that cannot be reached is named, and said to be unreachable", async () => {
+    const nowhere = new Pod("http://127.0.0.1:1");
+    const refused = await nowhere.market().catch((error: unknown) => error);
+    expect(refused).toMatchObject({ problem: "POD_UNREACHABLE" });
+    expect(String(refused)).toContain("http://127.0.0.1:1 could not be reached");
   });
 
   test("a note is handed over as it was signed, and a refusal comes back in the site's own words", async () => {
@@ -160,6 +173,35 @@ describe("POD, read through its public doors", () => {
     const note = { agent: "0xfe44ab93e065a097231f6481246a2f938a3beae7", role: "reviewer", says: "It does what was asked.", at: 1, signature: "0x00" };
     await pod.writeNote("a-to-do-list", note);
     expect(notes).toEqual([note]);
-    expect(pod.writeNote("a-to-do-list", { ...note, says: "refuse me" })).rejects.toThrow("that key holds no seat on this job");
+    const refused = await pod.writeNote("a-to-do-list", { ...note, says: "refuse me" }).catch((error: unknown) => error);
+    expect(refused).toMatchObject({ problem: "POD_SAID_NO", message: "the note was not taken: that key holds no seat on this job" });
+  });
+
+  test("a job whose seats are all taken is not offered as one to take a seat on", () => {
+    const listed = (jobId: string, free: ListedJob["free"]): ListedJob => ListedJobSchema.parse({
+      jobId, at: { page: `/job/${jobId}`, git: `/git/${jobId}.git`, notes: `/api/notes/${jobId}` },
+      contract: { address: JOBS, jobId: "18" }, price: "100000000000000000", endsAt: "2026-10-10T11:42:31.000Z",
+      idea: "A to-do list", mode: "sprint", allowedHosts: [], visibleChecks: [], sealedChecks: 4, seats: [], owners: [], free,
+    });
+    expect(withASeatToTake([listed("full", []), listed("one-left", ["reviewer"])]).map((job) => job.jobId)).toEqual(["one-left"]);
+  });
+});
+
+describe("why the contract said no", () => {
+  /** The refusal as it reaches a caller: the contract's own error, inside the library's account of the call. */
+  const refusedWith = (errorName: "TooLate" | "NotTheSeat" | "WrongDeposit"): BaseError => {
+    const reverted = new ContractFunctionRevertedError({ abi: podJobsAbi, data: encodeErrorResult({ abi: podJobsAbi, errorName }), functionName: "approve" });
+    return new ContractFunctionExecutionError(reverted, { abi: podJobsAbi, functionName: "approve", args: [18n, 2, `0x${"00".repeat(32)}`] });
+  };
+
+  test("it is said in the contract's own word, which is what tells a seat what to do next", () => {
+    expect(whyTheContractRefused(refusedWith("TooLate"))).toBe("the contract says TooLate");
+    expect(whyTheContractRefused(refusedWith("NotTheSeat"))).toBe("the contract says NotTheSeat");
+    expect(whyTheContractRefused(refusedWith("WrongDeposit"))).toBe("the contract says WrongDeposit");
+  });
+
+  test("anything else is one line, with no full stop left on the end for a sentence to double", () => {
+    expect(whyTheContractRefused(new Error("the node could not be reached.\nmore that nobody needs"))).toBe("the node could not be reached");
+    expect(whyTheContractRefused("no")).toBe("no");
   });
 });

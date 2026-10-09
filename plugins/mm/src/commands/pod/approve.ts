@@ -3,8 +3,9 @@ import { encodeFunctionData, zeroHash, type Address, type Hex } from "viem";
 import { podJobsAbi, readJob, roleNumber } from "../../../../../src/jobs.ts";
 import { bytes32ToCommit, commitToBytes32 } from "../../../../../src/repo.ts";
 import { commitToApprove } from "../../candidate.ts";
-import { inWords, JOB, ROLE, roleFrom, SITE, siteFrom } from "../../inputs.ts";
+import { fromPod, JOB, ROLE, roleFrom, SITE, siteFrom } from "../../inputs.ts";
 import { Pod } from "../../pod.ts";
+import { whyTheContractRefused } from "../../refusal.ts";
 import { MetaMaskWallet } from "../../wallet.ts";
 
 const inputs = {
@@ -42,7 +43,7 @@ export default class PodApprove extends PluginCommand<Approved> {
     const told = await io.resolveInputs(inputs);
     const role = roleFrom(told.role);
     const pod = new Pod(siteFrom(told.site));
-    const [market, job] = await Promise.all([pod.market(), pod.job(told.job)]);
+    const [market, job] = await fromPod(Promise.all([pod.market(), pod.job(told.job)]));
     const wallet = new MetaMaskWallet(this.ctx, io, this.pluginCommandId, market);
     const seat = wallet.address();
     const contract = { address: job.jobs, publicClient: wallet.reads };
@@ -56,7 +57,7 @@ export default class PodApprove extends PluginCommand<Approved> {
     try {
       await wallet.reads.simulateContract({ ...approving, account: seat });
     } catch (error) {
-      throw new CommandError("APPROVAL_REFUSED", `The contract would refuse this approval: ${inWords(error)}.`, `Only the address that holds the ${role} seat may approve as it, and only while the job is open.`);
+      throw new CommandError("APPROVAL_REFUSED", `The contract would refuse this approval: ${whyTheContractRefused(error)}.`, `Only the address that holds the ${role} seat may approve as it, and only while the job is open.`);
     }
     io.progress?.(`Asking MetaMask to approve ${commit} as the ${role} seat on "${job.jobId}".`);
     const transaction = await wallet.send({ to: contract.address, data: encodeFunctionData(approving) });

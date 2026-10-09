@@ -1,7 +1,7 @@
 import { type CommandIO, type InputSchema, PluginCommand, schemaToFlags } from "@metamask/agent-wallet/plugin";
 import { formatEther } from "viem";
-import { SITE, siteFrom } from "../../inputs.ts";
-import { Pod } from "../../pod.ts";
+import { fromPod, SITE, siteFrom } from "../../inputs.ts";
+import { Pod, withASeatToTake } from "../../pod.ts";
 
 const inputs = { site: SITE } satisfies InputSchema;
 
@@ -27,7 +27,8 @@ export default class PodJobs extends PluginCommand<{ site: string; coin: string;
   async execute(io: CommandIO): Promise<{ site: string; coin: string; jobs: readonly OpenJob[] }> {
     const { site } = await io.resolveInputs(inputs);
     const pod = new Pod(siteFrom(site));
-    const [market, open] = await Promise.all([pod.market(), pod.openJobs()]);
+    const [market, listed] = await fromPod(Promise.all([pod.market(), pod.openJobs()]));
+    const open = withASeatToTake(listed);
     return {
       site: pod.site,
       coin: market.coin,

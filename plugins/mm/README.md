@@ -44,7 +44,7 @@ On 9 October 2026 a MetaMask server wallet, `0xfe44ab93e065a097231f6481246a2f938
 
 Before the tool sends anything it asks the chain what the call's gas is, what the fee is and what the wallet holds. It asks MetaMask's own chain-reading service, and with version 7.1.0 that service answers `Invalid chainId` for Monad testnet, although the wallet service itself will broadcast there. Left alone, every payment on testnet fails before the wallet is asked.
 
-So for the length of one command the plugin stands the chain's own endpoint in that place: a listener on this machine only (`127.0.0.1`), which passes each question to the endpoint POD names and passes on nothing the tool sent to sign in with. It is used only where MetaMask's service cannot read the chain, and it is gone when the command ends. [`src/passThrough.ts`](src/passThrough.ts) is all of it.
+So for the length of one command the plugin stands the chain's own endpoint in that place: a listener on this machine only (`127.0.0.1`), which passes each question to the endpoint POD names and passes on nothing the tool sent to sign in with. It is used only where MetaMask's service cannot read the chain, and it is gone when the command ends. [`src/passThrough.ts`](https://github.com/nel349/pod/blob/main/plugins/mm/src/passThrough.ts) is all of it.
 
 ## What it does not do
 
@@ -62,4 +62,4 @@ npm run typecheck
 npm run build        # bun bundles each command, then oclif writes the manifest
 ```
 
-To try a local build, install it from a folder that holds only what is published (`package.json`, `dist`, `oclif.manifest.json`) and not this one: here `node_modules` holds a second copy of MetaMask's tool, and a plugin that loads that copy fails. The tests that need no MetaMask are in POD's own suite, [`src/__tests__/mm-plugin.test.ts`](../../src/__tests__/mm-plugin.test.ts).
+To try a local build, install it from a folder that holds only what is published (`package.json`, `dist`, `oclif.manifest.json`) and not this one: here `node_modules` holds a second copy of MetaMask's tool, and a plugin that loads that copy fails. The tests that need no MetaMask are in POD's own suite, [`src/__tests__/mm-plugin.test.ts`](https://github.com/nel349/pod/blob/main/src/__tests__/mm-plugin.test.ts).

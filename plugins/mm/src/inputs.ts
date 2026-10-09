@@ -2,7 +2,7 @@
 import { CommandError, InputFieldType, type InputSchema } from "@metamask/agent-wallet/plugin";
 import type { Role } from "../../../src/job.ts";
 import { SEATS } from "../../../src/seal.ts";
-import { POD_SITE } from "./pod.ts";
+import { PodDidNotAnswer, POD_SITE, type PodProblem } from "./pod.ts";
 
 export const SITE = {
   type: InputFieldType.Text, flag: "site", required: false, prompt: false,
@@ -32,3 +32,20 @@ export function roleFrom(told: string): Role {
 
 /** Anything thrown, as words: for refusals that came from somebody else's code. */
 export const inWords = (error: unknown): string => ((error instanceof Error ? error.message : String(error)).split("\n")[0] ?? "").replace(/\.+$/, "");
+
+/** what a person can do about each way reading POD goes wrong */
+const WHAT_TO_DO: Record<PodProblem, string> = {
+  NO_SUCH_JOB: "Run `mm pod jobs` for the jobs with a free seat, or check the name on the job's page.",
+  POD_SAID_NO: "Read what it said: a door says who may do what, and when.",
+  POD_UNREACHABLE: "Check the connection, and --site if you gave one, and run it again.",
+};
+
+/** What a command asks of POD, with a refusal reported the way the tool reports every refusal: a code, what happened, what to do. */
+export async function fromPod<T>(asked: Promise<T>): Promise<T> {
+  try {
+    return await asked;
+  } catch (error) {
+    if (error instanceof PodDidNotAnswer) throw new CommandError(error.problem, `${inWords(error)}.`, WHAT_TO_DO[error.problem]);
+    throw error;
+  }
+}

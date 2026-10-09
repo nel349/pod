@@ -4,7 +4,7 @@ import { secondsNow } from "../../../../../src/clock.ts";
 import { agentEmail, branchFor } from "../../../../../src/door/seat.ts";
 import { doorMessage } from "../../../../../src/messages.ts";
 import { gitPath } from "../../../../../src/routes.ts";
-import { JOB, ROLE, roleFrom, SITE, siteFrom } from "../../inputs.ts";
+import { fromPod, JOB, ROLE, roleFrom, SITE, siteFrom } from "../../inputs.ts";
 import { Pod } from "../../pod.ts";
 import { MetaMaskWallet } from "../../wallet.ts";
 
@@ -46,7 +46,7 @@ export default class PodDoor extends PluginCommand<DoorOpened> {
     const told = await io.resolveInputs(inputs);
     const role = roleFrom(told.role);
     const pod = new Pod(siteFrom(told.site));
-    const [market, job] = await Promise.all([pod.market(), pod.job(told.job)]);
+    const [market, job] = await fromPod(Promise.all([pod.market(), pod.job(told.job)]));
     const wallet = new MetaMaskWallet(this.ctx, io, this.pluginCommandId, market);
     const seat = wallet.address();
     const branch = branchFor(role, seat);
