@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "Work a paid seat on POD from MetaMask's Agent Wallet (mm): find a job, take a seat, sign in at its doors, leave a note, approve",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "repository": {
     "type": "git",
