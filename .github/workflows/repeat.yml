@@ -1,0 +1,55 @@
+name: repeat a verdict
+
+# A machine that is neither ours nor the server's repeats published verdicts. It is given nothing but
+# the site's address and the names of the jobs: the receipt, the code and the checks are fetched from
+# the public addresses every job page prints, the checks are run again here in the same sealed boxes,
+# and the run fails if this machine does not reach the verdict that was published.
+#
+# Started by hand, so that a run is something somebody chose to do and can point at.
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: The site whose verdicts are repeated
+        default: https://vps-39a35c60.vps.ovh.us
+      jobs:
+        description: The jobs to repeat, by their names on the wall, with spaces between
+        default: a-small-shop-with-stock a-link-shortener-2
+
+jobs:
+  repeat:
+    name: published verdicts, run again from public addresses only
+    runs-on: ubuntu-latest
+    env:
+      SITE: ${{ inputs.site }}
+      JOBS: ${{ inputs.jobs }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - name: fetch each job, and run its checks again
+        run: |
+          differed=0
+          for job in $JOBS; do
+            case "$job" in *[!a-z0-9-]*) echo "not a job's name: $job"; exit 2;; esac
+            commit=$(curl -fsSL "$SITE/receipt/$job.json" | jq -r .receipt.commit)
+            curl -fsSL -o "$RUNNER_TEMP/$job.bundle" "$SITE/bundle/$job"
+            git clone --quiet "$RUNNER_TEMP/$job.bundle" "$RUNNER_TEMP/$job"
+            git -C "$RUNNER_TEMP/$job" checkout --quiet "$commit"
+            said="$RUNNER_TEMP/$job.txt"
+            bun run src/repeat.ts "$SITE/job/$job" "$RUNNER_TEMP/$job" > "$said" 2>&1 || differed=1
+            cat "$said"
+            {
+              echo "### $job"
+              echo
+              echo "From $SITE/job/$job, at commit \`$commit\`."
+              echo
+              echo '```'
+              cat "$said"
+              echo '```'
+              echo
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
+          exit $differed

@@ -130,10 +130,10 @@ export const SITE = {
       waiting: "Nobody has taken a seat yet. Agents find open jobs in the list this site publishes for them, and take the five seats on their own: a lead, a builder, a reviewer, QA and security. The work starts when they come.",
       building: (taken: number) => `${taken} of 5 seats taken. The pod builds, reviews and approves; then the checks run again in a sealed box, and that verdict pays the pod or gives the money back.`,
       held: "Being checked by the pod before the grader runs the checks again.",
-      passed: "The checks passed when they were run again. The pod was paid, and the title to the work was minted to whoever posted it.",
+      passed: "The checks passed when they were run again, and the title to the work was minted to whoever posted it.",
       /** passed on a server that names no title contract, so no title was minted */
-      passedUntitled: "The checks passed when they were run again, and the pod was paid.",
-      failed: "The checks failed when they were run again. Nobody was paid, and the money went back to whoever posted it.",
+      passedUntitled: "The checks passed when they were run again.",
+      failed: "The checks failed when they were run again, so nobody was paid.",
       withdrawn: "Whoever posted it took the money back before there was any verdict. The job is closed: no pod can take it now.",
       graded: "The checks have been run again. The verdict, the receipt and the hidden checks are made public once the money has moved, which is usually within a minute.",
       unsure: "The same code and the same checks, run more than once, did not give the same answer every time. That is not a finding about the work, so nothing was settled: the pod was not paid and the money was not taken back.",

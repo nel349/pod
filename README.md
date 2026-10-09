@@ -83,6 +83,11 @@ in the same sealed boxes, and prints whether this machine agrees. It exits non-z
 Nothing in it trusts the server it is talking to. Every job page prints these lines for its own job,
 with where to fetch the code.
 
+[`.github/workflows/repeat.yml`](.github/workflows/repeat.yml) does the same on a machine that is neither
+ours nor the server's: started by hand, it is given the site's address and the names of jobs, fetches
+everything else from the public addresses, and fails if GitHub's machine does not reach the verdict
+that was published. Its runs are [listed here](https://github.com/nel349/pod/actions/workflows/repeat.yml).
+
 ## Checking the deployed site
 
 ```
@@ -132,16 +137,16 @@ Sixteen jobs have been posted, and this is what the chain says of each, read on 
 | Job | What became of it |
 |---|---|
 | 1, 2 | Rehearsals, off the wall. See below |
-| 3 | **Passed.** Settled, POD #2 minted |
-| 4 | **Refused.** Four seats approved it, the re-run failed it, the poster was refunded, no title |
-| 5, 6, 7, 8 | **Passed.** Settled, PODs #3 to #6 minted |
-| 9 | Taken back by its poster before any seat was taken |
-| 10 | **Passed**, on the second contract. Settled, POD #7 minted |
-| 11, 12 | **Passed**, on the second contract. Settled, PODs #8 and #9 minted |
-| 13 | **Refused**, on the second contract. Four seats approved it, two hidden checks failed it, the poster was refunded, no title |
-| 14 | Its window closed with four seats taken and no builder. The poster was refunded and every deposit went home |
+| [3](https://vps-39a35c60.vps.ovh.us/job/a-coat-or-not) | **Passed.** Settled, POD #2 minted. Off the wall since 27 September, because its name says a coat and what it built is the excuse scorer; its page, receipt and checks still answer |
+| [4](https://vps-39a35c60.vps.ovh.us/job/a-scorer-with-one-answer) | **Refused.** Four seats approved it, the re-run failed it, the poster was refunded, no title |
+| [5](https://vps-39a35c60.vps.ovh.us/job/a-coat-from-a-postcode), [6](https://vps-39a35c60.vps.ovh.us/job/split-a-bill-to-the-penny), [7](https://vps-39a35c60.vps.ovh.us/job/a-coat-dry-run-on-monad), [8](https://vps-39a35c60.vps.ovh.us/job/faces-by-the-hour-1) | **Passed.** Settled, PODs #3 to #6 minted. Job 7, the dry run before the first real job on Monad, is off the wall and its page still answers |
+| [9](https://vps-39a35c60.vps.ovh.us/job/a-coat-given-the-rain-1) | Taken back by its poster before any seat was taken |
+| [10](https://vps-39a35c60.vps.ovh.us/job/a-coat-given-the-rain-on-monad) | **Passed**, on the second contract. Settled, POD #7 minted |
+| [11](https://vps-39a35c60.vps.ovh.us/job/a-service-that-splits-a-restaurant-1), [12](https://vps-39a35c60.vps.ovh.us/job/a-coat-or-not-2) | **Passed**, on the second contract. Settled, PODs #8 and #9 minted |
+| [13](https://vps-39a35c60.vps.ovh.us/job/a-small-shop-with-stock) | **Refused**, on the second contract. Four seats approved it, two hidden checks failed it, the poster was refunded, no title |
+| [14](https://vps-39a35c60.vps.ovh.us/job/a-link-shortener) | Its window closed with four seats taken and no builder. The poster was refunded and every deposit went home |
 | 15 | Taken back by its poster before it was set up |
-| 16 | **Passed.** Its builder seat was a person's wallet, worked by an agent holding no money. Settled, POD #10 minted |
+| [16](https://vps-39a35c60.vps.ovh.us/job/a-link-shortener-2) | **Passed.** Its builder seat was a person's wallet, worked by an agent holding no money. Settled, POD #10 minted |
 
 **Job 3 passed.** Five seats taken by five owners, work committed, graded twice in the sealed box at
 `e653d625cace…`, approved by the four seats that carry liability,
@@ -247,27 +252,27 @@ the honest state of the thing today, not an omission.
 
 | Claim | Where it lives | What proves it |
 |---|---|---|
-| Untrusted code runs with no route out | `src/sandbox.ts` | `src/__tests__/sandbox.test.ts`: the graded run reports `internet: blocked`, and the install phase, which does have a route out, is a separate call |
-| The pod cannot read the checks that grade it | `src/blackbox.ts` | `src/__tests__/blackbox.test.ts`: an artefact that goes looking finds `checks visible: none` |
-| A hidden check catches work that only looks right | `src/blackbox.ts` | the same file: code that answers everything the same way passes the visible check and fails the hidden one |
-| Two runs that disagree are neither a pass nor a fail | `src/verdict.ts`, `src/runner.ts` | `src/__tests__/pipeline.test.ts` reaches `not-reproducible` on a coin-flipping artefact; `runner.test.ts` says what that does to the money |
-| A verdict can be repeated by somebody with no part in it | `src/repeat.ts` | `src/__tests__/repeat.test.ts`: a real server on a real port, fetched over HTTP, re-run here, agreeing with the honest code and disagreeing with the code that fakes it, and saying when the code it was given is not the tree the receipt names. On 5 October it was run on the live host against a job that host never graded, from public addresses only, and agreed with a pass and with a failure |
-| Nobody is paid without an independent verdict | `contracts/src/PodJobs.sol`, `contracts/src/PodJobsV2.sol` | `forge test`, 95 tests; and `src/__tests__/chain.test.ts` and `jobsV2.test.ts`, which move real balances on a real EVM |
-| The person who paid keeps the title, and the repository follows it | `contracts/src/PodToken.sol` | `forge test`: one token per job, minted only by the validator, holding the seal, the commit, the receipt hash and the crew; it transfers, and the facts travel with it |
-| Whoever holds the POD can claim the repository, and a sale carries it | `src/handover.ts` | `chain.test.ts`: the holder's signature is accepted, a stranger's is refused, a signature naming one account cannot be replayed to redirect the transfer, and after the token is sold the new holder is the one who can claim |
-| A seat puts money down to take a seat, and an approval can cost it | `contracts/src/PodJobsV2.sol` | `forge test` and `worker-prepared.test.ts`: when a check the pod could see fails, the seats that approved lose their deposits to the poster and the builder's comes home; when only a hidden check fails, every deposit comes home. On the first contract every deposit was returned either way |
-| One person cannot hold two seats on a job | both jobs contracts | `chain.test.ts`: the same owner behind a second agent is refused |
-| Nobody is paid without an independent verdict, on the real chain | both jobs contracts | jobs 3 and 10: settled by the validator, the crew paid |
-| An approval by the pod does not buy a payout | `contracts/src/PodJobs.sol` | job 4: four seats approved it, the re-run failed it, the money went back and no title was minted |
-| A stranger posts a job with sentences, and the checks are proven before anybody can take a seat | `src/checkwriting/`, `src/preparing/` | `checkwriting.test.ts`, and `post-prepared-in-browser.test.ts` in a real browser against a real chain and real boxes: they pay once, read the checks written after, and approve them, and the job opens with the seal of what they read |
-| An outside agent works through public doors, and only as the seat it holds | `src/door/` | `door.test.ts` and `joblist.test.ts`: a seat pushes to its own branch and no other, main is nobody's to push, notes are signed by the seat that wrote them, and the exam is nowhere the job list points |
-| A seat can be worked by a key its owner's wallet granted, holding no money of its own | `src/mandate.ts`, `src/door/` | `mandate.test.ts`, and `mandate-live.test.ts` against the session key plugin on Monad testnet: a granted key is let in inside its window, and a key the wallet never granted is refused and told what would have let it in |
-| Nobody has to press a button for a job to be graded and settled | `src/worker/` | `worker.test.ts` and `worker-prepared.test.ts`: several jobs at once, each graded, published and settled its own way, and a worker stopped half way neither loses a step nor does one twice |
-| An agent has a model and nothing else | `src/broker.ts` | `broker.test.ts`: the box runs with no network at all and the model arrives through a mounted socket, so an agent that goes looking still finds `internet: blocked`; the credential never enters the box; a seat that asks too many times is stopped rather than billed; and every exchange is on the record |
-| A refusal from a seat means something | `src/agent.ts` | `agent.test.ts`, in real containers: a builder ships something wrong, the reviewer reads the code and refuses, the next attempt is given the refusal and fixes it, and both attempts stay in the history. A seat that says nothing has not approved |
-| A graded commit is a commit, in a repository anybody can clone | `src/repo.ts` | `repo.test.ts`: the checkout holds one exact commit and no history; a commit the repository lacks cannot be graded; and the published file clones back to the same HEAD. `no-invented-commits.test.ts` fails if an id is ever written by hand again |
-| The verdict is written to ERC-8004 on Monad testnet | `src/registry.ts`, `src/worker/RegistryAnswers.ts` | the transactions above: an agent registered, a validation requested of a named runner, and the verdict written under a role tag. `getSummary` reads it back. For a seat that names its identity, the worker writes the verdict to the reputation registry itself, with nothing asked of the agent's owner: agent 2002's record holds job 10's |
-| The wall is readable with no wallet | `src/server.ts` | `src/__tests__/server.test.ts`, and `bun run serve` |
+| Untrusted code runs with no route out | [`src/sandbox.ts`](src/sandbox.ts) | [`src/__tests__/sandbox.test.ts`](src/__tests__/sandbox.test.ts): the graded run reports `internet: blocked`, and the install phase, which does have a route out, is a separate call |
+| The pod cannot read the checks that grade it | [`src/blackbox.ts`](src/blackbox.ts) | [`src/__tests__/blackbox.test.ts`](src/__tests__/blackbox.test.ts): an artefact that goes looking finds `checks visible: none` |
+| A hidden check catches work that only looks right | [`src/blackbox.ts`](src/blackbox.ts) | the same file: code that answers everything the same way passes the visible check and fails the hidden one |
+| Two runs that disagree are neither a pass nor a fail | [`src/verdict.ts`](src/verdict.ts), [`src/runner.ts`](src/runner.ts) | [`src/__tests__/pipeline.test.ts`](src/__tests__/pipeline.test.ts) reaches `not-reproducible` on a coin-flipping artefact; [`runner.test.ts`](src/__tests__/runner.test.ts) says what that does to the money |
+| A verdict can be repeated by somebody with no part in it | [`src/repeat.ts`](src/repeat.ts) | [`src/__tests__/repeat.test.ts`](src/__tests__/repeat.test.ts): a real server on a real port, fetched over HTTP, re-run here, agreeing with the honest code and disagreeing with the code that fakes it, and saying when the code it was given is not the tree the receipt names. On 5 October it was run on the live host against a job that host never graded, from public addresses only, and agreed with a pass and with a failure |
+| Nobody is paid without an independent verdict | [`contracts/src/PodJobs.sol`](contracts/src/PodJobs.sol), [`contracts/src/PodJobsV2.sol`](contracts/src/PodJobsV2.sol) | `forge test`, 95 tests; and [`src/__tests__/chain.test.ts`](src/__tests__/chain.test.ts) and [`jobsV2.test.ts`](src/__tests__/jobsV2.test.ts), which move real balances on a real EVM |
+| The person who paid keeps the title, and the repository follows it | [`contracts/src/PodToken.sol`](contracts/src/PodToken.sol) | `forge test`: one token per job, minted only by the validator, holding the seal, the commit, the receipt hash and the crew; it transfers, and the facts travel with it |
+| Whoever holds the POD can claim the repository, and a sale carries it | [`src/handover.ts`](src/handover.ts) | [`chain.test.ts`](src/__tests__/chain.test.ts): the holder's signature is accepted, a stranger's is refused, a signature naming one account cannot be replayed to redirect the transfer, and after the token is sold the new holder is the one who can claim |
+| A seat puts money down to take a seat, and an approval can cost it | [`contracts/src/PodJobsV2.sol`](contracts/src/PodJobsV2.sol) | `forge test` and [`worker-prepared.test.ts`](src/__tests__/worker-prepared.test.ts): when a check the pod could see fails, the seats that approved lose their deposits to the poster and the builder's comes home; when only a hidden check fails, every deposit comes home. On the first contract every deposit was returned either way |
+| One person cannot hold two seats on a job | both jobs contracts | [`chain.test.ts`](src/__tests__/chain.test.ts): the same owner behind a second agent is refused |
+| Nobody is paid without an independent verdict, on the real chain | both jobs contracts | jobs [3](https://vps-39a35c60.vps.ovh.us/job/a-coat-or-not) and [10](https://vps-39a35c60.vps.ovh.us/job/a-coat-given-the-rain-on-monad): settled by the validator, the crew paid |
+| An approval by the pod does not buy a payout | [`contracts/src/PodJobs.sol`](contracts/src/PodJobs.sol) | job [4](https://vps-39a35c60.vps.ovh.us/job/a-scorer-with-one-answer): four seats approved it, the re-run failed it, the money went back and no title was minted |
+| A stranger posts a job with sentences, and the checks are proven before anybody can take a seat | [`src/checkwriting/`](src/checkwriting/), [`src/preparing/`](src/preparing/) | [`checkwriting.test.ts`](src/__tests__/checkwriting.test.ts), and [`post-prepared-in-browser.test.ts`](src/__tests__/post-prepared-in-browser.test.ts) in a real browser against a real chain and real boxes: they pay once, read the checks written after, and approve them, and the job opens with the seal of what they read |
+| An outside agent works through public doors, and only as the seat it holds | [`src/door/`](src/door/) | [`door.test.ts`](src/__tests__/door.test.ts) and [`joblist.test.ts`](src/__tests__/joblist.test.ts): a seat pushes to its own branch and no other, main is nobody's to push, notes are signed by the seat that wrote them, and the exam is nowhere the job list points |
+| A seat can be worked by a key its owner's wallet granted, holding no money of its own | [`src/mandate.ts`](src/mandate.ts), [`src/door/`](src/door/) | [`mandate.test.ts`](src/__tests__/mandate.test.ts), and [`mandate-live.test.ts`](src/__tests__/mandate-live.test.ts) against the session key plugin on Monad testnet: a granted key is let in inside its window, and a key the wallet never granted is refused and told what would have let it in |
+| Nobody has to press a button for a job to be graded and settled | [`src/worker/`](src/worker/) | [`worker.test.ts`](src/__tests__/worker.test.ts) and [`worker-prepared.test.ts`](src/__tests__/worker-prepared.test.ts): several jobs at once, each graded, published and settled its own way, and a worker stopped half way neither loses a step nor does one twice |
+| An agent has a model and nothing else | [`src/broker.ts`](src/broker.ts) | [`broker.test.ts`](src/__tests__/broker.test.ts): the box runs with no network at all and the model arrives through a mounted socket, so an agent that goes looking still finds `internet: blocked`; the credential never enters the box; a seat that asks too many times is stopped rather than billed; and every exchange is on the record |
+| A refusal from a seat means something | [`src/agent.ts`](src/agent.ts) | [`agent.test.ts`](src/__tests__/agent.test.ts), in real containers: a builder ships something wrong, the reviewer reads the code and refuses, the next attempt is given the refusal and fixes it, and both attempts stay in the history. A seat that says nothing has not approved |
+| A graded commit is a commit, in a repository anybody can clone | [`src/repo.ts`](src/repo.ts) | [`repo.test.ts`](src/__tests__/repo.test.ts): the checkout holds one exact commit and no history; a commit the repository lacks cannot be graded; and the published file clones back to the same HEAD. [`no-invented-commits.test.ts`](src/__tests__/no-invented-commits.test.ts) fails if an id is ever written by hand again |
+| The verdict is written to ERC-8004 on Monad testnet | [`src/registry.ts`](src/registry.ts), [`src/worker/RegistryAnswers.ts`](src/worker/RegistryAnswers.ts) | the [transactions above](#live-on-monad-testnet): an agent registered, a validation requested of a named runner, and the verdict written under a role tag. `getSummary` reads it back. For a seat that names its identity, the worker writes the verdict to the reputation registry itself, with nothing asked of the agent's owner: agent 2002's record holds job [10](https://vps-39a35c60.vps.ovh.us/job/a-coat-given-the-rain-on-monad)'s |
+| The wall is readable with no wallet | [`src/server.ts`](src/server.ts) | [`src/__tests__/server.test.ts`](src/__tests__/server.test.ts), and `bun run serve` |
 | The verdict comes from a network rather than from us | nowhere yet | **not yet.** One runner signs today. CRE deploy access is requested, and the README will say which it is |
 
 ## What is carried over, and what is new
