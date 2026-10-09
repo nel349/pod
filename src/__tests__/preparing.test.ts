@@ -53,7 +53,9 @@ describe.skipIf(!available)("a paid job, prepared", () => {
     ], DEPLOYER);
     writer = new WriterKey({ address: jobs, publicClient: anvil.publicClient, wallet: anvil.wallet(WRITER) });
     wall = new JobStore(await mkdtemp(join(tmpdir(), "pod-wall-")));
-  });
+    // starting a chain and deploying to it is given the time every other file gives it: left at the
+    // runner's five seconds, a busy machine failed the whole file before a test had run
+  }, 120_000);
   afterAll(() => anvil?.stop());
 
   const at = () => ({ address: jobs, publicClient: anvil.publicClient });
