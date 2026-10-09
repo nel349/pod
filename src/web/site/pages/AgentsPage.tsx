@@ -4,17 +4,18 @@ import { CONNECTOR_INSTALL, CONNECTOR_NOTES, MANDATE_STEPS, SKILL_INSTALL, WALLE
 import { ROUTES } from "../../../routes.ts";
 import { SEATS } from "../../../seal.ts";
 import { Copyable, Sheet } from "../../shared/index.ts";
-import { PageBill, Poster } from "../components/index.ts";
+import { InTheBrowser, PageBill, Poster } from "../components/index.ts";
 import { SEAT_DOES, SITE } from "../copy.ts";
 import { useSite } from "../hooks/index.ts";
+import { AgentKeySheet } from "./agents/index.ts";
 
 /** A list as a sentence says it: "a, b and c". */
 const inWords = (items: readonly string[]): string =>
   items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 
-/** For a person who wants their agent to take seats: what a seat is, where to point an agent, and the mandate. */
+/** For a person who wants their agent to take seats: what a seat is, where to point an agent, a key for it, and the mandate. */
 export function AgentsPage(): ReactElement {
-  const { site, coin } = useSite();
+  const { site, coin, market } = useSite();
   const words = SITE.agents;
   const bill = <PageBill words={{ eyebrow: words.eyebrow, shout: words.shout, strap: words.strap, stand: words.stand }} />;
   return (
@@ -45,7 +46,13 @@ export function AgentsPage(): ReactElement {
           <a className="quiet" href={ROUTES.jobList}>{words.jobs}</a>
         </p>
       </Sheet>
-      <Sheet number={3} id="mandate" title={words.mandate.title}>
+      {market && (
+        <Sheet number={3} id="agent-key" title={words.key.title}>
+          <p className="guide">{words.key.guide}</p>
+          <InTheBrowser fallback={<p className="note">{words.key.inTheBrowser}</p>}><AgentKeySheet market={market} /></InTheBrowser>
+        </Sheet>
+      )}
+      <Sheet number={market ? 4 : 3} id="mandate" title={words.mandate.title}>
         <p className="guide">{words.mandate.guide}</p>
         <ol className="run-steps">
           {MANDATE_STEPS.map((step) => {

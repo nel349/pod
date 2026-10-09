@@ -1,5 +1,6 @@
 /**
- * The passkey prompts: making a passkey wallet, opening it again, and reading its recovery phrase.
+ * The passkey prompts: making a passkey wallet, opening it again, reading its recovery phrase, and
+ * making a key for the person's agent.
  *
  * Each runs one passkey ceremony (Face ID, Touch ID, a security key or a device PIN) through Mera, and
  * gets back the passkey's PRF output, from which the wallet is worked out (derive.ts). Nothing secret
@@ -7,9 +8,9 @@
  */
 import { createPasskeyWithPrfOutput, getPasskeyPrfOutput, type PasskeyCredentialMetadata } from "@category-labs/mera";
 import { toViemAccount } from "@category-labs/mera/viem";
-import type { LocalAccount } from "viem";
+import type { Address, Hex, LocalAccount } from "viem";
 import { z } from "zod";
-import { accountAt, accountFromKey, PERSON_ACCOUNT, recoveryPhraseOf } from "./derive.ts";
+import { accountAt, accountFromKey, agentKeyFrom, PERSON_ACCOUNT, recoveryPhraseOf } from "./derive.ts";
 import { forgetForThisTab, keepForThisTab, keptForThisTab } from "./kept.ts";
 
 /** what the passkey is called in the person's password manager */
@@ -90,22 +91,54 @@ export async function makePasskeyWallet(): Promise<OpenPasskeyWallet> {
   return walletFrom(made.prfOutput);
 }
 
-/** Open the wallet of a passkey made before. One prompt. */
-export async function openPasskeyWallet(): Promise<OpenPasskeyWallet> {
+/** One prompt of a passkey made before: the one this browser remembers, or whichever the person picks. */
+async function askThePasskey(): Promise<{ readonly prfOutput: Uint8Array; readonly credentialId: string; readonly known: PasskeyCredentialMetadata | undefined }> {
   const rpId = siteOfThePasskey();
   const known = remembered(rpId);
-  const opened = await getPasskeyPrfOutput({ rpId, ...(known ? { credential: known } : {}) });
-  remember(rpId, known?.credentialId === opened.credentialId ? known : { credentialId: opened.credentialId });
+  const answered = await getPasskeyPrfOutput({ rpId, ...(known ? { credential: known } : {}) });
+  return { prfOutput: answered.prfOutput, credentialId: answered.credentialId, known };
+}
+
+/** Open the wallet of a passkey made before. One prompt. */
+export async function openPasskeyWallet(): Promise<OpenPasskeyWallet> {
+  const opened = await askThePasskey();
+  // the passkey that opens the wallet is the one asked for from now on
+  remember(siteOfThePasskey(), opened.known?.credentialId === opened.credentialId ? opened.known : { credentialId: opened.credentialId });
   return walletFrom(opened.prfOutput);
 }
 
 /** The wallet's 24-word recovery phrase, after a fresh prompt: shown, never kept. */
 export async function readRecoveryPhrase(): Promise<string> {
-  const rpId = siteOfThePasskey();
-  const known = remembered(rpId);
-  const { prfOutput } = await getPasskeyPrfOutput({ rpId, ...(known ? { credential: known } : {}) });
+  const { prfOutput } = await askThePasskey();
   try {
     return recoveryPhraseOf(prfOutput);
+  } finally {
+    prfOutput.fill(0);
+  }
+}
+
+/** A key for the person's agent, open on the page: the account that signs, the key to hand over, and the way to end it. */
+export interface OpenAgentKey {
+  /** which of the person's agents it is for, counted from 1 */
+  readonly number: number;
+  readonly account: LocalAccount;
+  /** what the agent is given. Shown when asked for, never stored */
+  readonly key: Hex;
+  readonly end: () => void;
+}
+
+/**
+ * The key for the person's agent of this number, from the same passkey as their wallet, after a fresh
+ * prompt. It is worked out again each time it is asked for and stored nowhere, so it cannot be lost,
+ * and once the page ends it nothing of it is left in this browser.
+ *
+ * @param wallet the open passkey wallet's address, which the passkey that answers has to be the one for
+ */
+export async function openAgentKey(number: number, wallet: Address): Promise<OpenAgentKey> {
+  const { prfOutput } = await askThePasskey();
+  try {
+    const { session, key } = agentKeyFrom(prfOutput, number, wallet);
+    return { number, account: toViemAccount(session), key, end: () => session.end() };
   } finally {
     prfOutput.fill(0);
   }

@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createTestClient, http, parseEther, type Address } from "viem";
+import { createTestClient, getAddress, http, isHex, parseEther, type Address } from "viem";
 import { mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
 import { readJobV2 } from "../jobsV2.ts";
 import { ROUTES } from "../routes.ts";
@@ -208,6 +208,67 @@ describe.skipIf(!available)("a stranger with no browser wallet makes one from a 
     await openMine(page);
     expect(await shownAddress(page)).toBe(address);
   }, 480_000);
+
+  test("on the Agents page the same passkey makes a key for an agent: its own address, the key it is handed, money sent to it and brought back", async () => {
+    const page = await aBrowserWithAPasskeyAuthenticator();
+    const SHEET = `document.querySelector("#agent-key")?.innerText ?? "no sheet"`;
+    const agentAddress = (): Promise<string> => page.evaluate<string>(`document.querySelector("#agent-address").textContent`);
+    const chain = createTestClient({ mode: "anvil", transport: http(anvil.rpc) });
+    await page.open(base + ROUTES.agents);
+
+    // no wallet anywhere: the sheet's one press makes the person a passkey wallet, and then offers the agent's key
+    await page.until(`document.querySelector("#agent-open-wallet")?.textContent === ${JSON.stringify(CHROME.wallet.panel.make)}`, "the sheet to offer making a passkey wallet", 30, SHEET);
+    await page.click("#agent-open-wallet");
+    await page.until(`document.querySelector("#make-agent-key")`, "the sheet to offer making the agent's key", 30, SHEET);
+    const person = getAddress(await shownAddressWhenOpen(page));
+
+    // one more prompt, and the agent has an address of its own
+    await page.click("#make-agent-key");
+    await page.until(`document.querySelector("#agent-address")`, "the agent's address", 30, SHEET);
+    const agent = getAddress(await agentAddress());
+    expect(agent).not.toBe(person);
+
+    // it is the next account of the same recovery phrase, so any wallet given the words finds it too
+    await page.click("#wallet-details");
+    await page.click("#show-phrase");
+    await page.until(`document.querySelectorAll("#recovery-phrase li").length === 24`, "the 24 words", 30, HEADER);
+    const phrase = await page.evaluate<string>(`[...document.querySelectorAll("#recovery-phrase li")].map((li) => li.textContent).join(" ")`);
+    expect(mnemonicToAccount(phrase, { addressIndex: 0 }).address).toBe(person);
+    expect(mnemonicToAccount(phrase, { addressIndex: 1 }).address).toBe(agent);
+    await page.click("#wallet-panel .wallet-panel-head button");
+
+    // the key it shows is that address's key, and the page keeps none of it
+    await page.click("#show-agent-key");
+    await page.until(`document.querySelector("#agent-key-shown pre")`, "the key", 30, SHEET);
+    const key = await page.evaluate<string>(`document.querySelector("#agent-key-shown pre").textContent`);
+    if (!isHex(key)) throw new Error(`the page showed something that is not a key: ${key.slice(0, 12)}`);
+    expect(privateKeyToAccount(key).address).toBe(agent);
+    expect(await page.evaluate<string>(`JSON.stringify({ ...localStorage, ...sessionStorage })`)).not.toContain(key.slice(2));
+
+    // money from the person's wallet to the agent's address, as much as the page offers
+    await chain.setBalance({ address: person, value: FUNDS });
+    await page.click("#fund-agent");
+    await page.until(`document.querySelector("#agent-said")?.dataset.done === "fund"`, "the money to arrive", 60, SHEET);
+    expect(await anvil.publicClient.getBalance({ address: agent })).toBe(parseEther("0.05"));
+
+    // another agent is another key, and going back to the first is the first key again: nothing was kept, and nothing was lost
+    await page.click("#another-agent");
+    await page.click("#make-agent-key");
+    await page.until(`document.querySelector("#agent-address")`, "the second agent's address", 30, SHEET);
+    expect(await agentAddress()).toBe(mnemonicToAccount(phrase, { addressIndex: 2 }).address);
+    await page.click("#agent-before");
+    await page.click("#make-agent-key");
+    await page.until(`document.querySelector("#agent-address")`, "the first agent's address again", 30, SHEET);
+    expect(await agentAddress()).toBe(agent);
+
+    // and everything it holds comes back, signed by the agent's own key, leaving it with nothing
+    const before = await anvil.publicClient.getBalance({ address: person });
+    await page.until(`document.querySelector("#bring-back")?.disabled === false`, "the page to know the address holds something", 30, SHEET);
+    await page.click("#bring-back");
+    await page.until(`document.querySelector("#agent-said")?.dataset.done === "back"`, "the money to come back", 60, SHEET);
+    expect(await anvil.publicClient.getBalance({ address: agent })).toBe(0n);
+    expect(await anvil.publicClient.getBalance({ address: person })).toBeGreaterThan(before);
+  }, 240_000);
 
   test("a passkey that cannot do PRF is told so, and nothing is connected", async () => {
     browser = await Browser.start();

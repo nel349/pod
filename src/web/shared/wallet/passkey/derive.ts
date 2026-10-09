@@ -10,13 +10,23 @@
  * Pure: the same bytes always make the same phrase and the same accounts.
  */
 import { createSecp256k1SigningSession, getEvmAddress, type EvmAddress, type Secp256k1SigningSession } from "@category-labs/mera";
-import { hexToBytes, toHex, type Hex } from "viem";
+import { hexToBytes, isAddressEqual, toHex, type Address, type Hex } from "viem";
 import { HDKey } from "@scure/bip32";
 import { entropyToMnemonic, mnemonicToSeedSync } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english";
 
 /** The person's own wallet: the first account on the path */
 export const PERSON_ACCOUNT = 0;
+/**
+ * The account kept for the person's agent of this number: the first agent is the account after the
+ * person's own, the second the one after that. Each is a key of its own, so an agent given one can
+ * spend what that address holds and nothing of the person's.
+ */
+export function agentAccount(number: number): number {
+  if (!Number.isInteger(number) || number < 1) throw new Error(`agents are numbered from 1, and ${number} is not one`);
+  return PERSON_ACCOUNT + number;
+}
+
 /** how many bytes a passkey's PRF output is, and so how much entropy the phrase carries: 24 words */
 const PRF_BYTES = 32;
 
@@ -53,6 +63,27 @@ export function accountAt(phrase: string, index: number): Derived {
   } finally {
     seed.fill(0);
   }
+}
+
+/** The passkey that answered is not the one the open wallet was made from, so its keys are another person's. */
+export class NotTheWalletsPasskey extends Error {
+  constructor(wallet: Address) {
+    super(`that passkey is not the one the open wallet, ${wallet}, was made from`);
+  }
+}
+
+/**
+ * The key for the person's agent of this number, from a passkey's output: given only when that output
+ * is the one the open wallet came from, so a second passkey in the same browser cannot hand over the
+ * keys of a wallet that is not the one on the page.
+ */
+export function agentKeyFrom(prfOutput: Uint8Array, number: number, wallet: Address): Derived {
+  const index = agentAccount(number);
+  const phrase = recoveryPhraseOf(prfOutput);
+  const person = accountAt(phrase, PERSON_ACCOUNT);
+  person.session.end();
+  if (!isAddressEqual(person.address, wallet)) throw new NotTheWalletsPasskey(wallet);
+  return accountAt(phrase, index);
 }
 
 /** The same account again, from the key a tab kept, with no passkey asked for. */

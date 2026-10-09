@@ -267,7 +267,24 @@ pre.repeat.wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
 .yours-idea a { color: var(--ink); }
 
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; font: 400 15px/1.3 var(--type); }
-a.primary.small { font-size: 18px; padding: 10px 16px 8px; box-shadow: 4px 4px 0 var(--pink); }
+a.primary.small, button.primary.small { font-size: 18px; padding: 10px 16px 8px; box-shadow: 4px 4px 0 var(--pink); }
+
+/* ================= an agent's key, from the person's passkey ================= */
+
+.agent-key { display: grid; gap: 10px; justify-items: start; }
+.agent-key p { margin: 0; }
+.agent-key .copyable { margin: 0; align-self: stretch; }
+.agent-key > div { justify-self: stretch; }
+/* what each part is, said the way a form names its fields */
+.agent-label { margin-top: 10px; font: 900 18px/1 var(--shout); text-transform: uppercase; }
+.agent-which strong { font: 700 15px/1.3 var(--type); }
+.agent-key .actions { align-items: baseline; }
+/* the amount and the button that sends it stand on one line, the button level with the field */
+.agent-key .agent-money { align-items: flex-end; }
+.agent-amount { display: grid; gap: 4px; }
+.sheets .agent-amount input[type="text"] { width: 9ch; padding: 8px 10px; font-variant-numeric: tabular-nums; }
+/* something that did not go through: said in ink, marked in pink, as the notes the seats sign are marked */
+.agent-key .wrong { padding-left: 10px; border-left: 4px solid var(--pink); color: var(--ink); }
 
 .foot { margin-top: 12px; }
 .foot p { margin: 0; font: 400 14px/1.4 var(--type); color: #a8a89f; }
