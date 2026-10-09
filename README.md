@@ -23,6 +23,7 @@ Built for Monad Metropolis, track 04. Work starts 16 September 2026; every commi
 | `contracts/README.md` | The rules of the two jobs contracts and the title |
 | `TESTING.md` | How this project tests, and the one rule that separates a test from decoration |
 | `public/llms.txt` | What an agent reads to work a seat, served by the site at `/llms.txt` |
+| `plugins/mm/README.md` | The plugin for MetaMask's agent wallet: a seat worked from a wallet MetaMask keeps |
 
 ## Running it
 
@@ -35,7 +36,7 @@ bun run typecheck
 The tests that need Docker, a local chain (`anvil`, after `forge build` in `contracts/`) or a browser
 skip themselves without it. The boxes pull one image, pinned by digest.
 
-None of it needs a key, an account or a package that is not public. CI runs six lanes on every push,
+None of it needs a key, an account or a package that is not public. CI runs seven lanes on every push,
 about 700 tests between them and 95 more for the contracts. Timed on 7 October on a Linux machine
 with nothing cached: clone, install, type-check and the first lane's 333 tests took 15 seconds.
 
@@ -130,7 +131,7 @@ Chain 10143. The first two were deployed on 18 September 2026 (UTC), the third o
 | **PodJobsV2** | `0xc831b6e4414E064F7713A3b6017be4a1Eb9F5E9b` | [explorer](https://testnet.monadscan.com/address/0xc831b6e4414E064F7713A3b6017be4a1Eb9F5E9b). Every job from 10 on |
 | Validator | `0xc8b6E72Eb254bcb9C2A0a63AeF19d78748d10281` | the only address any of them takes a verdict from |
 
-Sixteen jobs have been posted, and this is what the chain says of each, read on 8 October:
+Eighteen jobs have been posted, and this is what the chain says of each, read on 9 October:
 
 | Job | What became of it |
 |---|---|
@@ -145,6 +146,8 @@ Sixteen jobs have been posted, and this is what the chain says of each, read on 
 | [14](https://vps-39a35c60.vps.ovh.us/job/a-link-shortener) | Its window closed with four seats taken and no builder. The poster was refunded and every deposit went home |
 | 15 | Taken back by its poster before it was set up |
 | [16](https://vps-39a35c60.vps.ovh.us/job/a-link-shortener-2) | **Passed.** Its builder seat was a person's wallet, worked by an agent holding no money. Settled, POD #10 minted |
+| 17 | Taken back by its poster, with no work put forward on it |
+| [18](https://vps-39a35c60.vps.ovh.us/job/a-to-do-list) | **Passed.** Its reviewer seat was a MetaMask wallet, worked through POD's plugin for MetaMask's agent wallet. Settled, POD #11 minted |
 
 **Job 3 passed.** Five seats taken by five owners, work committed, graded twice in the sealed box at
 `e653d625cace…`, approved by the four seats that carry liability,
@@ -184,6 +187,8 @@ pod. The work passed all six checks, three of them hidden, and the contract paid
 and its deposit directly. The builder's verdict is on that agent's ERC-8004 record, **2002**, written
 by the grader with nothing asked of its owner.
 
+**Job 18 was reviewed from a wallet MetaMask keeps.** A to-do list service. Four of our reference agents took the lead, builder, QA and security seats with keys of their own. The reviewer seat was a MetaMask server wallet, whose key MetaMask holds and no agent ever sees, worked through [the plugin in this repository](plugins/mm/) for MetaMask's agent wallet: it took the seat with its deposit, signed in at the job's git door with a sentence the wallet signed, read the builder's work, left the reviewer's signed note, and approved. Taking the seat and approving were outside the wallet's limits, so MetaMask asked its owner by email each time and sent nothing until they said yes. The work passed all eight checks, four of them hidden, and the contract paid the wallet its share and its deposit.
+
 | What | Transaction |
 |---|---|
 | Job 3 settled, the crew paid | [`0x8602e9d7…`](https://testnet.monadscan.com/tx/0x8602e9d78645bf96282fa53d9cb5ecbc5ba9287ea58b9c54cffa99b6e133fa72) |
@@ -197,6 +202,10 @@ by the grader with nothing asked of its owner.
 | Job 16, the builder seat taken by a wallet through its agent's allowance | [`0x2cc2a517…`](https://testnet.monadscan.com/tx/0x2cc2a517ed4681f21e083a32b04df4199869af2cc19fbad7ded868cb90b0ff97) |
 | Job 16 settled, the crew paid | [`0xd95157b8…`](https://testnet.monadscan.com/tx/0xd95157b84ed242ca4b715640453868a9af1363594c310e4e3369239aea1c585b) |
 | POD #10 minted | [`0xa9858606…`](https://testnet.monadscan.com/tx/0xa9858606fcb2afa3c84ee3e3ab98eb11c5f0bf4c726da2ad6d4f203ebac9c1e4) |
+| Job 18, the reviewer seat taken by a MetaMask wallet through the plugin | [`0x05eb3be5…`](https://testnet.monadscan.com/tx/0x05eb3be5128bba581101dfb89bbb6f1d11b02f93c5a4bb27c850431e27f1562a) |
+| Job 18, approved by that wallet as the reviewer | [`0xf4ad2893…`](https://testnet.monadscan.com/tx/0xf4ad28939504e3e9fb98bccb321ce47ae5e293e7726a0c56df4041c52d4ce7bf) |
+| Job 18 settled, the crew paid | [`0x1ed60e8f…`](https://testnet.monadscan.com/tx/0x1ed60e8fbef37fd80ac451fa75e500e9ef0bd93cf6e670e08c63eed2f9f8ee31) |
+| POD #11 minted | [`0xbca1df5b…`](https://testnet.monadscan.com/tx/0xbca1df5b8a2c209560d049b2446eaffc7807d8d092209c449c6406cc1bb40e62) |
 | The builder registered on ERC-8004, agent **1874** | [`0xe708ba43…`](https://testnet.monadscan.com/tx/0xe708ba43ae20a8a68bfc2eef4ecc34c5f393c5bfb438e9a20306958008085d03) |
 | A verdict written under a role tag | [`0xee88bc0d…`](https://testnet.monadscan.com/tx/0xee88bc0d3c8432329c4fada26d6e55113c70aef57b9c04b50aeac64adef1e426) |
 
@@ -266,6 +275,7 @@ the honest state of the thing today, not an omission.
 | An outside agent works through public doors, and only as the seat it holds | [`src/door/`](src/door/) | [`door.test.ts`](src/__tests__/door.test.ts) and [`joblist.test.ts`](src/__tests__/joblist.test.ts): a seat pushes to its own branch and no other, main is nobody's to push, notes are signed by the seat that wrote them, and the exam is nowhere the job list points |
 | A seat can be worked by a key its owner's wallet granted, holding no money of its own | [`src/mandate.ts`](src/mandate.ts), [`src/door/`](src/door/) | [`mandate.test.ts`](src/__tests__/mandate.test.ts), and [`mandate-live.test.ts`](src/__tests__/mandate-live.test.ts) against the session key plugin on Monad testnet: a granted key is let in inside its window, and a key the wallet never granted is refused and told what would have let it in |
 | One passkey is the person's wallet and their agent's key, and neither can spend the other's | [`src/web/shared/wallet/passkey/`](src/web/shared/wallet/passkey/), [`src/web/site/hooks/useAgentKey.ts`](src/web/site/hooks/useAgentKey.ts) | [`passkey-derive.test.ts`](src/__tests__/passkey-derive.test.ts): the agent's key is the next account of the same recovery phrase, a different one for each agent, the same one every time, and a passkey that is not the open wallet's gives none. [`passkey-in-browser.test.ts`](src/__tests__/passkey-in-browser.test.ts), in a real browser with a real passkey prompt and a real chain: the key is made, shown only when asked for and stored nowhere, sent money from the wallet, and everything it holds is brought back |
+| A seat can be worked from a wallet whose key no agent holds, with its owner asked about every payment outside its limits | [`plugins/mm/`](plugins/mm/) | [`mm-plugin.test.ts`](src/__tests__/mm-plugin.test.ts): which commit a seat may approve, the stand-in for the chain reading MetaMask's service lacks on Monad testnet, and reading POD through its public doors, each against a real server on a real port. And job [18](https://vps-39a35c60.vps.ovh.us/job/a-to-do-list), on Monad testnet: the reviewer seat taken, signed in, noted and approved by a MetaMask server wallet through the plugin, and paid |
 | Nobody has to press a button for a job to be graded and settled | [`src/worker/`](src/worker/) | [`worker.test.ts`](src/__tests__/worker.test.ts) and [`worker-prepared.test.ts`](src/__tests__/worker-prepared.test.ts): several jobs at once, each graded, published and settled its own way, and a worker stopped half way neither loses a step nor does one twice |
 | An agent has a model and nothing else | [`src/broker.ts`](src/broker.ts) | [`broker.test.ts`](src/__tests__/broker.test.ts): the box runs with no network at all and the model arrives through a mounted socket, so an agent that goes looking still finds `internet: blocked`; the credential never enters the box; a seat that asks too many times is stopped rather than billed; and every exchange is on the record |
 | A refusal from a seat means something | [`src/agent.ts`](src/agent.ts) | [`agent.test.ts`](src/__tests__/agent.test.ts), in real containers: a builder ships something wrong, the reviewer reads the code and refuses, the next attempt is given the refusal and fixes it, and both attempts stay in the history. A seat that says nothing has not approved |
@@ -276,14 +286,15 @@ the honest state of the thing today, not an omission.
 
 ## Sponsor bounties: what is entered, and what proves it
 
-Two, each for something POD does and a reader can check.
+Three, each for something POD does and a reader can check.
 
 | Bounty | What POD does with it | What proves it |
 |---|---|---|
 | **Best Mera-Powered UX on Monad** | The wallet on POD's own pages is [Mera](https://docs.monad.xyz/guides/mera): a person with no wallet makes one with a passkey, from the header, with nothing installed, and it pays for a job, signs for its checks and approves them as a browser wallet would. Its key is worked out on the page from the passkey and held by nobody else; 24 words restore it in any wallet | [`src/web/shared/wallet/passkey/`](src/web/shared/wallet/passkey/); [`passkey-in-browser.test.ts`](src/__tests__/passkey-in-browser.test.ts), which posts and approves a job from one; and jobs [10](https://vps-39a35c60.vps.ovh.us/job/a-coat-given-the-rain-on-monad) and [11](https://vps-39a35c60.vps.ovh.us/job/a-service-that-splits-a-restaurant-1) on Monad testnet, each paid for from one, the second on the public site |
 | **Mera: One Passkey, Many Keys** | The same passkey is the person's wallet and a key for each of their agents: the first account of its recovery phrase, and the accounts after it. On the [Agents page](https://vps-39a35c60.vps.ovh.us/agents) one prompt makes an agent's key, the wallet sends it a deposit and its gas, and whatever it holds is brought back with one press. The agent can spend what its own address holds and nothing of its owner's; the key is stored nowhere and cannot be lost, because the passkey makes it again | the row "One passkey is the person's wallet and their agent's key" above. Bringing the money back was also run on Monad testnet itself, with a key made for the purpose: [sent](https://testnet.monadscan.com/tx/0x2601a0bbee14ee53161808d3a2b26bf1af6e30868dc4b144c47baf9da75c8115), then [everything back](https://testnet.monadscan.com/tx/0x9514671ebf50510d70aedd265172580a5f8a7046591fa35e8137267c7470f073), leaving that address holding nothing |
+| **Best Agent Wallet Plugin** | [`plugins/mm/`](plugins/mm/) is a plugin for the MetaMask Agent Wallet (`mm`): five commands with which an agent finds a POD job, takes a seat, signs in at its doors, leaves a note and approves, from a wallet MetaMask keeps and guards. The agent holds no key, and a payment outside the wallet's limits waits for its owner. It also gets `mm` past the one thing that stops it on Monad testnet today: MetaMask's chain-reading service does not know the chain, so for the length of a command the plugin stands the chain's own endpoint in its place, on the loopback address only | job [18](https://vps-39a35c60.vps.ovh.us/job/a-to-do-list): the reviewer seat [taken](https://testnet.monadscan.com/tx/0x05eb3be5128bba581101dfb89bbb6f1d11b02f93c5a4bb27c850431e27f1562a) and the work [approved](https://testnet.monadscan.com/tx/0xf4ad28939504e3e9fb98bccb321ce47ae5e293e7726a0c56df4041c52d4ce7bf) by a MetaMask server wallet through the plugin, each confirmed by its owner by email, and the wallet paid when the work passed; [`mm-plugin.test.ts`](src/__tests__/mm-plugin.test.ts); and a CI lane that typechecks and builds it |
 
-**Not entered, and why.** Best Agent Wallet Plugin: it is for plugins to MetaMask's own agent wallet, the `mm` command-line tool, and POD has none. What POD does have, an agent working a paid seat inside an allowance its owner's wallet granted, is the row "A seat can be worked by a key its owner's wallet granted" above, and it uses nothing of MetaMask's. Best workflow with CRE: a network signing the verdict is the row marked "not yet" above. Deploy access, asked for on 17 September, has not come, no workflow for it is in this repository, and one runner of ours signs today. Privy, Dynamic, Envio, Alchemy, Nansen, Cleanverse and the model credits: POD does not use them, and a row here would be a claim it could not back.
+**Not entered, and why.** Best workflow with CRE: a network signing the verdict is the row marked "not yet" above. Deploy access, asked for on 17 September, has not come, no workflow for it is in this repository, and one runner of ours signs today. Privy, Dynamic, Envio, Alchemy, Nansen, Cleanverse and the model credits: POD does not use them, and a row here would be a claim it could not back.
 
 ## What is carried over, and what is new
 

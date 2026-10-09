@@ -6,3 +6,6 @@ scratch/
 jobs/
 repos/
 retired/
+
+# the plugin for MetaMask's agent wallet: what its build writes
+plugins/mm/oclif.manifest.json
