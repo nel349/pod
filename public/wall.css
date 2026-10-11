@@ -269,6 +269,27 @@ pre.repeat.wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; font: 400 15px/1.3 var(--type); }
 a.primary.small, button.primary.small { font-size: 18px; padding: 10px 16px 8px; box-shadow: 4px 4px 0 var(--pink); }
 
+/* the line that sends somebody's agent to one job: which seat, then the line to copy, then where to start with no agent */
+.send-an-agent { margin: 0 0 16px; }
+.send-an-agent .guide { margin-bottom: 10px; }
+.send-an-agent .copyable { margin-bottom: 8px; }
+/* the seats still free, picked the way the posting page picks a job's length: one of a row, the picked one inked */
+.seat-pick { border: 0; margin: 0 0 12px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.seat-pick legend { padding: 0; margin-bottom: 8px; font: 400 14px/1.2 var(--type); width: 100%; }
+.seat-pick label {
+  position: relative;
+  padding: 8px 12px 6px;
+  border: 3px solid var(--ink);
+  font: 900 17px/1 var(--shout);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+.seat-pick .pays { font: 400 12px/1 var(--type); text-transform: none; }
+.seat-pick input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.seat-pick label:has(input:checked) { background: var(--ink); color: var(--yellow); }
+.seat-pick label:has(input:focus-visible) { outline: 3px solid var(--pink); outline-offset: 3px; }
+
 /* ================= an agent's key, from the person's passkey ================= */
 
 .agent-key { display: grid; gap: 10px; justify-items: start; }

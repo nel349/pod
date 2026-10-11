@@ -31,6 +31,8 @@ const { PayStep, ShardSeal, WrittenCheck } = await import("../web/post/component
 const { CHROME, ErrorBoundary } = await import("../web/shared/index.ts");
 const { AgentKey } = await import("../web/site/pages/agents/AgentKey.tsx");
 const { SITE } = await import("../web/site/copy.ts");
+const { SendAnAgent } = await import("../web/site/pages/job/SendAnAgent.tsx");
+const { SiteContext } = await import("../web/site/hooks/index.ts");
 const { COPY, progressOf, SHARDS } = await import("../web/post/state/index.ts");
 
 afterEach(() => cleanup());
@@ -293,5 +295,44 @@ describe("an agent's key, open on the page", () => {
   test("a payment the chain refused says why", () => {
     const drawn = render(<AgentKey view={{ ...OPEN, status: { kind: "stopped", move: "fund", why: "this wallet holds 0 MON, and this takes 0.05 MON." } }} on={presses().on} />);
     expect(drawn.getByRole("status").textContent).toBe(WORDS.stopped("this wallet holds 0 MON, and this takes 0.05 MON"));
+  });
+});
+
+
+describe("the line that sends an agent to an open job", () => {
+  const REVIEWER = { role: "reviewer", pay: "15000000000000000" } as const;
+  const QA = { role: "qa", pay: "15000000000000000" } as const;
+  const LINK = "https://pod.example/job/a-to-do-list";
+  const sheet = (free: Parameters<typeof SendAnAgent>[0]["free"]) => (
+    <SiteContext.Provider value={{ coin: "MON", drawnAt: "2026-10-11T03:00:00.000Z", site: "https://pod.example" }}>
+      <SendAnAgent jobId="a-to-do-list" free={free} />
+    </SiteContext.Provider>
+  );
+  const line = (drawn: { container: HTMLElement }): string => drawn.container.querySelector(".copyable pre")?.textContent ?? "";
+
+  test("it is for any free seat until one is picked, and then it names the seat picked", () => {
+    const drawn = render(sheet([REVIEWER, QA]));
+    expect(line(drawn)).toBe(SITE.job.sentenceForThisJob(LINK));
+    fireEvent.click(drawn.getByLabelText(/^reviewer/));
+    expect(line(drawn)).toBe("Take the reviewer seat on https://pod.example/job/a-to-do-list, work it to the end, and tell me what it paid.");
+    fireEvent.click(drawn.getByLabelText(SITE.job.anySeat));
+    expect(line(drawn)).toBe(SITE.job.sentenceForThisJob(LINK));
+  });
+
+  test("only the seats still free are offered, each with what it pays", () => {
+    const drawn = render(sheet([REVIEWER]));
+    expect(drawn.queryByLabelText(/^reviewer/)).not.toBeNull();
+    expect(drawn.queryByLabelText(/^qa/)).toBeNull();
+    expect(drawn.getByText("0.015 MON")).toBeTruthy();
+  });
+
+  test("a seat taken while the page is open is no longer named: the line goes back to any free seat", () => {
+    const drawn = render(sheet([REVIEWER, QA]));
+    fireEvent.click(drawn.getByLabelText(/^reviewer/));
+    expect(line(drawn)).toContain("the reviewer seat");
+    // the page follows the job: somebody else took the reviewer seat
+    drawn.rerender(sheet([QA]));
+    expect(line(drawn)).toBe(SITE.job.sentenceForThisJob(LINK));
+    expect(drawn.queryByLabelText(/^reviewer/)).toBeNull();
   });
 });

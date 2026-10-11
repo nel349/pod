@@ -1,11 +1,10 @@
 import type { ReactElement } from "react";
-import { ROUTES } from "../../../../routes.ts";
-import { SEATS } from "../../../../seal.ts";
 import { Sheet } from "../../../shared/index.ts";
 import { InTheBrowser, When } from "../../components/index.ts";
 import { SITE, timeLeft, whatHappensNext } from "../../copy.ts";
 import { useIsViewer, useNow } from "../../hooks/index.ts";
 import { moneyAt, type JobView, type MoneyView } from "../../views/index.ts";
+import { freeSeatsOf, SendAnAgent } from "./SendAnAgent.tsx";
 import { WhoseMoney } from "./WhoseMoney.tsx";
 
 /** A line only the poster reads: that money held is theirs to take back if the window closes first. */
@@ -43,10 +42,11 @@ function Money({ money, poster }: { readonly money: MoneyView; readonly poster: 
 export function StandsSheet({ job, lostTouch }: { readonly job: JobView; readonly lostTouch: boolean }): ReactElement {
   const isRunning = job.verdict === "running";
   const seatsTaken = job.seats.filter((seat) => seat.agent).length;
+  const free = freeSeatsOf(job.seats);
   return (
     <Sheet number={2} id="stands" title={SITE.job.standsTitle} stamp={false}>
       <p className="lede">{whatHappensNext(job.verdict, seatsTaken, job.title !== undefined)}</p>
-      {isRunning && seatsTaken < SEATS.length && <p><a className="quiet" href={ROUTES.agents}>{SITE.job.bringAnAgent}</a></p>}
+      {isRunning && free.length > 0 && <SendAnAgent jobId={job.jobId} free={free} />}
       {job.waitingBecause && <p className="note">{SITE.job.waitingBecause(job.waitingBecause)}</p>}
       {job.retired && <p className="note">{SITE.job.retired(job.retired)}</p>}
       {job.money && <Money money={job.money} poster={job.poster} />}

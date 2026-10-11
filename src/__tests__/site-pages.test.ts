@@ -7,6 +7,7 @@ import { DEPOSIT_PERCENT, SHARES } from "../job.ts";
 import {
   jobView, moneyAt, needsTheChainForMoney, receiptView, renderSite, tileView, unpublishedView, type AgentFactsView, type SiteData, type SitePage,
 } from "../web/site/index.ts";
+import { SEATS } from "../seal.ts";
 import { lengthOf, SITE, timeLeft, whenInUTC } from "../web/site/copy.ts";
 import { CONNECTOR_INSTALL, MANDATE_STEPS, SKILL_INSTALL, WALLET_ADDRESS } from "../mandate.ts";
 import type { SignedReceipt } from "../receipt.ts";
@@ -210,6 +211,24 @@ describe("one job, opened", () => {
   test("a job nobody has taken says who comes and when; one being built says how many seats are taken", () => {
     expect(job(running({ tile: tile({ verdict: "running", pod: [] }) }))).toContain("Nobody has taken a seat yet");
     expect(job(running())).toContain("2 of 5 seats taken");
+  });
+
+  test("a job with a free seat gives the line that sends an agent to it, by its own address, and offers only the seats still free", () => {
+    const link = `${SITE_ADDRESS}/job/excuses`;
+    expect(SITE.job.sentenceForThisJob(link)).toBe("Take a seat on https://pod.example/job/excuses, work it to the end, and tell me what it paid.");
+    expect(SITE.job.sentenceForThisJob(link, "reviewer")).toBe("Take the reviewer seat on https://pod.example/job/excuses, work it to the end, and tell me what it paid.");
+    // lead and builder are taken: the line is for any free seat until one is picked, and those two are not offered
+    const html = job(running());
+    expect(html).toContain(SITE.job.sentenceForThisJob(link));
+    const offered = [...html.matchAll(/data-seat="([a-z]+)"/g)].map((found) => found[1]);
+    expect(offered).toEqual(["reviewer", "qa", "security"]);
+    // a pod that is full has no seat to send anybody to, and a job that is over has none either
+    const full = SEATS.map((role, index) => {
+      const holder: `0x${string}` = `0x${String(index + 1).padStart(40, "0")}`;
+      return { role, agent: holder, owner: holder };
+    });
+    expect(job(running({ tile: tile({ verdict: "running", receiptURI: undefined, finishedAt: undefined, pod: full }) }))).not.toContain(SITE.job.sendYourAgent);
+    expect(job(record())).not.toContain(SITE.job.sendYourAgent);
   });
 
   test("while it runs, the pod's notes are kept back, and said to be", () => {
