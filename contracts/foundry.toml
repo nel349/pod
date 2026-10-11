@@ -12,10 +12,19 @@ remappings = [
 ]
 
 # The reputation registry is too deep for the plain compiler, as the ERC-8004 team's own build knows:
-# it is compiled through the IR, and only it. Our own contracts compile exactly as they are deployed.
-additional_compiler_profiles = [{ name = "through-ir", via_ir = true, optimizer = true }]
+# it is compiled through the IR, and only it. Our own contracts compile exactly as they are deployed:
+# the first two jobs contracts and the title contract plainly, as they went to Monad, and the third
+# with the optimizer, without which it is larger than the 24,576 bytes a chain allows a contract. The
+# third's tests, its deployment and every test in TypeScript run that same optimized code. A file that
+# imports the second contract beside the third gets a copy of the second built to match, kept beside
+# the plain one under another name, and nothing deploys that copy to a real chain.
+additional_compiler_profiles = [
+  { name = "through-ir", via_ir = true, optimizer = true },
+  { name = "optimized", via_ir = false, optimizer = true, optimizer_runs = 1000 },
+]
 compilation_restrictions = [
   { paths = "lib/erc-8004-contracts/contracts/ReputationRegistryUpgradeable.sol", via_ir = true },
+  { paths = "src/PodJobsV3.sol", via_ir = false, min_optimizer_runs = 1000 },
 ]
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
