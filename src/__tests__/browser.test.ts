@@ -10,6 +10,7 @@ import { JobStore, type JobRecord } from "../store.ts";
 import { signReceipt, type Receipt } from "../receipt.ts";
 import { checksPath, jobPath, receiptPath, ROUTES } from "../routes.ts";
 import type { Tile } from "../gallery.ts";
+import { SITE } from "../web/site/copy.ts";
 
 /**
  * The wall, driven the way a person drives it.
@@ -143,7 +144,7 @@ describe.skipIf(!available)("the wall, driven the way a person drives it", () =>
     await browser.open(base + jobPath("one-still-open"));
     const text = (await browser.text()).toLowerCase();
     expect(text).toContain("what is asked");
-    expect(text).toContain("2 more checks are sealed");
+    expect(text).toContain(SITE.job.sealedCount(2).toLowerCase());
     expect(await browser.evaluate<string>(`[...document.querySelectorAll("#pod li.open .seat-role")].map((seat) => seat.textContent).join(",")`)).toContain("security");
 
     await browser.open(base + checksPath("one-still-open"));

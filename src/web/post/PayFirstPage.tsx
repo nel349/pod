@@ -23,7 +23,9 @@ export function PayFirstPage({ market, writing }: { readonly market: MarketConfi
   // failing that, a draft left here before, as it was left
   const [draftBack, setDraftBack] = useState(() => (kept ? undefined : draftStore.read(market)));
   const form = useForm<PostForm>({
-    resolver: zodResolver(PostFormSchema), defaultValues: kept ? formOfKeptSetUp(kept) : draftBack?.form ?? BLANK_FORM, mode: "onSubmit",
+    resolver: zodResolver(PostFormSchema),
+    // a draft kept before a field existed is laid over a blank form, so nothing it lacks is left undefined
+    defaultValues: kept ? formOfKeptSetUp(kept) : draftBack ? { ...BLANK_FORM, ...draftBack.form } : BLANK_FORM, mode: "onSubmit",
   });
   const draft: DraftForm = useWatch({ control: form.control });
   usePointerDrift();
@@ -54,7 +56,7 @@ export function PayFirstPage({ market, writing }: { readonly market: MarketConfi
   return (
     <StepOrderContext.Provider value={PAY_FIRST_STEPS}>
       <div className="poster">
-        <Bill progress={progress} working={paying.status.kind === "posting" ? "pay" : undefined} />
+        <Bill progress={progress} working={paying.status.kind === "posting" ? "pay" : undefined} rule={market.lastWord} />
         <FormProvider {...form}>
           <form id="post" className="sheets" noValidate onSubmit={(event) => void paying.submit(event)}>
             <ProgressStrip progress={progress} working={paying.status.kind === "posting" ? "pay" : undefined} />
@@ -62,7 +64,7 @@ export function PayFirstPage({ market, writing }: { readonly market: MarketConfi
             <IdeaStep />
             <LinesStep lines="brief" />
             <LinesStep lines="exam" />
-            <TermsStep coin={market.coin} isPaid={paying.kept !== undefined} />
+            <TermsStep coin={market.coin} isPaid={paying.kept !== undefined} canTell={market.lastWord?.tellsByMail === true} />
             <PayFirstStep
               market={market}
               view={{

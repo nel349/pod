@@ -23,10 +23,10 @@ const SALT = "0123456789abcdef0123456789abcdef";
 const PRICE = parseEther("0.1");
 const ZERO_SEAL = `0x${"0".repeat(64)}` as const;
 
-const triedCheck = (says: string, secret: boolean, file: string, nearMiss = true): TriedCheck => ({
-  checkable: true, says, secret, asks: "asks", expects: "expects", nearMiss: "It never says take a coat.",
-  file, source: `// ${says}\nprocess.exit(0);\n`, proof: { working: true, nearMiss, nothing: true },
-  saw: { working: "ok", nearMiss: "caught", nothing: "caught" },
+const triedCheck = (says: string, secret: boolean, file: string, hasFailedOnNothing = true): TriedCheck => ({
+  checkable: true, says, secret, asks: "asks", expects: "expects",
+  file, source: `// ${says}\nprocess.exit(0);\n`, proof: { nothing: hasFailedOnNothing },
+  saw: { nothing: hasFailedOnNothing ? "caught" : "fine" },
 });
 const CHECKS: readonly Written[] = [triedCheck(WET, false, "check-1.mjs"), triedCheck(DRY, true, "check-2.mjs")];
 

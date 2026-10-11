@@ -42,32 +42,49 @@ const MARKET = {
   jobs: "0x0000000000000000000000000000000000000001" as const, explorer: "http://explorer.invalid", coin: "MON",
 };
 
-const SHAKY: TriedCheck = {
+const READY: TriedCheck = {
   checkable: true, says: "When it is dry, it tells me I do not need one", secret: true,
-  asks: "Asks while it is dry", expects: "No coat needed", nearMiss: "It always says take a coat.",
+  asks: "Asks while it is dry", expects: "No coat needed",
   file: "check-2.mjs", source: "process.exit(0);",
-  proof: { working: true, nearMiss: false, nothing: true },
-  saw: { working: "dry said no coat", nearMiss: "fine", nothing: "404" },
+  proof: { nothing: true },
+  saw: { nothing: "404" },
 };
+/** a check that passes with nothing built */
+const SHAKY: TriedCheck = { ...READY, proof: { nothing: false }, saw: { nothing: "fine" } };
 
 describe("a written check", () => {
-  test("a failed trial says what went wrong and what the check printed; a passed one says only that it passed", () => {
-    render(<ul><WrittenCheck check={SHAKY} /></ul>);
-    const trials = screen.getAllByRole("listitem").filter((item) => item.classList.contains("trial"));
-    expect(trials.map((item) => item.className)).toEqual(["trial held", "trial broke", "trial held"]);
-    expect(trials[1]?.textContent).toBe(`Let a near miss through: it always says take a coat. ${COPY.checks.trials.saw("fine")}`);
-    expect(trials[0]?.textContent).toBe(COPY.checks.trials.working.held);
+  test("a check that can be used shows the line, how it is checked, when it passes, and that it is ready", () => {
+    render(<ul><WrittenCheck check={READY} /></ul>);
+    const [check] = screen.getAllByRole("listitem");
+    expect(check?.className).toBe("written-check");
+    expect(check?.querySelector(".which")?.textContent).toBe(COPY.checks.exam);
+    expect(check?.querySelector(".says")?.textContent).toBe(READY.says);
+    expect([...check?.querySelectorAll(".readback dd") ?? []].map((said) => said.textContent)).toEqual([READY.asks, READY.expects]);
+    expect(check?.querySelector(".standing")?.className).toBe("standing ready");
+    expect(check?.querySelector(".standing")?.textContent).toBe(COPY.checks.ready);
+    // nothing is said of what is left out when the check leaves nothing out
+    expect(check?.querySelector(".leaves-out")).toBeNull();
   });
 
-  test("a check whose near miss failed another line too is still proven, and says which line under the trial", () => {
-    const other = "When it is raining, it tells me to take one";
-    render(<ul><WrittenCheck check={{ ...SHAKY, proof: { working: true, nearMiss: true, nothing: true }, nearMissAlsoBroke: [other] }} /></ul>);
-    const [check] = screen.getAllByRole("listitem").filter((item) => item.classList.contains("written-check"));
-    expect(check?.className).toBe("written-check");
-    const trials = screen.getAllByRole("listitem").filter((item) => item.classList.contains("trial"));
-    expect(trials.map((item) => item.className)).toEqual(["trial held", "trial held", "trial held"]);
-    expect(trials[1]?.querySelector(".also")?.textContent).toBe(COPY.checks.trials.nearMiss.alsoBroke([other]));
-    expect(trials[0]?.querySelector(".also")).toBeNull();
+  test("what a line asks for that its check cannot look at is said under it, in the writer's own sentence", () => {
+    render(<ul><WrittenCheck check={{ ...READY, leavesOut: "A real mint on a blockchain." }} /></ul>);
+    expect(document.querySelector(".leaves-out")?.textContent).toBe(`${COPY.checks.leavesOut} A real mint on a blockchain.`);
+    // and the check can still be used
+    expect(document.querySelector(".standing")?.className).toBe("standing ready");
+  });
+
+  test("a check that would pass with nothing built says so, and is not shown as ready", () => {
+    render(<ul><WrittenCheck check={SHAKY} /></ul>);
+    const [check] = screen.getAllByRole("listitem");
+    expect(check?.className).toBe("written-check shaky");
+    expect(check?.querySelector(".standing")?.className).toBe("standing not");
+    expect(check?.querySelector(".standing")?.textContent).toBe(COPY.checks.notUsable.passesNothing);
+  });
+
+  test("nothing of how a check was tried is shown: no trials, and nothing a check printed", () => {
+    render(<ul><WrittenCheck check={SHAKY} /></ul>);
+    expect(document.querySelector(".trials, .trial, .saw")).toBeNull();
+    expect(document.body.textContent).not.toContain("near miss");
   });
 
   test("the program itself is there, folded away, for anybody who wants to read it", () => {
@@ -124,7 +141,7 @@ describe("after a payment that went through", () => {
   test("if publishing then failed, the button offers to finish the paid job, and says what was paid", async () => {
     const { sealJob } = await import("../web/post/state/index.ts");
     const sealed = await sealJob(
-      { idea: "A service that tells me about coats", kind: "service", brief: [], exam: [], price: "0.1", mode: "flash", name: "a-coat" },
+      { idea: "A service that tells me about coats", kind: "service", brief: [], exam: [], price: "0.1", mode: "flash", name: "a-coat", tell: "" },
       [], "a-salt",
     );
     render(
@@ -156,7 +173,7 @@ describe("sealing what is on the page", () => {
     const form = {
       idea: "A service that tells me whether to take a coat", kind: "service" as const,
       brief: [{ says: "When it is raining, it says take a coat" }], exam: [],
-      price: "0.1", mode: "flash" as const, name: "a-coat",
+      price: "0.1", mode: "flash" as const, name: "a-coat", tell: "",
     };
     const tried = (source: string): TriedCheck => ({ ...SHAKY, secret: false, says: form.brief[0]!.says, source, proof: { working: true, nearMiss: true, nothing: true } });
     const key = requestKey(toWriteRequest(form));

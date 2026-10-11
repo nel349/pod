@@ -8,6 +8,7 @@ import { ROUTES, cardPath, checkFilePath, checksPath, jobApiPath, jobPath, recei
 import type { SignedReceipt } from "../receipt.ts";
 import { JobViewSchema } from "../web/site/index.ts";
 import type { Tile } from "../gallery.ts";
+import { SITE } from "../web/site/copy.ts";
 
 const LEAD = "0x1111111111111111111111111111111111111111" as const;
 const BUILDER = "0x2222222222222222222222222222222222222222" as const;
@@ -92,8 +93,8 @@ describe("the wall", () => {
     const body = await (await get(store, ROUTES.wall)).text();
     expect(body.indexOf(jobPath("newer"))).toBeLessThan(body.indexOf(jobPath("older")));
     expect(body).toContain("checks failed");
-    expect(body).toContain("<b>1</b> paid");
-    expect(body).toContain("<b>1</b> refused");
+    expect(body).toContain(`<b>1</b> ${SITE.wall.tally.paid}`);
+    expect(body).toContain(`<b>1</b> ${SITE.wall.tally.failed}`);
   });
 
   test("what is running is at the top, then what happened, newest first", async () => {
@@ -157,7 +158,7 @@ describe("one job, opened", () => {
 
     const body = await (await get(store, jobPath("a-weather-page"))).text();
     expect(body).toContain("What is asked");
-    expect(body).toContain("2 more checks are sealed until there is a verdict");
+    expect(body).toContain(SITE.job.sealedCount(2));
     expect(body).toMatch(/seat-role">security<\/p>.*?>open</);
   });
 

@@ -4,15 +4,17 @@
  * A chain that cannot be read right now does not take a page down: the page is drawn without what the
  * chain would have added, says so where it matters, and the reason is logged for whoever runs this.
  */
-import type { Address } from "viem";
+import { isAddress, isAddressEqual, type Address } from "viem";
 import { recordByRole } from "./agentpage.ts";
 import { firstLine } from "./errors.ts";
 import type { AgentFactsReader } from "./agentFacts.ts";
 import type { Owners } from "./owners.ts";
+import type { Records } from "./records.ts";
 import { jobPath } from "./routes.ts";
 import { isPublished, publicRecord, type JobRecord, type JobStore } from "./store.ts";
 import {
-  agentFactsView, jobView, needsTheChainForMoney, receiptView, tileView, unpublishedView, yoursEntry,
+  answerOf,
+  agentFactsView, jobView, needsTheChainForMoney, receiptView, seatsOfYours, tileView, unpublishedView, yoursEntry,
   type ChainSays, type JobView, type ReceiptView, type SitePage, type TileView, type YoursEntry, type YoursView,
 } from "./web/site/index.ts";
 
@@ -48,10 +50,29 @@ async function chainSaysOf(record: JobRecord, owners: Owners | undefined, now: D
   return { ...who, ...money, ...(owners.isPreparedFirst(record) ? { takesBackBeforeASeat: true } : {}) };
 }
 
-/** A record as a tile, linking its receipt only when a signed one is kept. */
+/**
+ * How a job's poster and its seated agents have fared, where the job's own contract keeps count. A
+ * count that could not be read is left out, which the page says nothing about, never guessed.
+ */
+async function recordsOf(record: JobRecord, poster: string | undefined, records: Records | undefined): Promise<Pick<ChainSays, "posterRecord" | "agentRecords">> {
+  if (!records || !record.chain || !isAddressEqual(record.chain.jobs, records.jobs)) return {};
+  const agents = [...new Set(record.tile.pod.map((seat) => seat.agent.toLowerCase()))].filter((agent): agent is Address => isAddress(agent));
+  const [posterRecord, counted] = await Promise.all([
+    poster && isAddress(poster) ? quietly(`how ${poster}'s jobs ended`, () => records.poster(poster)) : undefined,
+    Promise.all(agents.map(async (agent) => [agent, await quietly(`how ${agent}'s jobs ended`, () => records.agent(agent))] as const)),
+  ]);
+  const agentRecords = Object.fromEntries(counted.flatMap(([agent, found]) => (found ? [[agent, found]] : [])));
+  return { ...(posterRecord ? { posterRecord } : {}), ...(Object.keys(agentRecords).length > 0 ? { agentRecords } : {}) };
+}
+
+/** Where a job's delivered website answers now: nowhere while its verdict is sealed, or once it was taken down. */
+const liveAddressOf = (record: JobRecord): string | undefined =>
+  record.live && record.live.removedAt === undefined && isPublished(record) ? record.live.url : undefined;
+
+/** A record as a tile, linking its receipt only when a signed one is kept, and its website while it is live. */
 const tileOf = (record: JobRecord): TileView => {
   const shown = publicRecord(record);
-  return tileView(shown.tile, shown.signed !== undefined);
+  return tileView(shown.tile, shown.signed !== undefined, isPublished(record) ? answerOf(record) : undefined, liveAddressOf(record));
 };
 
 /** Whether a job is shown among others, on the wall, an agent's page or your own: a retired one is not. */
@@ -61,21 +82,25 @@ export async function wallPage(store: JobStore): Promise<SitePage> {
   return { page: "wall", tiles: (await store.inWallOrder()).filter(isShown).map(tileOf) };
 }
 
-export async function jobData(store: JobStore, owners: Owners | undefined, jobId: string, now: Date): Promise<JobView | undefined> {
+export async function jobData(store: JobStore, owners: Owners | undefined, jobId: string, now: Date, records?: Records): Promise<JobView | undefined> {
   const record = await store.read(jobId);
   if (!record) return undefined;
-  return jobView(publicRecord(record, now), await store.notes(jobId), await chainSaysOf(record, owners, now));
+  const chainSays = await chainSaysOf(record, owners, now);
+  return jobView(publicRecord(record, now), await store.notes(jobId), { ...chainSays, ...(await recordsOf(record, chainSays.poster, records)) });
 }
 
-export async function agentPage(store: JobStore, agent: Address, agents: AgentFactsReader | undefined): Promise<SitePage> {
+export async function agentPage(store: JobStore, agent: Address, agents: AgentFactsReader | undefined, records?: Records): Promise<SitePage> {
   const wanted = agent.toLowerCase();
-  const records = await store.inWallOrder();
-  const sat = records.filter(isShown).filter((record) => record.tile.pod.some((seat) => seat.agent.toLowerCase() === wanted));
+  const all = await store.inWallOrder();
+  const sat = all.filter(isShown).filter((record) => record.tile.pod.some((seat) => seat.agent.toLowerCase() === wanted));
   // with no chain to answer to, nothing is known beyond this wall, and that is not a failure to read
-  const facts = agents ? await quietly(`what is known of ${agent}`, () => agents.of(agent, records)) : {};
+  const [facts, answered] = await Promise.all([
+    agents ? quietly(`what is known of ${agent}`, () => agents.of(agent, all)) : {},
+    records ? quietly(`how ${agent}'s jobs ended`, () => records.agent(agent)) : undefined,
+  ]);
   return {
     page: "agent", agent, record: [...recordByRole(agent, sat.map((record) => publicRecord(record).tile))],
-    facts: agentFactsView(facts), tiles: sat.map(tileOf),
+    facts: agentFactsView(facts), tiles: sat.map(tileOf), ...(answered ? { answered } : {}),
   };
 }
 
@@ -116,5 +141,7 @@ export async function yoursData(
     posted: posted.sort(runningFirst),
     ...(unpublished ? { unpublished } : {}),
     holds: read.filter(({ who }) => who.holder?.toLowerCase() === wanted).map(({ record, who }) => yoursEntry(publicRecord(record, now), who)),
+    // every job, on a chain or not: a seat is on the record whichever contract the job is on
+    seats: (await store.all()).filter(isShown).flatMap((record) => seatsOfYours(publicRecord(record, now), address)),
   };
 }

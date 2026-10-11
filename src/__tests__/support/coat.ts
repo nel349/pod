@@ -2,9 +2,8 @@
  * A job about coats, and what a check writer might hand back for it.
  *
  * The model is the one thing the check-writing tests do not run for real: what is under test is what
- * the platform does with whatever the writer hands over. These are the replies a good writer, a lazy
- * one and a dishonest one would give, written out so the platform can be shown to tell them apart by
- * running them.
+ * the platform does with whatever the writer hands over. These are the replies a good writer and a
+ * careless one would give, written out so the platform can be shown to tell them apart by running them.
  */
 import type { Model } from "../../broker.ts";
 import type { CheckWriter, WriteRequest } from "../../checkwriting/index.ts";
@@ -29,6 +28,7 @@ export const serverSaying = (wet: string, dry: string): string => `require("http
   response.end(JSON.stringify({ coat: rain === "yes" ? ${wet} : ${dry} }));
 }).listen(3000);`;
 
+/** The work a pod would hand in for the coat job: what the checks are run on once it is built. */
 export const WORKING = serverSaying("true", "false");
 
 const checkThat = (rain: string, coat: boolean): string => `const answer = await (await fetch(process.env.TARGET + "/?rain=${rain}")).json().catch(() => ({}));
@@ -37,12 +37,10 @@ console.log("rain=${rain} said coat=${coat}");`;
 
 /** What a good writer hands back for each of the two sentences. */
 export const good = (i: 0 | 1) => i === 0
-  ? { checkable: true, asks: "Asks while it is raining", expects: "Take a coat", check: checkThat("yes", true),
-    nearMiss: "It never says take a coat", nearMissServer: serverSaying("false", "false") }
-  : { checkable: true, asks: "Asks while it is dry", expects: "No coat needed", check: checkThat("no", false),
-    nearMiss: "It always says take a coat", nearMissServer: serverSaying("true", "true") };
+  ? { checkable: true, asks: "Asks while it is raining", expects: "Take a coat", check: checkThat("yes", true) }
+  : { checkable: true, asks: "Asks while it is dry", expects: "No coat needed", check: checkThat("no", false) };
 
-export const GOOD_REPLY = { working: WORKING, checks: [good(0), good(1)] };
+export const GOOD_REPLY = { checks: [good(0), good(1)] };
 
 const asAnswer = (reply: unknown): string => (typeof reply === "string" ? reply : "```json\n" + JSON.stringify(reply) + "\n```");
 

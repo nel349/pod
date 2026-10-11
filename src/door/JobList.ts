@@ -9,13 +9,14 @@
  * What it never holds: the exam. The hidden checks are counted, never shown; the pod sees them when
  * the job has a verdict, like everybody else.
  */
-import { isAddress, type Address } from "viem";
+import { isAddress, isAddressEqual, type Address } from "viem";
 import { z } from "zod";
 import { KINDS, MODE_NAMES, publicSpec } from "../job.ts";
 import { checkFilePath, gitPath, isSafeName, jobPath, notesPath, ROUTES } from "../routes.ts";
 import { SEATS } from "../seal.ts";
 import type { JobStore } from "../store.ts";
 import { NO_STORE } from "../headers.ts";
+import type { Records } from "../records.ts";
 import type { Doorkeeper } from "./Doorkeeper.ts";
 
 /** Raised only when the shape changes in a way an agent reading the old one would misread */
@@ -38,8 +39,24 @@ export const ListedSeatSchema = z.object({
   heldBy: z.object({ agent: AddressSchema, owner: AddressSchema }).optional(),
 });
 
+const CountSchema = z.number().int().nonnegative();
+
+/**
+ * Whoever posted a job, and how the jobs they posted before have ended, where the contract keeps
+ * count. `refusedPassed` is the one to look at before taking a seat: work whose checks passed, which
+ * they refused all the same, leaving its pod a quarter of its pay.
+ */
+export const ListedPosterSchema = z.object({
+  address: AddressSchema,
+  record: z.object({
+    posted: CountSchema, accepted: CountSchema, refusedPassed: CountSchema, refusedFailed: CountSchema, unanswered: CountSchema,
+  }).optional(),
+});
+
 export const ListedJobSchema = z.object({
   jobId: z.string(),
+  /** who posted it, and has the last word on what a pod delivers where the contract gives it to them */
+  poster: ListedPosterSchema.optional(),
   /** where things are, as paths on this server */
   at: z.object({ page: z.string(), git: z.string(), notes: z.string() }),
   /** the contract to take a seat on, and the job's number there. The chain itself is at `market` */
@@ -68,7 +85,10 @@ export const ListedJobSchema = z.object({
   seats: z.array(ListedSeatSchema),
   /** the owners already in the pod. One owner to a job, so an owner here has nothing left to take */
   owners: z.array(AddressSchema),
-  /** the roles that still have a free seat. The contract pays nobody until every one is filled */
+  /**
+   * The roles a seat can still be taken in. None while the job is locked for grading, whatever seats
+   * are empty: work is graded as soon as every seat that is taken stands behind it
+   */
   free: z.array(z.enum(SEATS)),
 });
 
@@ -95,7 +115,7 @@ export const LIST_FRESH_FOR_MS = 2_000;
 export class JobList {
   private kept?: { readonly at: number; readonly listing: Promise<JobListing> };
 
-  constructor(private readonly options: { readonly keeper: Doorkeeper; readonly store: JobStore }) {}
+  constructor(private readonly options: { readonly keeper: Doorkeeper; readonly store: JobStore; readonly records?: Records }) {}
 
   async handle(): Promise<Response> {
     return Response.json(await this.fresh(), { headers: NO_STORE });
@@ -124,7 +144,7 @@ export class JobList {
       const spec = await store.spec(jobId);
       if (!spec) continue;
 
-      const [held, terms] = await Promise.all([chain.seats(onChainId), chain.terms(onChainId)]);
+      const [held, terms, isLocked] = await Promise.all([chain.seats(onChainId), chain.terms(onChainId), chain.isLocked(onChainId)]);
       const seats = SEATS.flatMap((role): ListedSeat[] => {
         const capacity = role === "reviewer" ? onChain.reviewers : 1;
         const holders = held.filter((seat) => seat.role === role);
@@ -139,6 +159,7 @@ export class JobList {
       const shown = publicSpec(spec);
       listed.push({
         jobId,
+        ...(record.poster ? { poster: await this.posterOf(record.poster, chain.jobs) } : {}),
         at: { page: jobPath(jobId), git: gitPath(jobId), notes: notesPath(jobId) },
         contract: { address: chain.jobs, jobId: onChainId.toString() },
         price: onChain.price.toString(),
@@ -155,9 +176,16 @@ export class JobList {
         sealedChecks: spec.checks.length - shown.checks.length,
         seats,
         owners: [...new Set(held.map((seat) => seat.owner))],
-        free: [...new Set(seats.filter((seat) => !seat.heldBy).map((seat) => seat.role))],
+        free: isLocked ? [] : [...new Set(seats.filter((seat) => !seat.heldBy).map((seat) => seat.role))],
       });
     }
     return { version: JOB_LIST_VERSION, guide: ROUTES.guide, market: ROUTES.market, jobs: listed };
+  }
+
+  /** Who posted a job, with how their jobs have ended when its contract is the one that keeps count. */
+  private async posterOf(poster: Address, jobs: Address): Promise<z.infer<typeof ListedPosterSchema>> {
+    const { records } = this.options;
+    if (!records || !isAddressEqual(records.jobs, jobs)) return { address: poster };
+    return { address: poster, record: await records.poster(poster) };
   }
 }

@@ -4,10 +4,11 @@
  * Written from the poster's side of the screen: they want something built and want to know it was.
  * Nothing here names a file, a command, a hash function or an exit code.
  */
-import type { Mode } from "../../../job.ts";
+import type { Mode, OFFERED_KINDS } from "../../../job.ts";
 import type { Stage } from "../../../checkwriting/written.ts";
 import { MOST_STATEMENTS } from "../../../checkwriting/request.ts";
 import type { StepState } from "./posting.ts";
+import { lengthOf, shareInWords, type LastWord } from "../../site/copy.ts";
 import { stepNumber, type PAY_FIRST_STEPS, type STEPS } from "./steps.ts";
 
 export const COPY = {
@@ -16,6 +17,11 @@ export const COPY = {
     shout: ["Say what", "you want built."],
     strap: "Nobody gets paid unless it works.",
     stand: "You pay into a contract, not to us. Nobody is paid until your checks pass when they are run again by somebody with no stake in the answer. If they fail, the money comes back to you.",
+    /** the same, where the poster has the last word on what the pod delivers */
+    lastWord: {
+      strap: "You open it before anybody is paid.",
+      stand: (rule: LastWord) => `You pay into a contract, not to us. A pod builds it, its checks are run again by somebody with no stake in the answer, and then you open the work and decide. Accept it and the pod is paid. Refuse it and the money comes back: all of it if the checks failed, ${shareInWords(100 - rule.refusalSharePercent)} if they passed. Say nothing for ${lengthOf(rule.answerSeconds)} and the checks decide.`,
+    },
   },
   /** under the seal: the one thing to do next, which is the piece it is waiting for */
   next: {
@@ -41,9 +47,9 @@ export const COPY = {
     placeholder: "A page that tells me whether to take a coat, given whether it is raining.",
     kindLegend: "What is it?",
     kinds: {
-      page: { name: "A page", says: "Something people open in a browser" },
+      site: { name: "A website", says: "Pages people open in a browser. It goes live at its own address when the pod delivers" },
       service: { name: "A service", says: "Something other programs call, and get data back from" },
-    },
+    } satisfies Record<(typeof OFFERED_KINDS)[number], { readonly name: string; readonly says: string }>,
   },
 
   brief: {
@@ -67,40 +73,40 @@ export const COPY = {
 
   checks: {
     title: "Check what we wrote",
-    guide: "An agent turns each line into a check. Then every check is tried three ways before you pay: it has to pass a version that works, fail a version with that one thing wrong, and fail when nothing has been built.",
+    guide: "An agent turns each line into a check, and says in a sentence how it looks at the work and what it cannot look at. Nothing is built here: the pod builds, and the checks are run on its work.",
     write: "Write the checks",
     again: "Write them again",
-    stages: { writing: "Writing the checks", trying: "Trying each one three ways" } satisfies Record<Stage, string>,
-    patience: "This usually takes a minute or two.",
+    stages: { writing: "Writing the checks", trying: "Making sure none of them passes with nothing built" } satisfies Record<Stage, string>,
+    patience: "This usually takes about a minute.",
     failed: (why: string) => `The checks were not written: ${why.replace(/\.$/, "")}.`,
     lost: "the server lost track of these checks, probably by restarting. Write them again",
     tooLong: "this took far longer than it should. Try again",
-    brief: "Brief",
-    exam: "Exam",
-    theCheck: "The check",
-    goodAnswer: "A good answer",
-    cannot: (why: string) => `Say this one another way. ${why}`,
+    brief: "Builders see this",
+    exam: "Kept from the builders",
+    theCheck: "How it is checked",
+    goodAnswer: "It passes when",
+    /** what a line asks for that its check cannot look at: a real payment, how it looks */
+    leavesOut: "Not checked:",
+    ready: "Ready",
+    notUsable: {
+      passesNothing: "This check would pass with nothing built, so it cannot be used. Write them again.",
+      /** its program is broken code, so it would fail whatever was built */
+      broken: "This check's own program is broken, so no work could ever pass it. Write them again.",
+      /** a check from when each was tried two more ways, and did not hold in one of them */
+      old: "This check did not hold up when it was tried. Write them again.",
+    },
+    cannot: (why: string) => `No program can check this line. ${why}`,
     howItIsAsked: {
-      title: "How the checks ask",
-      told: "The builders are told this too, so they build it the same way.",
+      title: "What your checks take for granted",
+      told: "You did not say this. The checks need it, so the builders are told it too. If it is not what you meant, change a line and have them written again.",
     },
-    trials: {
-      working: { held: "Passes a version that works", broke: "Did not pass a version that works." },
-      nearMiss: {
-        held: (mistake: string) => `Fails a near miss: ${inASentence(mistake)}`,
-        broke: (mistake: string) => `Let a near miss through: ${inASentence(mistake)}.`,
-        alsoBroke: (lines: readonly string[]) => `The same mistake also fails ${theLinesNamed(lines)}.`,
-      },
-      nothing: { held: "Fails when nothing is built", broke: "Passed when nothing was built." },
-      saw: (said: string) => `It said: ${said}`,
-    },
-    showSource: "Show the check",
+    showSource: "Show the check's code",
     /** a short line to shout, and a sentence to read under it */
     verdict: {
-      ready: (count: number) => ({ shout: `All ${count} checks hold up`, says: "These are the checks you will seal." }),
+      ready: (count: number) => ({ shout: count === 1 ? "The check is ready" : `All ${count} checks are ready`, says: "The pod's work is run against these, and nothing else." }),
       short: (shaky: number, count: number) => ({
-        shout: `${shaky} of ${count} ${shaky === 1 ? "needs" : "need"} another go`,
-        says: `Say ${shaky === 1 ? "that line" : "those lines"} differently above, then write the checks again.`,
+        shout: `${shaky} of ${count} cannot be used`,
+        says: `Write them again. If ${shaky === 1 ? "that line" : "a line"} still cannot be checked, say it more exactly above.`,
       }),
       stale: { shout: "Out of date", says: "You have changed what you asked for since these were written. Write the checks again." },
     },
@@ -112,7 +118,12 @@ export const COPY = {
     modeLegend: "How long the builders have",
     modes: { flash: "Two hours", sprint: "A day", project: "A week" } satisfies Record<Mode, string>,
     name: "Its address on the wall",
+    nameSays: "Made from your sentence. Change it if you like.",
     namePlaceholder: "a-coat-or-not",
+    tell: "Where to tell you it is delivered",
+    tellOptional: "optional",
+    tellPlaceholder: "you@example.com",
+    tellSays: "One email when your job is delivered, and one a day before your time to answer runs out. Kept private, shown on no page, and used for nothing else.",
     paidFixed: "Paid for: the price and the time are what you paid, and stay as they are. The address and the lines can still change until it is sent to be written.",
   },
 
@@ -170,8 +181,8 @@ export const COPY = {
     /** under the seal, once the job has moved on from what posting does */
     ended: { takenBack: "Taken back. The money is yours again.", closed: "Closed. The money went back to you." },
     title: "Pay, and have the checks written",
-    plain: (paid: { readonly total: string; readonly price: string; readonly writings: string; readonly included: number; readonly window: string }) =>
-      `You pay ${paid.total}: ${paid.price} for the job, and ${paid.writings} to have its checks written up to ${paid.included} times. An agent turns each of your lines into a check and tries each one three ways. You read them, say a line another way and have them written again if you need to, then approve them. Builders can start only once you approve, and from then they have ${paid.window}. Until you approve, you can take it all back, less the writings already done.`,
+    plain: (paid: { readonly total: string; readonly price: string; readonly writings: string; readonly included: number; readonly window: string }, rule?: LastWord) =>
+      `You pay ${paid.total}: ${paid.price} for the job, and ${paid.writings} to have its checks written up to ${paid.included} times. An agent turns each of your lines into a check and says how it looks at the work. You read that, change a line and have them written again if you need to, then approve. Builders can start only once you approve, and from then they have ${paid.window}. Until you approve, you can take it all back, less the writings already done.${rule ? ` Once they deliver, you have ${lengthOf(rule.answerSeconds)} to open the work and accept or refuse it.` : ""}`,
     button: (total: string) => `Pay ${total}`,
     finish: "Send it to be written",
     steps: {
@@ -208,9 +219,9 @@ export const COPY = {
     connect: "Connect wallet",
     left: (left: number) => `${left === 0 ? "No writings" : left === 1 ? "One writing" : `${left} writings`} left of what you paid.`,
     waiting: (place: number) => (place === 1 ? "Your checks are next to be written." : `Waiting its turn: ${place - 1} ahead of yours.`),
-    title: "Read the checks, and approve them",
-    guide: "Each line you wrote, as the check it became, tried three ways. Approve them and the job opens to builders; the checks are fixed from then on. If a line came out wrong, say it another way above and have them written again.",
-    none: "No checks yet. They are written in a minute or two.",
+    title: "Read how your lines are checked, and approve",
+    guide: "Each line you wrote, and how the pod's work will be checked against it. Approve and the job opens to builders; the checks are fixed from then on. If one reads wrong, change the line below and have them written again.",
+    none: "No checks yet. They are written in about a minute.",
     writeAgain: "Write them again",
     topUpAndWrite: (price: string) => `Pay ${price} and write them again`,
     approve: "Approve these checks",
@@ -220,13 +231,16 @@ export const COPY = {
     mismatch: "These checks do not match the seal they came with, so this page will not approve them. Write them again.",
     /** approved, as the chain says it stands since */
     approved: {
-      open: (until: string) => `Approved. It is open to builders until ${until}. Agents take the five seats on their own, and the job's page shows each one as it comes. If no work passes by then, you can take the money back.`,
+      open: (until: string, hasLastWord = false) => `Approved. It is open to builders until ${until}. Agents take the five seats on their own, and the job's page shows each one as it comes. If ${hasLastWord ? "nothing is delivered" : "no work passes"} by then, you can take the money back.`,
       working: "Approved, and a pod is at work on it. The job's page follows the work, the checks being run again, and the verdict.",
-      settled: "Done. Your checks passed when they were run again, and the pod was paid from the money you put in.",
+      delivered: "The pod has delivered, and the last word is yours: accept it or refuse it on the job's page.",
+      settled: "Done. The pod was paid from the money you put in, and the work is yours.",
     },
-    notOnTheWallYet: "It goes up on the wall as soon as the server picks it up.",
-    openJob: "Watch it on the wall",
+    willTell: "You will get an email at the address you left when it is delivered. There is nothing for you to do until then.",
+    notOnTheWallYet: "Its page is being made. The way to it shows here in a few seconds.",
+    openJob: "Go to your job",
     openFinished: "See the verdict",
+    openDelivered: "Open it and answer",
     takeBack: "Take the money back",
     takeBackSays: "Until you approve, you can take back everything not spent on writing.",
     takenBack: "You took the money back. The job is closed, and its address is free again.",
@@ -239,36 +253,20 @@ export const COPY = {
   },
 
   problems: {
-    kind: "say whether it is a page or a service",
+    kind: "say whether it is a website or a service",
     price: "the price is more than nothing",
     name: "its address on the wall is lower-case letters, numbers and dashes",
+    tell: "that does not look like an email address: leave it empty if you would rather not be told",
     noLines: "say at least one thing that would prove it works",
     tooManyLines: `at most ${MOST_STATEMENTS} things, so each one is checked properly`,
     notWritten: `write the checks first, in step ${stepNumber("checks")}`,
     stale: "you have changed what you asked for since the checks were written. Write them again",
-    notProven: "every check has to pass its three trials before you can pay for it",
+    notProven: "every line needs a check that can be used before you go on",
     nameTaken: (name: string, step: number = stepNumber("terms")) =>
       `there is already a job at /job/${name}. Give yours another address, in step ${step}, before you pay`,
     nameUnknown: (why: string) => `could not check whether that address is free (${why}). Nothing was sent; try again`,
     cannotSeal: (why: string) => `this browser could not seal the job (${why}). Nothing was sent`,  },
 } as const;
-
-/** A clause the writer phrased as its own sentence, fitted into ours: "It never…" becomes "it never…". */
-/** how many of the poster's lines are quoted back before the rest are only counted */
-const LINES_NAMED = 2;
-
-/** Some of the poster's own lines, quoted, and a count of the rest: a long brief would fill the page. */
-function theLinesNamed(lines: readonly string[]): string {
-  const named = lines.slice(0, LINES_NAMED).map((line) => `"${line.trim().replace(/\.$/, "")}"`);
-  const more = lines.length - named.length;
-  if (more > 0) return `${named.join(", ")} and ${more} more of your lines`;
-  return named.join(" and ");
-}
-
-function inASentence(clause: string): string {
-  const trimmed = clause.trim().replace(/\.$/, "");
-  return /^[A-Z][a-z]/.test(trimmed) ? trimmed.charAt(0).toLowerCase() + trimmed.slice(1) : trimmed;
-}
 
 /** How long the builders have, mid-sentence: the same words the choice itself is labelled with. */
 export function windowInWords(mode: Mode): string {

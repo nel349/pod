@@ -1,3 +1,4 @@
+import { lastSaid, LONGEST_CHECK_SAID } from "../blackbox.ts";
 import { describe, expect, test } from "bun:test";
 import { privateKeyToAccount } from "viem/accounts";
 import { mkdtemp } from "node:fs/promises";
@@ -12,6 +13,7 @@ import type { Spec } from "../job.ts";
 import { signReceipt, type Receipt } from "../receipt.ts";
 import { receiptPath } from "../routes.ts";
 import type { GradeReport } from "../pipeline.ts";
+import { SITE } from "../web/site/copy.ts";
 
 const KEY = `0x${"7".repeat(64)}` as const;
 const RUNNER = privateKeyToAccount(KEY).address;
@@ -95,6 +97,23 @@ describe("what the wall is told about a graded job", () => {
     expect(record.checksSaid.filter((c) => c.hidden)).toHaveLength(1);
     expect(record.signed?.receipt.commit).toBe("c0ffee1234abcd");
   });
+
+  test("a check that failed keeps its own last word beside it, cut to a line; one that passed keeps none", async () => {
+    const failing = await report({
+      verdict: "failed",
+      checks: [
+        { says: "the page answers", command: "node loads.mjs", exitCode: 0, seconds: 0.4, hidden: false },
+        { says: "a weak excuse scores lower", command: "node weak.mjs", exitCode: 1, seconds: 0.5, hidden: true },
+      ],
+    });
+    const ran = (command: string, exitCode: number, output: string) => ({ says: "", command, hidden: false, exitCode, output, seconds: 1 });
+    const rounds = [{ ...failing.rounds[0]!, checks: [ran("node loads.mjs", 0, "it loads\n"), ran("node weak.mjs", 1, `starting\n\n  ${"x".repeat(400)}\n`)] }, failing.rounds[1]!];
+    const record = recordFor(await job({ report: { ...failing, rounds } }));
+    expect(record.checksSaid[0]).toEqual({ says: "the page answers", hidden: false, exitCode: 0 });
+    expect(record.checksSaid[1]?.said).toBe("x".repeat(LONGEST_CHECK_SAID));
+    expect(lastSaid("\n \n")).toBeUndefined();
+    expect(lastSaid("one\nCard page not found\n\n")).toBe("Card page not found");
+  });
 });
 
 describe("a job that is open, before anybody has built anything", () => {
@@ -129,7 +148,7 @@ describe("a job that is open, before anybody has built anything", () => {
 
     expect(body).toContain("What will be checked");
     expect(body).toContain("the page answers with a verdict for today");
-    expect(body).toContain("2 more checks are sealed until there is a verdict");
+    expect(body).toContain(SITE.job.sealedCount(2));
     expect(body).toMatch(/seat-role">security<\/p>.*?>open</);
 
     // neither the hidden checks nor the salt reach the page

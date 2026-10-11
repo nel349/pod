@@ -3,6 +3,7 @@ import { Sheet } from "../../../shared/index.ts";
 import { SITE } from "../../copy.ts";
 import { useYours } from "../../hooks/index.ts";
 import { UnpublishedSheet } from "./UnpublishedSheet.tsx";
+import { YourSeats } from "./YourSeats.tsx";
 import { YoursEntries } from "./YoursEntries.tsx";
 
 /**
@@ -14,16 +15,23 @@ export function WalletsOwn({ address, keptOnChainId }: { readonly address: strin
   switch (state.kind) {
     case "loading": return <Sheet number={2} id="reading" title={SITE.yours.postedTitle} stamp={false}><p className="note">{SITE.yours.loading}</p></Sheet>;
     case "failed": return <Sheet number={2} id="reading" title={SITE.yours.postedTitle} stamp={false}><p className="said-status">{SITE.yours.failed(state.why)}</p></Sheet>;
-    case "read": return (
-      <>
-        <Sheet number={2} id="posted" title={SITE.yours.postedTitle} stamp={false}>
-          <YoursEntries entries={state.yours.posted} isHeld={false} none={SITE.yours.nothingPosted} />
-        </Sheet>
-        <UnpublishedSheet unpublished={state.yours.unpublished?.filter((job) => job.onChainId !== keptOnChainId)} />
-        <Sheet number={4} id="holds" title={SITE.yours.holdsTitle} stamp={false}>
-          <YoursEntries entries={state.yours.holds} isHeld none={SITE.yours.nothingHeld} />
-        </Sheet>
-      </>
-    );
+    case "read": {
+      // somebody who only sends agents came for their seats: those lead, ahead of two lists with nothing in them
+      const { posted, holds, seats } = state.yours;
+      const isOnlyAnOwner = posted.length === 0 && holds.length === 0 && seats.length > 0;
+      return (
+        <>
+          {isOnlyAnOwner && <YourSeats seats={seats} />}
+          <Sheet number={2} id="posted" title={SITE.yours.postedTitle} stamp={false}>
+            <YoursEntries entries={posted} isHeld={false} none={SITE.yours.nothingPosted} />
+          </Sheet>
+          <UnpublishedSheet unpublished={state.yours.unpublished?.filter((job) => job.onChainId !== keptOnChainId)} />
+          <Sheet number={4} id="holds" title={SITE.yours.holdsTitle} stamp={false}>
+            <YoursEntries entries={holds} isHeld none={SITE.yours.nothingHeld} />
+          </Sheet>
+          {!isOnlyAnOwner && <YourSeats seats={seats} />}
+        </>
+      );
+    }
   }
 }

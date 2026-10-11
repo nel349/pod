@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { receiptFilePath } from "../../../routes.ts";
 import type { SignedReceipt } from "../../../receipt.ts";
-import type { JobRecord } from "../../../store.ts";
+import { isCodePublic, type JobRecord } from "../../../store.ts";
+import { answerOf, AnswerSchema } from "./answer.ts";
 
 /** A receipt, for a person: what was run, what it said, and the signed file behind it. */
 export const ReceiptViewSchema = z.object({
@@ -24,11 +25,16 @@ export const ReceiptViewSchema = z.object({
   finishedAt: z.string(),
   hash: z.string(),
   signature: z.string(),
+  /** where the job stands with its poster, when they have the last word: a verdict alone pays nobody there */
+  answer: AnswerSchema.optional(),
+  /** true while the code the receipt names is still the pod's alone, so its address opens for nobody yet */
+  isCodePrivate: z.boolean().optional(),
 });
 export type ReceiptView = z.infer<typeof ReceiptViewSchema>;
 
 export function receiptView(record: JobRecord, signed: SignedReceipt, jobPage: string): ReceiptView {
   const { receipt } = signed;
+  const answer = answerOf(record);
   return {
     jobId: record.jobId, idea: record.tile.idea, jobPage, file: receiptFilePath(record.jobId),
     verdict: receipt.verdict, commit: receipt.commit, repository: receipt.repository, tree: receipt.tree,
@@ -36,5 +42,6 @@ export function receiptView(record: JobRecord, signed: SignedReceipt, jobPage: s
     checks: receipt.checks.map((check) => ({ ...check })),
     allowedHosts: [...receipt.allowedHosts], undeclaredCalls: [...receipt.undeclaredCalls],
     runner: receipt.runner, finishedAt: receipt.finishedAt, hash: signed.hash, signature: signed.signature,
+    ...(answer ? { answer } : {}), ...(isCodePublic(record) ? {} : { isCodePrivate: true }),
   };
 }

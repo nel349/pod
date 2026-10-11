@@ -2,12 +2,14 @@ import { z } from "zod";
 import { shareOf, type Role } from "../../../job.ts";
 import { NoteSchema, type Note } from "../../../note.ts";
 import { repeatCommand } from "../../../jobpage.ts";
-import { standingWords, type Tile } from "../../../gallery.ts";
+import type { Tile } from "../../../gallery.ts";
+import { standingOf } from "./tile.ts";
 import type { OnChainJob } from "../../../posting.ts";
 import { checksPath, claimPath, receiptFilePath, receiptPath } from "../../../routes.ts";
 import { SEATS } from "../../../seal.ts";
 import type { SignedReceipt } from "../../../receipt.ts";
-import { isPublished, type JobRecord } from "../../../store.ts";
+import { isCodePublic, isPublished, type JobRecord } from "../../../store.ts";
+import { AgentRecordSchema, answerOf, AnswerSchema, deliveryOf, DeliveryViewSchema, PosterRecordSchema, type AgentRecordView, type PosterRecordView } from "./answer.ts";
 import { MODES, VerdictSchema, WEI } from "./kinds.ts";
 import { MoneyViewSchema, moneyOf } from "./money.ts";
 
@@ -18,6 +20,8 @@ export const SeatViewSchema = z.object({
   /** in wei: the seat's share of the price */
   pay: WEI,
   approvedAt: z.string().optional(),
+  /** how the jobs its agent held a seat on have ended, where the contract keeps count */
+  record: AgentRecordSchema.optional(),
 });
 export type SeatView = z.infer<typeof SeatViewSchema>;
 
@@ -31,13 +35,19 @@ export const TitleViewSchema = z.object({
 });
 export type TitleView = z.infer<typeof TitleViewSchema>;
 
-const CheckSaidSchema = z.object({ says: z.string(), hidden: z.boolean(), exitCode: z.number().int().optional() });
+const CheckSaidSchema = z.object({ says: z.string(), hidden: z.boolean(), exitCode: z.number().int().optional(), said: z.string().optional() });
 
 /** One job, opened: everything its page shows. */
 export const JobViewSchema = z.object({
   jobId: z.string(),
   idea: z.string(),
   verdict: VerdictSchema,
+  /** where it stands with its poster, once delivered on the contract where they have the last word */
+  answer: AnswerSchema.optional(),
+  /** whether its poster has the last word on what its pod delivers, which its contract decides */
+  hasLastWord: z.boolean().optional(),
+  /** its delivery: until when the poster may answer, what a refusal leaves the pod, and how it ended */
+  delivery: DeliveryViewSchema.optional(),
   standing: z.string(),
   mode: z.enum(MODES),
   price: WEI,
@@ -53,14 +63,37 @@ export const JobViewSchema = z.object({
   /** what the pod said to each other, published with the verdict and not before */
   notes: z.array(NoteSchema),
   receipt: z.object({ page: z.string(), file: z.string(), finishedAt: z.string(), repeat: z.string() }).optional(),
-  chain: z.object({ jobId: z.string(), jobs: z.string(), settled: z.string().optional(), minted: z.string().optional() }).optional(),
+  chain: z.object({
+    jobId: z.string(), jobs: z.string(), settled: z.string().optional(), minted: z.string().optional(),
+    /** the validator's report of what the checks found, where the poster has the last word */
+    reported: z.string().optional(),
+  }).optional(),
   money: MoneyViewSchema.optional(),
   title: TitleViewSchema.optional(),
   repository: z.string().optional(),
+  /** the pod's code cannot be fetched yet: its poster has the last word and has not accepted it */
+  isCodePrivate: z.boolean().optional(),
+  /** where the delivered website is live, or that it was taken down, or why it never went live */
+  live: z.union([
+    z.object({ isDown: z.literal(false), url: z.string(), host: z.string() }),
+    // taken down: its old address is not handed on, since nothing answers there now
+    z.object({ isDown: z.literal(true), host: z.string() }),
+  ]).optional(),
+  notLiveBecause: z.string().optional(),
   /** who paid for it, when the chain could say */
   poster: z.string().optional(),
+  /** how the jobs its poster paid for have ended, where the contract keeps count */
+  posterRecord: PosterRecordSchema.optional(),
   /** why the worker is holding back a job whose pod says it is done */
   waitingBecause: z.string().optional(),
+  /** work its builder has put forward, while the other seats may still sign on and before it is graded */
+  review: z.object({
+    putForwardAt: z.string().optional(),
+    reviewBy: z.string(),
+    /** the seats other than its builder that stand behind it so far, and the ones taken that do not yet */
+    behind: z.array(z.enum(SEATS)),
+    notYet: z.array(z.enum(SEATS)),
+  }).optional(),
   /** why it was taken off the wall, when it was */
   retired: z.string().optional(),
 });
@@ -74,6 +107,10 @@ export interface ChainSays {
   readonly onChain?: Pick<OnChainJob, "state" | "endsAt">;
   /** the job is on a contract that lets its poster take the money back at once while nobody is seated */
   readonly takesBackBeforeASeat?: boolean;
+  /** how its poster's jobs have ended, where the contract keeps count */
+  readonly posterRecord?: PosterRecordView;
+  /** how each seated agent's jobs have ended, by the agent's address in lower case, where the contract keeps count */
+  readonly agentRecords?: Readonly<Record<string, AgentRecordView>>;
 }
 
 export function jobView(record: JobRecord, notes: readonly Note[], chainSays: ChainSays): JobView {
@@ -85,21 +122,28 @@ export function jobView(record: JobRecord, notes: readonly Note[], chainSays: Ch
   const isSealed = !isPublished(record);
   const money = moneyOf(record, chainSays.onChain, chainSays.takesBackBeforeASeat === true);
   const tokenId = record.chain?.tokenId;
+  const answer = isSealed ? undefined : answerOf(record);
+  const delivery = isSealed ? undefined : deliveryOf(record);
   return {
-    jobId: tile.jobId, idea: tile.idea, verdict: tile.verdict, standing: standingWords(tile), mode: tile.mode,
+    jobId: tile.jobId, idea: tile.idea, verdict: tile.verdict,
+    ...(answer ? { answer } : {}),
+    ...(record.chain?.lastWord ? { hasLastWord: true } : {}),
+    ...(delivery ? { delivery } : {}),
+    standing: standingOf(tile, answer), mode: tile.mode,
     price: tile.price.toString(), seal: record.seal,
     ...(tile.commit ? { commit: tile.commit } : {}),
     ...(record.brief?.howItIsAsked ? { howItIsAsked: record.brief.howItIsAsked } : {}),
     sealedChecks: isSealed ? record.brief?.sealedChecks ?? record.checksSaid.filter((check) => check.hidden).length : 0,
     checks: isSealed ? record.checksSaid.filter((check) => !check.hidden) : [...record.checksSaid],
     checksPath: checksPath(tile.jobId),
-    seats: seatsOf(record),
+    seats: seatsOf(record, chainSays.agentRecords),
     notes: isSealed ? [] : [...notes],
     ...(record.signed ? { receipt: receiptParts(record.jobId, record.signed, record.repository) } : {}),
     ...(record.chain ? { chain: {
       jobId: record.chain.jobId, jobs: record.chain.jobs,
       ...(record.chain.settled ? { settled: record.chain.settled } : {}),
       ...(record.chain.minted ? { minted: record.chain.minted } : {}),
+      ...(record.chain.reported ? { reported: record.chain.reported } : {}),
     } } : {}),
     ...(money ? { money } : {}),
     ...(tokenId !== undefined ? { title: {
@@ -109,10 +153,30 @@ export function jobView(record: JobRecord, notes: readonly Note[], chainSays: Ch
       ...(record.invited ? { invited: record.invited } : {}),
     } } : {}),
     ...(record.repository ? { repository: record.repository } : {}),
+    ...(isCodePublic(record) ? {} : { isCodePrivate: true }),
+    ...(record.live && !isSealed ? { live: liveView(record.live) } : {}),
+    ...(record.notLiveBecause && !isSealed ? { notLiveBecause: record.notLiveBecause } : {}),
+    ...(record.review && record.tile.verdict === "running" ? { review: reviewView(record.review, record.tile.pod) } : {}),
     ...(chainSays.poster ? { poster: chainSays.poster } : {}),
+    ...(chainSays.posterRecord ? { posterRecord: chainSays.posterRecord } : {}),
     ...(record.waitingBecause && isRunning ? { waitingBecause: record.waitingBecause } : {}),
     ...(record.retired ? { retired: record.retired.why } : {}),
   };
+}
+
+/** Work under review, as its page says it: who other than its builder stands behind it, and who has yet to say. */
+function reviewView(review: NonNullable<JobRecord["review"]>, pod: Tile["pod"]): NonNullable<JobView["review"]> {
+  const others = SEATS.filter((role) => role !== "builder" && pod.some((seat) => seat.role === role));
+  return {
+    ...(review.putForwardAt ? { putForwardAt: review.putForwardAt } : {}),
+    reviewBy: review.reviewBy,
+    behind: others.filter((role) => review.behind.includes(role)),
+    notYet: others.filter((role) => !review.behind.includes(role)),
+  };
+}
+
+function liveView(live: NonNullable<JobRecord["live"]>): NonNullable<JobView["live"]> {
+  return live.removedAt === undefined ? { isDown: false, url: live.url, host: live.host } : { isDown: true, host: live.host };
 }
 
 function receiptParts(jobId: string, signed: SignedReceipt, repository: string | undefined): NonNullable<JobView["receipt"]> {
@@ -126,13 +190,14 @@ function receiptParts(jobId: string, signed: SignedReceipt, repository: string |
  * Every seat, taken or open, with the share of the price it is paid. Jobs posted here have one seat
  * of each kind, so each share is the contract's share for that seat.
  */
-function seatsOf(record: JobRecord): SeatView[] {
+function seatsOf(record: JobRecord, records: ChainSays["agentRecords"] = {}): SeatView[] {
   const { tile, approvals } = record;
   return SEATS.map((role: Role): SeatView => {
     const pay = shareOf(tile.price, role).toString();
     const seat = tile.pod.find((one) => one.role === role);
     if (!seat) return { role, pay };
     const approval = approvals.find((one) => one.role === role && one.agent.toLowerCase() === seat.agent.toLowerCase());
-    return { role, agent: seat.agent, pay, ...(approval ? { approvedAt: approval.at } : {}) };
+    const counted = records[seat.agent.toLowerCase()];
+    return { role, agent: seat.agent, pay, ...(approval ? { approvedAt: approval.at } : {}), ...(counted ? { record: counted } : {}) };
   });
 }

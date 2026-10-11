@@ -134,7 +134,7 @@ export class Preparing {
   async setUp(asked: unknown): Promise<Answer<{ readonly onChainId: string; readonly name: string }>> {
     const parsed = SetUpRequestSchema.safeParse(asked);
     if (!parsed.success) return refused(400, parsed.error.issues[0]?.message ?? "that is not a job to prepare");
-    const { onChainId, name, mode, salt, request, poster, signature } = parsed.data;
+    const { onChainId, name, mode, salt, request, poster, signature, tell } = parsed.data;
     if (!isWallName(name)) return refused(400, "a job's name is lower-case letters, numbers and dashes, from 3 to 64 of them");
 
     let signer: Address;
@@ -156,14 +156,21 @@ export class Preparing {
     const already = await this.options.store.readSetUp(onChainId);
     if (already) {
       const isTheSame = already.name === name && already.mode === mode && already.salt === salt && isAddressEqual(already.poster, poster);
-      return isTheSame ? { ok: true, value: { onChainId, name } } : refused(409, `job ${onChainId} was already set up differently`);
+      if (!isTheSame) return refused(409, `job ${onChainId} was already set up differently`);
+      // where to be told is the poster's to change while the job is still theirs alone: a page that lost
+      // the first answer and asks again with a corrected address has it kept, not quietly ignored
+      if (already.tell !== tell) {
+        const { tell: _before, ...kept } = already;
+        await this.options.store.saveSetUp({ ...kept, ...(tell ? { tell } : {}) });
+      }
+      return { ok: true, value: { onChainId, name } };
     }
 
     if (await this.options.wall.read(name)) return refused(409, `there is already a job called ${name}`);
     const claimed = await this.claimName(name, onChainId);
     if (!claimed) return refused(409, `there is already a job called ${name}`);
 
-    await this.options.store.saveSetUp({ onChainId, jobs: this.jobs, name, poster, mode, salt, setUpAt: new Date().toISOString() });
+    await this.options.store.saveSetUp({ onChainId, jobs: this.jobs, name, poster, mode, salt, setUpAt: new Date().toISOString(), ...(tell ? { tell } : {}) });
     await this.options.store.ask(onChainId, { request, askedAt: new Date().toISOString() });
     this.enqueue(onChainId);
     this.say(`job ${onChainId} is set up as ${name}; its first writing waits its turn`);
@@ -201,6 +208,7 @@ export class Preparing {
       ok: true,
       value: {
         onChainId, name: setUp.name, mode: setUp.mode, salt: setUp.salt, now: this.nowFor(onChainId),
+        ...(setUp.tell ? { tells: true } : {}),
         ...(asked ? { asked: asked.request } : {}),
         writings: writings.filter((writing) => writing.isSettled),
         money: { ...money, writingPrice },

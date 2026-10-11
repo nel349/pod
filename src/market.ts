@@ -59,6 +59,19 @@ export const MarketConfigSchema = z.object({
     price: z.string().regex(/^[0-9]+$/, "a writing's price is a whole number of wei"),
     included: z.number().int().positive(),
   }).optional(),
+  /**
+   * Set where a job's poster has the last word on what its pod delivers: how long they have to accept
+   * or refuse, and what a pod keeps, in percent of each seat's pay, when they refuse work whose checks
+   * passed. Both are the contract's own. Absent on a contract that settles on the checks alone.
+   */
+  lastWord: z.object({
+    answerSeconds: z.number().int().positive(),
+    refusalSharePercent: z.number().int().min(0).max(100),
+    /** how long the other seats have to say whether they stand behind what a builder put forward, in percent of the job's window; after it the work is graded whoever does */
+    reviewSharePercent: z.number().int().min(1).max(99),
+    /** a poster who leaves an address is told by mail when their job is delivered: only where a mail service is set up, so the page never promises a message nobody sends */
+    tellsByMail: z.boolean().optional(),
+  }).optional(),
 });
 
 export type MarketConfig = z.infer<typeof MarketConfigSchema>;

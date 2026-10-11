@@ -23,7 +23,7 @@ export interface PayFirstView {
 /** What paying covers and what happens after, the button, and, once pressed, every step it takes. */
 export function PayFirstStep({ market, view }: { readonly market: MarketConfig; readonly view: PayFirstView }): ReactElement {
   const { status, steps, kept } = view;
-  const words = payFirstWords(view.paid, market.coin, view.mode);
+  const words = payFirstWords(view.paid, market.coin, view.mode, market.lastWord);
   const waits = useWalletWaits();
   return (
     <Step name="pay" title={COPY.payFirst.title}>

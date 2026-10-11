@@ -19,13 +19,15 @@ const FIRST_JOB = 10n;
 const SEAL: Hex = "0x1111111111111111111111111111111111111111111111111111111111111111";
 
 describe("a state number nobody knows", () => {
-  test("is an error, on either contract, never read as open", () => {
+  test("is an error, on any of the contracts, never read as open", () => {
     expect(stateOf(1)).toBe("working");
-    // one reader serves both contracts, and preparing is the newer one's
+    // one reader serves all three contracts: preparing is the second's, and delivered the third's
     expect(stateOf(4)).toBe("preparing");
-    expect(() => stateOf(5)).toThrow("has no word for");
+    expect(stateOf(5)).toBe("delivered");
+    expect(() => stateOf(6)).toThrow("has no word for");
     expect(stateOfV2(4)).toBe("preparing");
-    expect(() => stateOfV2(5)).toThrow("has no word for");
+    expect(stateOfV2(5)).toBe("delivered");
+    expect(() => stateOfV2(6)).toThrow("has no word for");
   });
 });
 

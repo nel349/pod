@@ -337,6 +337,11 @@ button.quiet:hover { color: var(--pink); text-decoration: line-through; }
   .wallet { min-width: 0; flex-shrink: 1; }
   .wallet button { font-size: 13px; padding: 7px 8px 5px; white-space: normal; text-align: left; }
   .wallet .who .as { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  /* a browser wallet connected: the address over its two links, each whole, and the pages give way rather than the wallet */
+  .wallet:has(#disconnect-wallet) { flex-shrink: 0; display: grid; grid-template-columns: auto auto; justify-content: end; justify-items: end; gap: 3px 10px; }
+  .wallet:has(#disconnect-wallet) .who { grid-column: 1 / -1; white-space: nowrap; font-size: 12px; }
+  .wallet:has(#disconnect-wallet) button.wrong, .wallet button.wrong ~ #disconnect-wallet { grid-column: 1 / -1; white-space: nowrap; }
+  .wallet:has(#disconnect-wallet) button.change { white-space: nowrap; padding: 2px 0; font-size: 12px; }
 }
 .wallet .wrong { color: var(--pink); }
 .wallet .none { color: #a8a89f; }

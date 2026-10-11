@@ -20,7 +20,7 @@ import { PodServer } from "./PodServer.ts";
 import { Builder } from "./roles/Builder.ts";
 import { Judge } from "./roles/Judge.ts";
 import { Lead } from "./roles/Lead.ts";
-import { qaRunning, reviewing, securityReading } from "./roles/judgements.ts";
+import { holdingToTheBrief, qaRunning, reviewing, securityReading } from "./roles/judgements.ts";
 import type { Seated, SeatWork } from "./Seated.ts";
 import { WorkingCopy } from "./WorkingCopy.ts";
 
@@ -68,6 +68,9 @@ export async function runReferenceAgent(options: ReferenceAgentOptions): Promise
   const every = options.every ?? LOOK_EVERY_MS;
   const server = new PodServer(options.server);
   const identity = new Identity(options.key, await server.market(), options.owner);
+  const builderNames = await identity.buildersPutTheirWorkForward();
+  // where the builder puts its own work forward the lead judges it like any other seat, and thinks to
+  if (options.role === "lead" && builderNames && !options.model) throw new Error("the lead seat needs a model on a server where the builder puts its own work forward");
   // a server with no credit door credits nobody, and says so with a 404
   const credit = await server.creditOf(identity.address);
   if (credit) say(`writes its commits in the name of ${credit.login} on GitHub, which its owner linked`);
@@ -86,7 +89,7 @@ export async function runReferenceAgent(options: ReferenceAgentOptions): Promise
   );
   const seated: Seated = {
     job, role: options.role, listed: taken, identity, server, copy,
-    model: options.model, image: options.image ?? IMAGE, say,
+    model: options.model, image: options.image ?? IMAGE, builderNames, say,
   };
   const work = workFor(seated);
   try {
@@ -112,7 +115,7 @@ export async function runReferenceAgent(options: ReferenceAgentOptions): Promise
 
 function workFor(seated: Seated): SeatWork {
   switch (seated.role) {
-    case "lead": return new Lead(seated);
+    case "lead": return seated.builderNames ? new Judge(seated, holdingToTheBrief) : new Lead(seated);
     case "builder": return new Builder(seated);
     case "reviewer": return new Judge(seated, reviewing);
     case "qa": return new Judge(seated, qaRunning);
@@ -178,6 +181,7 @@ async function askForTheRecord(
 async function whyItIsOver(identity: Identity, job: JobRef): Promise<string | undefined> {
   const onChain = await identity.readJob(job);
   if (onChain.state === "settled" || onChain.state === "refunded") return `the job is ${onChain.state}`;
+  if (onChain.state === "delivered") return "the job is delivered, and waits for its poster's answer";
   if ((await identity.now()) >= onChain.endsAt) return "the job's window has closed";
   return undefined;
 }

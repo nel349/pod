@@ -34,13 +34,13 @@ export function whatIsPaid(price: bigint, writing: NonNullable<MarketConfig["wri
 }
 
 /** The pay sheet's words: what it costs, what happens after, and what the button does. */
-export function payFirstWords(paid: WhatIsPaid, coin: string, mode: Mode): { readonly terms: string; readonly button: string } {
+export function payFirstWords(paid: WhatIsPaid, coin: string, mode: Mode, rule?: MarketConfig["lastWord"]): { readonly terms: string; readonly button: string } {
   const amount = (wei: bigint): string => `${formatEther(wei)} ${coin}`;
   return {
     terms: COPY.payFirst.plain({
       total: amount(paid.total), price: amount(paid.price), writings: amount(paid.writingPrice * BigInt(paid.included)),
       included: paid.included, window: windowInWords(mode),
-    }),
+    }, rule),
     button: COPY.payFirst.button(amount(paid.total)),
   };
 }
@@ -74,6 +74,8 @@ export interface KeptSetUp {
   readonly mode: Mode;
   readonly salt: string;
   readonly request: WriteRequest;
+  /** where the poster asked to be told of the delivery, when they did */
+  readonly tell?: string;
 }
 
 const KeptSetUpSchema = z.object({
@@ -86,6 +88,7 @@ const KeptSetUpSchema = z.object({
   mode: z.enum(MODE_NAMES),
   salt: z.string().regex(SALT),
   request: WriteRequestSchema,
+  tell: z.string().optional(),
 });
 
 /** Where a set-up on this chain and contract is kept. */
@@ -114,7 +117,7 @@ export function readKeptSetUp(text: string | null): KeptSetUp | undefined {
 
 /** The form as it was when the job was paid for, so the page a poster comes back to shows it. */
 export function formOfKeptSetUp(kept: KeptSetUp): DraftForm {
-  return { ...formOfRequest(kept.request), price: kept.price, mode: kept.mode, name: kept.name };
+  return { ...formOfRequest(kept.request), price: kept.price, mode: kept.mode, name: kept.name, tell: kept.tell ?? "" };
 }
 
 /** The idea and the lines of a request, as the form holds them: a list left empty still shows one empty line. */

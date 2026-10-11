@@ -14,6 +14,7 @@ import { bodyWithin, tooLarge } from "./body.ts";
 import { firstLine } from "./errors.ts";
 import { transferRepository, type Published } from "./github.ts";
 import { checkClaim, holderOf } from "./handover.ts";
+import { siteMadeFor, type SiteHost } from "./hosting/index.ts";
 import { NO_STORE } from "./headers.ts";
 import type { Contract } from "./jobs.ts";
 import { isWallName, jobPath, ROUTES } from "./routes.ts";
@@ -36,6 +37,8 @@ export interface Claimable {
   readonly tokenId: string;
   readonly holder: Address;
   readonly repository: string;
+  /** where the work is live, when it is a website that was put live and is still there */
+  readonly live?: string;
   /** the last invitation sent, if one was */
   readonly invited?: Invitation;
 }
@@ -48,7 +51,12 @@ export interface Invitation {
 }
 
 export class Claims {
-  constructor(private readonly options: { readonly store: JobStore; readonly token: Omit<Contract, "wallet"> }) {}
+  constructor(private readonly options: {
+    readonly store: JobStore;
+    readonly token: Omit<Contract, "wallet">;
+    /** where delivered websites are live, which hands one to its title's holder with the repository */
+    readonly siteHost?: SiteHost;
+  }) {}
 
   async handle(request: Request): Promise<Response> {
     const jobId = new URL(request.url).pathname.slice(ROUTES.claimApi.length);
@@ -65,6 +73,7 @@ export class Claims {
       const answer: Claimable = {
         jobId, idea: record.tile.idea, tokenId: tokenId.toString(), repository,
         holder: await holderOf(this.options.token, tokenId),
+        ...(liveOf(record) ? { live: liveOf(record) } : {}),
         ...(record.invited ? { invited: record.invited } : {}),
       };
       return Response.json(answer, { headers: NO_STORE });
@@ -86,17 +95,39 @@ export class Claims {
     if (!checked.allowed || !checked.holder) {
       return Response.json({ why: checked.why ?? "that signature is not the holder's" }, { status: 403 });
     }
+    // the holder's signature is what the live site is handed over on: GitHub having a bad moment, or the
+    // holder having no account there, does not keep their own website from them
+    const site = await this.siteFor(record);
     try {
       await transferRepository(publishedAt(repository), parsed.data.toAccount);
     } catch (error) {
-      return Response.json({ why: `GitHub would not send the invitation: ${firstLine(error)}` }, { status: 502 });
+      return Response.json({ why: `GitHub would not send the invitation: ${firstLine(error)}`, ...site }, { status: 502, headers: NO_STORE });
     }
     const invited: Invitation = { account: parsed.data.toAccount, by: checked.holder, at: new Date().toISOString() };
     const fresh = await this.options.store.read(jobId);
     if (fresh) await this.options.store.save({ ...fresh, invited });
-    return Response.json({ invited }, { status: 201 });
+    return Response.json({ invited, ...site }, { status: 201, headers: NO_STORE });
+  }
+
+  /**
+   * The link that takes the job's live website into the holder's own account, for the one answer that
+   * has just checked their signature: whoever opens it takes the site, so it is never written down or
+   * shown to anybody else. A host having a bad moment costs the holder the link, not the repository.
+   */
+  private async siteFor(record: JobRecord): Promise<{ readonly site?: { readonly host: string; readonly takeIt: string } }> {
+    const { siteHost } = this.options;
+    if (!siteHost || !liveOf(record)) return {};
+    try {
+      return { site: { host: siteHost.name, takeIt: await siteHost.handoverLink(siteMadeFor(record)) } };
+    } catch (error) {
+      console.error(`[claims] ${record.jobId}: no link to hand its live site over: ${firstLine(error)}`);
+      return {};
+    }
   }
 }
+
+/** Where a job's website is live now, if it was put live and has not been taken down. */
+const liveOf = (record: JobRecord): string | undefined => (record.live && !record.live.removedAt ? record.live.url : undefined);
 
 const NOTHING_HERE = "There is no job at that address.";
 

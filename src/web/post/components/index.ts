@@ -11,7 +11,6 @@ export * from "./ShardSeal.tsx";
 export * from "./Step.tsx";
 export * from "./StepOrderContext.ts";
 export * from "./TermsStep.tsx";
-export * from "./Trial.tsx";
 export * from "./WrittenCheck.tsx";
 export * from "./PayFirstStep.tsx";
 export * from "./ApproveStep.tsx";

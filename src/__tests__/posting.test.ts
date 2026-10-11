@@ -32,12 +32,12 @@ const PRICE = parseEther("0.1");
 const VISIBLE = "// the page answers";
 const HIDDEN = "// the hidden check, which decides whether anybody is paid";
 
-/** A check as the writer hands one back when it passed all three of its trials. */
+/** A check as the writer hands one back when it failed against nothing built, as it must. */
 const passedItsTrials = (source: string): TriedCheck => ({
-  checkable: true, says: "a check", secret: false, asks: "asks", expects: "expects", nearMiss: "a mistake",
+  checkable: true, says: "a check", secret: false, asks: "asks", expects: "expects",
   file: "check.mjs", source,
-  proof: { working: true, nearMiss: true, nothing: true },
-  saw: { working: "ok", nearMiss: "caught", nothing: "caught" },
+  proof: { nothing: true },
+  saw: { nothing: "caught" },
 });
 
 /** how the checks of a job that needed it ask for what its poster left open, proven with them */

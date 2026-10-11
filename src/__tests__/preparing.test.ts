@@ -9,14 +9,14 @@ import type { WriteRequest } from "../checkwriting/index.ts";
 import { filesMatchSeal, MODES, sealSpec, type Mode } from "../job.ts";
 import { podJobsV2Abi, readJobV2, readWritingMoney, readWritingPrice, WriterKey } from "../jobsV2.ts";
 import { preparingMessage, setUpMessage } from "../messages.ts";
-import { Preparing, PreparingStore, type PreparingChain, type PreparingView, type Writer } from "../preparing/index.ts";
+import { Preparing, PreparingStore, preparingToTheWire, type PreparingChain, type PreparingView, type Writer } from "../preparing/index.ts";
 import { openJob } from "../publish.ts";
 import { specFromTheWire, SpecOnTheWireSchema } from "../specWire.ts";
 import { JobStore } from "../store.ts";
 import { handle } from "../server.ts";
 import { jobNamePath, preparingPath, preparingWritingsPath, ROUTES } from "../routes.ts";
 import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
-import { COAT_REQUEST, GOOD_REPLY, good, replying, WORKING, writerWith } from "./support/coat.ts";
+import { COAT_REQUEST, GOOD_REPLY, good, replying, writerWith } from "./support/coat.ts";
 import { dockerAvailable } from "./support/tools.ts";
 
 /**
@@ -160,6 +160,39 @@ describe.skipIf(!available)("a paid job, prepared", () => {
     await anvil.publicClient.waitForTransactionReceipt({ hash: await poster.writeContract(request) });
     expect((await readJobV2(at(), id))?.state).toBe("open");
   }, 300_000);
+
+  test("a poster may leave an address to be told at: it is kept with the set-up and with nothing anybody is shown, and refused when it is no address", async () => {
+    const { preparing, folder } = await service(UNREACHABLE);
+    const TELL = "the-poster@example.com";
+
+    const notAnAddress = await aPaidJob();
+    expect(await preparing.setUp({ ...(await asPoster(notAnAddress, uniqueName())), tell: "not an address" }))
+      .toMatchObject({ ok: false, status: 400, why: "that does not look like an email address" });
+    expect(await new PreparingStore(folder).readSetUp(`${notAnAddress}`), "nothing was set up under a bad address").toBeUndefined();
+
+    const id = await aPaidJob();
+    const answer = await preparing.setUp({ ...(await asPoster(id, uniqueName())), tell: `  ${TELL} ` });
+    expect(answer).toMatchObject({ ok: true });
+    expect((await new PreparingStore(folder).readSetUp(`${id}`))?.tell, "kept as written, without the spaces around it").toBe(TELL);
+    // what the poster's own page is sent says nothing of it, and neither does the answer to setting it up
+    expect(JSON.stringify(answer)).not.toContain(TELL);
+    const shown = await preparing.read(`${id}`, await statement(id));
+    if (!shown.ok) throw new Error(`its poster could not read the job they set up: ${shown.why}`);
+    expect(JSON.stringify(preparingToTheWire(shown.value))).not.toContain(TELL);
+
+    // asked again with the address corrected, as a page does that lost the first answer: the correction is kept
+    const corrected = { ...(await asPoster(id, (await new PreparingStore(folder).readSetUp(`${id}`))!.name)), tell: "corrected@example.com" };
+    expect(await preparing.setUp(corrected)).toMatchObject({ ok: true });
+    expect((await new PreparingStore(folder).readSetUp(`${id}`))?.tell).toBe("corrected@example.com");
+    // and by nobody else: a stranger's signature sets nothing
+    expect(await preparing.setUp({ ...corrected, ...(await asPoster(id, corrected.name, { by: STRANGER })), tell: "stranger@example.com" })).toMatchObject({ ok: false });
+    expect((await new PreparingStore(folder).readSetUp(`${id}`))?.tell).toBe("corrected@example.com");
+
+    // and a poster who leaves none is asked for none
+    const quiet = await aPaidJob();
+    expect(await preparing.setUp(await asPoster(quiet, uniqueName()))).toMatchObject({ ok: true });
+    expect((await new PreparingStore(folder).readSetUp(`${quiet}`))?.tell).toBeUndefined();
+  }, 120_000);
 
   test("nobody but the poster can set a job up, and the chain has to agree with what they say", async () => {
     const { preparing } = await service(UNREACHABLE);
@@ -492,7 +525,7 @@ describe.skipIf(!available)("a paid job, prepared", () => {
 
   test("a set with a line that is not proven is charged, and has nothing the writer signed", async () => {
     const taste = { checkable: false, why: "Say what you would see, for example the answer is in large type" };
-    const { preparing } = await service(replying({ working: WORKING, checks: [good(0), taste] }).model);
+    const { preparing } = await service(replying({ checks: [good(0), taste] }).model);
     const id = await aPaidJob();
     await preparing.setUp(await asPoster(id, uniqueName(), { request: { ...COAT_REQUEST, statements: [COAT_REQUEST.statements[0]!, { says: "It looks lovely", secret: true }] } }));
     const [written] = (await whenWritten(preparing, id)).writings;

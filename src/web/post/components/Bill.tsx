@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { ROUTES } from "../../../routes.ts";
+import type { MarketConfig } from "../../../market.ts";
 import { COPY, isSealed, type Progress, type StepName } from "../state/index.ts";
 import { ShardSeal } from "./ShardSeal.tsx";
 
@@ -7,21 +8,23 @@ interface BillProps {
   readonly progress?: Progress;
   readonly working?: StepName;
   readonly flash?: number;
+  /** set where the poster has the last word, which changes what this page promises */
+  readonly rule?: MarketConfig["lastWord"];
 }
 
 /**
  * The poster on the left: what this is, in the loudest type on the page, and the seal assembling as
  * the job does. Under it, one line saying what to do next: the seal says how far, this says where.
  */
-export function Bill({ progress, working, flash }: BillProps): ReactElement {
+export function Bill({ progress, working, flash, rule }: BillProps): ReactElement {
   return (
     <aside className="bill">
       <p className="eyebrow"><a href={ROUTES.wall}>Proof of Development</a> / {COPY.masthead.eyebrow}</p>
       <h1 className="shout">
         {COPY.masthead.shout.map((line) => <span key={line} data-text={line}>{line}</span>)}
-        <span className="strap">{COPY.masthead.strap}</span>
+        <span className="strap">{rule ? COPY.masthead.lastWord.strap : COPY.masthead.strap}</span>
       </h1>
-      <p className="stand">{COPY.masthead.stand}</p>
+      <p className="stand">{rule ? COPY.masthead.lastWord.stand(rule) : COPY.masthead.stand}</p>
       {progress && (
         <figure className="seal-figure">
           <ShardSeal progress={progress} working={working} flash={flash} />

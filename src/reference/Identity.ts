@@ -11,6 +11,8 @@ import { branchFor } from "../door/seat.ts";
 import { MOST_A_STATEMENT_MAY_LAST_SECONDS } from "../door/credentials.ts";
 import type { Role } from "../job.ts";
 import { approve, podJobsAbi, policyMet, readJob, readSeats, takeSeat, type HeldSeat, type OnChainJob } from "../jobs.ts";
+import { isLocked } from "../jobsV2.ts";
+import { isPutForwardByItsBuilder, putForward, readReviewBy } from "../jobsV3.ts";
 import type { MarketConfig } from "../market.ts";
 import { doorMessage, noteMessage } from "../messages.ts";
 import { requestValidation, type Registries } from "../registry.ts";
@@ -34,6 +36,8 @@ export class Identity {
   readonly jobs: Address;
   /** where to ask for verdicts to be recorded, if the server says */
   readonly registries?: Registries;
+  /** whether a builder puts its own work forward on this contract, asked of it once */
+  private builderNames?: Promise<boolean>;
 
   /**
    * @param owner who is behind the agent, for the contract's one-owner-to-a-job rule. Most people
@@ -102,11 +106,35 @@ export class Identity {
   }
 
   /**
-   * Whether the job is locked on its candidate: every approval the policy asks for is in place, so
-   * the work is being graded and the contract takes no other commit until it settles, the window
-   * closes, or the grader lets it go.
+   * How work comes to be graded on this contract. Where the contract gives the seats a time to review,
+   * the builder puts its own commit forward and no seat can hold it back; on the contracts before it,
+   * the lead names the candidate by approving it first, and every approval the policy asks for has to
+   * be in. Asked of the contract once.
+   */
+  buildersPutTheirWorkForward(): Promise<boolean> {
+    this.builderNames ??= isPutForwardByItsBuilder(this.contract);
+    return this.builderNames;
+  }
+
+  /** The builder puts its work forward, as one exact commit, to be reviewed and graded. */
+  putForward(job: JobRef, commit: string): Promise<Hex> {
+    return putForward(this.contract, job.onChainId, commitToBytes32(commit));
+  }
+
+  /** Whether the time to stand behind what is put forward has run out, by the chain's own clock. */
+  async isReviewOver(job: JobRef): Promise<boolean> {
+    const until = await readReviewBy(this.contract, job.onChainId);
+    return until !== undefined && (await this.now()) >= until;
+  }
+
+  /**
+   * Whether the job is locked on its candidate, so that the work is being graded and the contract
+   * takes no other commit until it is reported on, the window closes, or the grader lets it go. Where
+   * a builder puts its work forward that is the whole pod behind it, or its review run out; on the
+   * contracts before, every approval the policy asks for in place.
    */
   async isLocked(job: JobRef): Promise<boolean> {
+    if (await this.buildersPutTheirWorkForward()) return isLocked(this.contract, job.onChainId);
     const { commit } = await this.readJob(job);
     return commit !== zeroHash && policyMet(this.contract, job.onChainId, commit);
   }

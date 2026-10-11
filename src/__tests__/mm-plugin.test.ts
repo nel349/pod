@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { commitToApprove } from "../../plugins/mm/src/candidate.ts";
+import { commitToApprove, commitToPutForward } from "../../plugins/mm/src/candidate.ts";
 import { startPassThrough, type PassThrough } from "../../plugins/mm/src/passThrough.ts";
 import { BaseError, ContractFunctionExecutionError, ContractFunctionRevertedError, encodeErrorResult } from "viem";
 import { Pod, PodDidNotAnswer, withASeatToTake } from "../../plugins/mm/src/pod.ts";
@@ -51,6 +51,44 @@ describe("which commit a seat may approve", () => {
     expect(commitToApprove("builder", CANDIDATE, CANDIDATE)).toMatchObject({ ok: false, code: "BUILDERS_DO_NOT_APPROVE" });
     expect(commitToApprove("lead", "1cede02", undefined)).toMatchObject({ ok: false, code: "NOT_A_COMMIT" });
     expect(commitToApprove("reviewer", "not-a-commit", CANDIDATE)).toMatchObject({ ok: false, code: "NOT_A_COMMIT" });
+  });
+});
+
+describe("which commit a seat may put forward or approve, where the builder puts its own work forward", () => {
+  const BUILDER_NAMES = true;
+
+  test("the builder names a commit in full, and nobody else names one", () => {
+    expect(commitToPutForward("builder", CANDIDATE, undefined)).toEqual({ ok: true, commit: CANDIDATE });
+    // a better commit takes the candidate's place while its review runs
+    expect(commitToPutForward("builder", ANOTHER.toUpperCase(), CANDIDATE)).toEqual({ ok: true, commit: ANOTHER });
+    for (const role of ["lead", "reviewer", "qa", "security"] as const) {
+      expect(commitToPutForward(role, CANDIDATE, undefined)).toMatchObject({ ok: false, code: "NOT_THE_BUILDER" });
+    }
+  });
+
+  test("nothing is put forward without a full commit, nor the candidate over again", () => {
+    expect(commitToPutForward("builder", undefined, undefined)).toMatchObject({ ok: false, code: "NO_COMMIT_NAMED" });
+    expect(commitToPutForward("builder", "  ", CANDIDATE)).toMatchObject({ ok: false, code: "NO_COMMIT_NAMED" });
+    expect(commitToPutForward("builder", "1cede02", undefined)).toMatchObject({ ok: false, code: "NOT_A_COMMIT" });
+    expect(commitToPutForward("builder", CANDIDATE, CANDIDATE)).toMatchObject({ ok: false, code: "ALREADY_PUT_FORWARD" });
+  });
+
+  test("the lead approves the candidate like every other seat, and can name no other", () => {
+    for (const role of ["lead", "reviewer", "qa", "security"] as const) {
+      expect(commitToApprove(role, undefined, CANDIDATE, BUILDER_NAMES)).toEqual({ ok: true, commit: CANDIDATE });
+      expect(commitToApprove(role, CANDIDATE, CANDIDATE, BUILDER_NAMES)).toEqual({ ok: true, commit: CANDIDATE });
+      expect(commitToApprove(role, ANOTHER, CANDIDATE, BUILDER_NAMES)).toMatchObject({ ok: false, code: "NOT_THE_CANDIDATE" });
+      // with nothing put forward there is nothing to stand behind, and the lead cannot make it so
+      const nothingYet = commitToApprove(role, CANDIDATE, undefined, BUILDER_NAMES);
+      expect(nothingYet).toMatchObject({ ok: false, code: "NO_CANDIDATE" });
+      if (!nothingYet.ok) expect(nothingYet.hint).toContain("mm pod put-forward");
+    }
+  });
+
+  test("the builder is told how it stands behind its work instead of approving it", () => {
+    const refused = commitToApprove("builder", CANDIDATE, CANDIDATE, BUILDER_NAMES);
+    expect(refused).toMatchObject({ ok: false, code: "BUILDERS_DO_NOT_APPROVE" });
+    if (!refused.ok) expect(refused.hint).toContain("mm pod put-forward");
   });
 });
 

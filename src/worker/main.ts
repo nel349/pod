@@ -15,9 +15,12 @@ import { BoxSlots } from "../docker/index.ts";
 import { BOX_SLOTS_FOLDER, JOBS_FOLDER_SETTING, PREPARING_FOLDER, REPOSITORIES_FOLDER, WORKER_FOLDER } from "../folders.ts";
 import { GITHUB_OWNER_SETTING } from "../github.ts";
 import { confirmTheContracts } from "../contracts.ts";
+import { netlifyFromTheEnvironment } from "../hosting/index.ts";
+import { hasTheLastWord } from "../jobsV3.ts";
 import { live } from "../live.ts";
 import { PreparingStore } from "../preparing/index.ts";
 import { MONAD_REGISTRIES } from "../registry.ts";
+import { brevoFromTheEnvironment } from "../mail/index.ts";
 import { IMAGE } from "../sandbox.ts";
 import { JobStore } from "../store.ts";
 import { holdTheLock } from "./lock.ts";
@@ -33,16 +36,25 @@ const contracts = live();
 await confirmTheContracts({
   publicClient: contracts.publicClient, jobs: contracts.jobs.address,
   ...(contracts.earlier ? { earlier: contracts.earlier.address } : {}),
+  ...(contracts.second ? { second: contracts.second.address } : {}),
 });
+// asked of the contract itself, so the worker never settles where it should only report
+const posterHasTheLastWord = contracts.earlier !== undefined && (await hasTheLastWord(contracts.jobs));
 const publishTo = process.env[GITHUB_OWNER_SETTING];
+const siteHost = netlifyFromTheEnvironment();
 const site = siteFromTheEnvironment();
+const mailer = brevoFromTheEnvironment();
 
 const worker = new Worker({
   store: new JobStore(directory),
   repositories: join(directory, REPOSITORIES_FOLDER),
   // after the switch-over the contract new jobs go to prepares them, and the first one is graded still
   ...(contracts.earlier
-    ? { jobs: contracts.earlier, prepared: contracts.jobs, preparing: new PreparingStore(join(directory, PREPARING_FOLDER)) }
+    ? {
+      jobs: contracts.earlier, prepared: contracts.jobs, hasTheLastWord: posterHasTheLastWord,
+      ...(contracts.second ? { second: contracts.second } : {}),
+      preparing: new PreparingStore(join(directory, PREPARING_FOLDER)),
+    }
     : { jobs: contracts.jobs }),
   boxes: new BoxSlots(join(directory, BOX_SLOTS_FOLDER)),
   token: contracts.token,
@@ -51,6 +63,8 @@ const worker = new Worker({
   ...(site ? { site } : {}),
   registry: { registries: MONAD_REGISTRIES, stateFolder: join(directory, WORKER_FOLDER) },
   ...(publishTo ? { publishTo: { owner: publishTo } } : {}),
+  ...(siteHost ? { siteHost } : {}),
+  ...(mailer ? { mailer } : {}),
 });
 
 const lock = await holdTheLock(join(directory, WORKER_FOLDER));
@@ -58,8 +72,18 @@ const stop = new AbortController();
 process.once("SIGINT", () => stop.abort());
 process.once("SIGTERM", () => stop.abort());
 console.log(contracts.earlier
-  ? `the worker is watching ${contracts.jobs.address}, which prepares jobs, and ${contracts.earlier.address}, grading as ${contracts.validator}`
+  ? `the worker is watching ${contracts.jobs.address}, which prepares jobs${posterHasTheLastWord ? " and gives their poster the last word" : ""}, and ${contracts.earlier.address}, grading as ${contracts.validator}`
   : `the worker is watching ${contracts.jobs.address}, grading as ${contracts.validator}`);
+console.log(siteHost
+  ? `a delivered website is put live on ${siteHost.name}`
+  : "a delivered website has nowhere to go live: no host is named in the settings");
+console.log(!mailer
+  ? "a poster is not told by mail when their job is delivered: no mail service is named in the settings"
+  : !site
+    ? "a poster cannot be told by mail: the settings name a mail service but not this site's own address, which a message has to link to"
+    : !posterHasTheLastWord
+      ? "a poster is not told by mail: nothing is delivered to a poster on the contract jobs are posted to"
+      : `a poster who left an address is told by mail, through ${mailer.name}, when their job is delivered`);
 console.log(publishTo
   ? `work that passes is published on GitHub under ${publishTo}`
   : `work that passes stays on this server: ${GITHUB_OWNER_SETTING} names no GitHub account to publish it under`);

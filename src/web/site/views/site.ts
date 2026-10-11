@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MarketConfigSchema } from "../../../market.ts";
 import { AgentFactsViewSchema } from "./agent.ts";
+import { AgentRecordSchema } from "./answer.ts";
 import { JobViewSchema } from "./job.ts";
 import { WHEN } from "./kinds.ts";
 import { ReceiptViewSchema } from "./receipt.ts";
@@ -14,7 +15,11 @@ export const RoleRecordSchema = z.object({
 export const SitePageSchema = z.discriminatedUnion("page", [
   z.object({ page: z.literal("wall"), tiles: z.array(TileViewSchema) }),
   z.object({ page: z.literal("job"), job: JobViewSchema }),
-  z.object({ page: z.literal("agent"), agent: z.string(), record: z.array(RoleRecordSchema), facts: AgentFactsViewSchema, tiles: z.array(TileViewSchema) }),
+  z.object({
+    page: z.literal("agent"), agent: z.string(), record: z.array(RoleRecordSchema), facts: AgentFactsViewSchema, tiles: z.array(TileViewSchema),
+    /** how the posters of its jobs answered, where a contract keeps that count; absent when none does or it could not be read */
+    answered: AgentRecordSchema.optional(),
+  }),
   z.object({ page: z.literal("receipt"), receipt: ReceiptViewSchema }),
   z.object({ page: z.literal("yours") }),
   z.object({ page: z.literal("agents") }),

@@ -9,6 +9,8 @@
  * Everything that can be wrong with the settings is found when the server starts, with a sentence: a
  * contract that does not prepare jobs, or a writer key the contract does not answer to.
  */
+import { siteFromTheEnvironment } from "./address.ts";
+import { brevoFromTheEnvironment } from "./mail/index.ts";
 import { join } from "node:path";
 import { isAddress, type Account, type Address, type Chain, type PublicClient, type Transport, type WalletClient } from "viem";
 import { agentFactsFrom } from "./agentFacts.ts";
@@ -19,14 +21,17 @@ import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, IdentityDoor
 import { BOX_SLOTS_FOLDER, CREDIT_FOLDER, PREPARING_FOLDER, PROVEN_FOLDER, REPOSITORIES_FOLDER } from "./folders.ts";
 import { holderOf } from "./handover.ts";
 import { readJob, readJobCount, readSeats, readTerms, readValidator } from "./jobs.ts";
-import { readJobV2, readWritingMoney, readWritingPrice, readWritingsIncluded, WriterKey } from "./jobsV2.ts";
+import { isLocked, readJobV2, readWritingMoney, readWritingPrice, readWritingsIncluded, WriterKey } from "./jobsV2.ts";
 import { grantsFor, seatAllowance, SESSION_KEY_PLUGIN } from "./mandate.ts";
 import type { MarketConfig } from "./market.ts";
 import { ownersFrom, type OwnedContract } from "./owners.ts";
 import { readerFor, type ChainReader } from "./posting.ts";
+import { hasTheLastWord, readAnswerTime, readRefusalShare, readReviewShare } from "./jobsV3.ts";
+import { recordsAt } from "./records.ts";
+import { netlifyFromTheEnvironment, type SiteHost } from "./hosting/index.ts";
 import { Preparing, PreparingStore } from "./preparing/index.ts";
 import { confirmTheContracts, JOBS_ADDRESS_SETTING } from "./contracts.ts";
-import { OLD_JOBS_SETTING, WRITER_KEY_SETTING } from "./live.ts";
+import { OLD_JOBS_SETTING, SECOND_JOBS_SETTING, WRITER_KEY_SETTING } from "./live.ts";
 import type { Registries } from "./registry.ts";
 import type { Market, Services } from "./server.ts";
 import type { JobStore } from "./store.ts";
@@ -95,11 +100,17 @@ export interface ServicesInput {
   readonly jobs: Address;
   /** the contract jobs were posted to before, when `jobs` is the one that prepares them */
   readonly earlier?: Address;
+  /** the contract that prepared jobs before `jobs`, when `jobs` is the one on which the poster has the last word */
+  readonly second?: Address;
   /** the title contract; without it nobody can claim anything here */
   readonly token?: Address;
   /** the writer's wallet, which a contract that prepares jobs needs, and no other */
   readonly writer?: WalletClient<Transport, Chain, Account>;
   readonly checkWriter: CheckWriter;
+  /** where delivered websites are live, which hands one to its title's holder */
+  readonly siteHost?: SiteHost;
+  /** the worker is set up to tell a poster by mail when their job is delivered, so the posting page may ask for an address */
+  readonly tellsByMail?: boolean;
 }
 
 /** Every service, wired to the contracts it is given, after checking they are what they are said to be. */
@@ -108,7 +119,17 @@ export async function servicesFor(input: ServicesInput): Promise<Services> {
   if (input.earlier && !input.writer) {
     throw new Error(`${WRITER_KEY_SETTING} is not set: the contract at ${jobs} prepares jobs, and their checks are written and signed with the writer's key`);
   }
-  await confirmTheContracts({ publicClient, jobs, ...(input.earlier ? { earlier: input.earlier } : {}), ...(input.writer ? { writer: input.writer.account.address } : {}) });
+  await confirmTheContracts({
+    publicClient, jobs,
+    ...(input.earlier ? { earlier: input.earlier } : {}),
+    ...(input.second ? { second: input.second } : {}),
+    ...(input.writer ? { writer: input.writer.account.address } : {}),
+  });
+  // the contracts jobs were posted to before this one, newest first: their jobs are still read and answered for
+  const before = [
+    ...(input.second ? [{ jobs: input.second, prepares: true }] : []),
+    ...(input.earlier ? [{ jobs: input.earlier, prepares: false }] : []),
+  ];
   const contract = { address: jobs, publicClient };
   // a seat can be worked by a key its wallet granted, which the session key plugin is asked about.
   // Where the plugin is not deployed, which is any chain the mandate does not run on, the doors take
@@ -119,7 +140,7 @@ export async function servicesFor(input: ServicesInput): Promise<Services> {
   const keeper = new Doorkeeper({
     store,
     chain: doorChainAt(jobs, publicClient, input.page.chainId),
-    ...(input.earlier ? { earlier: [doorChainAt(input.earlier, publicClient, input.page.chainId)] } : {}),
+    ...(before.length > 0 ? { earlier: before.map((one) => doorChainAt(one.jobs, publicClient, input.page.chainId)) } : {}),
     ...(grants ? { grants } : {}),
   });
   const book = new CreditBook(join(directory, CREDIT_FOLDER));
@@ -127,15 +148,24 @@ export async function servicesFor(input: ServicesInput): Promise<Services> {
   const proven = new ProvenChecks(join(directory, PROVEN_FOLDER));
   const token = input.token ? { address: input.token, publicClient } : undefined;
   const preparing = input.earlier ? await preparingOn(input) : undefined;
+  // who has done what, where the contract keeps count: asked of the contract itself
+  const records = preparing && (await hasTheLastWord(contract)) ? recordsAt(contract) : undefined;
+  // the page says both before anybody pays, so it is told here, from the contract
+  const lastWord = records
+    ? {
+      answerSeconds: Number(await readAnswerTime(contract)), refusalSharePercent: await readRefusalShare(contract), reviewSharePercent: await readReviewShare(contract),
+      ...(input.tellsByMail ? { tellsByMail: true } : {}),
+    }
+    : undefined;
   // the page shows what writing costs before the poster pays, so it is told here
   const writing = preparing
     ? { price: `${await readWritingPrice(contract)}`, included: await readWritingsIncluded(contract) }
     : undefined;
   const market: Market = {
     // an agent working for a wallet is told what the wallet has to allow, only where a wallet can grant at all
-    page: { ...input.page, jobs, ...(writing ? { writing } : {}), ...(grants ? { seatAllowance: seatAllowance(jobs) } : {}) },
+    page: { ...input.page, jobs, ...(writing ? { writing } : {}), ...(lastWord ? { lastWord } : {}), ...(grants ? { seatAllowance: seatAllowance(jobs, lastWord !== undefined) } : {}) },
     chain: readerFor({ jobs, read: (id) => readJob(contract, id), now: async () => (await publicClient.getBlock()).timestamp }),
-    ...(input.earlier ? { earlier: ownedAt(input.earlier, publicClient).reader } : {}),
+    ...(before.length > 0 ? { earlier: before.map((one) => ownedAt(one.jobs, publicClient).reader) } : {}),
     writing: new CheckWriting({ writer: input.checkWriter, proven }),
     proven,
   };
@@ -144,16 +174,20 @@ export async function servicesFor(input: ServicesInput): Promise<Services> {
     door: new GitDoor({ repositories: join(directory, REPOSITORIES_FOLDER), keeper, credit: book }),
     notes: new NoteBoard({ keeper, store }),
     identities: new IdentityDoor({ keeper, store, client: publicClient, registries: input.registries }),
-    jobList: new JobList({ keeper, store }),
+    jobList: new JobList({ keeper, store, ...(records ? { records } : {}) }),
     credit: new CreditDoor({ book }),
     // who paid and who holds, on both contracts: old jobs keep their poster and their title holder (R12)
     owners: ownersFrom({
-      contracts: [{ ...ownedAt(jobs, publicClient), prepares: preparing !== undefined }, ...(input.earlier ? [ownedAt(input.earlier, publicClient)] : [])],
+      contracts: [
+        { ...ownedAt(jobs, publicClient), prepares: preparing !== undefined },
+        ...before.map((one) => ({ ...ownedAt(one.jobs, publicClient), ...(one.prepares ? { prepares: true } : {}) })),
+      ],
       ...(token ? { holder: (tokenId: bigint) => holderOf(token, tokenId) } : {}),
     }),
     agents: agentFactsFrom({ client: publicClient, registries: input.registries, validator: () => readValidator(contract), credit: book }),
-    ...(token ? { claims: new Claims({ store, token }) } : {}),
+    ...(token ? { claims: new Claims({ store, token, ...(input.siteHost ? { siteHost: input.siteHost } : {}) }) } : {}),
     ...(preparing ? { preparing } : {}),
+    ...(records ? { records } : {}),
   };
 }
 
@@ -166,11 +200,13 @@ export async function servicesFromTheEnvironment(
   const jobs = addressSetting(environment, JOBS_ADDRESS_SETTING);
   if (!jobs) return {};
   const earlier = addressSetting(environment, OLD_JOBS_SETTING);
+  const second = addressSetting(environment, SECOND_JOBS_SETTING);
   const tokenAddress = addressSetting(environment, TOKEN_ADDRESS_SETTING);
   const { monadClient, writerWallet } = await import("./live.ts");
   const { MONAD_REGISTRIES, MONAD_TESTNET } = await import("./registry.ts");
   const { claudeOnThisMachine } = await import("./broker.ts");
   const { modelThroughOpenRouter } = await import("./openrouter.ts");
+  const siteHost = netlifyFromTheEnvironment(environment);
   const chosen = checksModelNamed(environment);
   const thinking = chosen.thinking ? { thinking: chosen.thinking } : {};
   const model = chosen.through === "openrouter"
@@ -184,8 +220,12 @@ export async function servicesFromTheEnvironment(
     page: { chainId: MONAD_TESTNET.id, chainName: "Monad testnet", rpc, explorer: "https://testnet.monadscan.com", coin: MONAD_TESTNET.coin, faucet: MONAD_TESTNET.faucet, sending: MONAD_TESTNET.sending, registries: MONAD_REGISTRIES },
     registries: MONAD_REGISTRIES,
     ...(earlier ? { earlier, writer: writerWallet(environment) } : {}),
+    ...(second ? { second } : {}),
     ...(tokenAddress ? { token: tokenAddress } : {}),
     checkWriter: { model, image: IMAGE, agents: new URL("../agents", import.meta.url).pathname },
+    ...(siteHost ? { siteHost } : {}),
+    // a message links to the job's page, so mail needs this site's own address as well as a mail service
+    ...(brevoFromTheEnvironment(environment) && siteFromTheEnvironment(environment) ? { tellsByMail: true } : {}),
   });
 }
 
@@ -233,6 +273,8 @@ function doorChainAt(jobs: Address, publicClient: PublicClient, chainId: number)
     readJob: (id) => readJob(at, id),
     readSeats: (id) => readSeats(at, id),
     readTerms: (id) => readTerms(at, id),
+    // the first contract has no such question to ask, and nothing on it is ever locked with a seat free
+    readLocked: (id) => isLocked(at, id).catch(() => false),
     latestBlockTime: async () => (await publicClient.getBlock()).timestamp,
   });
 }

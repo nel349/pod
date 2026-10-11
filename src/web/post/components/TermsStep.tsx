@@ -9,7 +9,12 @@ import { Step } from "./Step.tsx";
  * What they pay, how long the builders have, and where the job will live on the wall. Once paid for,
  * the price and the time are what the chain holds, so they are shown and no longer changed.
  */
-export function TermsStep({ coin, isPaid = false }: { readonly coin: string; readonly isPaid?: boolean }): ReactElement {
+export function TermsStep({ coin, isPaid = false, canTell = false }: {
+  readonly coin: string;
+  readonly isPaid?: boolean;
+  /** this server tells a poster by mail when their job is delivered, so an address is worth asking for */
+  readonly canTell?: boolean;
+}): ReactElement {
   const { register } = useFormContext<PostForm>();
   return (
     <Step name="terms" title={COPY.terms.title}>
@@ -33,9 +38,20 @@ export function TermsStep({ coin, isPaid = false }: { readonly coin: string; rea
         <span className="slug-row">
           <span className="slug-prefix">/job/</span>
           <input id="name" type="text" placeholder={COPY.terms.namePlaceholder} autoComplete="off" spellCheck={false}
-            onKeyDown={holdEnter} {...register("name")} />
+            aria-describedby="name-says" onKeyDown={holdEnter} {...register("name")} />
         </span>
       </label>
+      <p id="name-says" className="note">{COPY.terms.nameSays}</p>
+      {canTell && (
+        <>
+          <label className="field tell">
+        <span>{COPY.terms.tell} <span className="optional">{COPY.terms.tellOptional}</span></span>
+        <input id="tell" type="text" inputMode="email" autoComplete="email" placeholder={COPY.terms.tellPlaceholder} spellCheck={false}
+          aria-describedby="tell-says" onKeyDown={holdEnter} {...register("tell")} />
+      </label>
+          <p id="tell-says" className="note">{COPY.terms.tellSays}</p>
+        </>
+      )}
     </Step>
   );
 }

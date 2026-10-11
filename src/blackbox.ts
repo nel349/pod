@@ -68,6 +68,15 @@ export interface CheckOutcome {
   readonly seconds: number;
 }
 
+/** The longest a check's own last word is kept: the line that explains a failure, and no more. */
+export const LONGEST_CHECK_SAID = 200;
+
+/** The last line a check printed, cut to a length: its own word for what it found, if it said anything. */
+export function lastSaid(output: string): string | undefined {
+  const last = output.trim().split("\n").map((line) => line.trim()).filter(Boolean).pop();
+  return last ? last.slice(0, LONGEST_CHECK_SAID) : undefined;
+}
+
 export interface GradeOutcome {
   readonly checks: readonly CheckOutcome[];
   readonly passed: boolean;

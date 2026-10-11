@@ -9,6 +9,7 @@
  */
 import { parseAbi, toFunctionSignature, type AbiFunction, type Address, type PublicClient } from "viem";
 import { podJobsAbi } from "./jobs.ts";
+import { podJobsV3Abi } from "./jobsV3.ts";
 
 /**
  * The session key plugin. It is the same address on every network because it is deployed through the
@@ -103,10 +104,10 @@ export const MANDATE_STEPS: readonly { readonly id: StepId; readonly where: Wher
 ];
 
 /**
- * The wallet, which opens in a phone's browser with nothing to install. The preview, because it is
- * the one that runs on Monad: the wallet at /mandate/ is the Arc one and does not know this chain.
+ * The wallet, which opens in a phone's browser with nothing to install. One address for Arc and Monad
+ * alike: the Monad build that was published beside it at /mandate-next/ took its place.
  */
-export const WALLET_ADDRESS = "https://kuiralabs.github.io/mandate-next/";
+export const WALLET_ADDRESS = "https://kuiralabs.github.io/mandate/";
 
 /** Teaches an agent POD: the seats, the doors, and what each seat does */
 export const SKILL_INSTALL = "npx skills add nel349/pod";
@@ -121,6 +122,8 @@ export const CONNECTOR_NOTES = "https://github.com/nel349/arc-agent-mandate/blob
 
 /** The two things a seat does on the contract: sitting down, and saying a commit should ship. */
 const A_SEAT_CALLS = ["takeSeat", "approve"] as const;
+/** The third, where a builder puts its own work forward: without it a builder working for a wallet could never deliver. */
+const A_BUILDERS_CALL = "putForward";
 
 /**
  * What a wallet's allowance has to name for its agent to work a seat, said the way the wallet's
@@ -128,18 +131,26 @@ const A_SEAT_CALLS = ["takeSeat", "approve"] as const;
  * person makes covers the whole seat, and they are never sent back for something that was left out.
  *
  * It is the job contract and those two functions, read from the contract's own interface so the
- * words here cannot drift from what the chain will accept. Nothing else: the verdict on an agent's
- * record is written by this server, not asked for by the wallet.
+ * words here cannot drift from what the chain will accept, and a third where the contract has a
+ * builder put its own work forward. Nothing else: the verdict on an agent's record is written by this
+ * server, not asked for by the wallet.
  */
 export interface SeatAllowance {
   readonly app: string;
   readonly calls: readonly { readonly contract: Address; readonly functions: readonly string[] }[];
 }
 
-export function seatAllowance(jobs: Address): SeatAllowance {
-  // the same two functions on the first contract and on the one that prepares jobs
+/**
+ * @param isPutForwardByItsBuilder whether the contract has a builder put its own work forward, which
+ *                                 the wallet then has to allow as well
+ */
+export function seatAllowance(jobs: Address, isPutForwardByItsBuilder = false): SeatAllowance {
+  // the same two functions on every jobs contract
   const functions = podJobsAbi
     .filter((item): item is Extract<(typeof podJobsAbi)[number], AbiFunction> => item.type === "function" && (A_SEAT_CALLS as readonly string[]).includes(item.name))
     .map((item) => toFunctionSignature(item));
-  return { app: "POD", calls: [{ contract: jobs, functions }] };
+  const builders = podJobsV3Abi
+    .filter((item): item is Extract<(typeof podJobsV3Abi)[number], AbiFunction> => item.type === "function" && item.name === A_BUILDERS_CALL)
+    .map((item) => toFunctionSignature(item));
+  return { app: "POD", calls: [{ contract: jobs, functions: isPutForwardByItsBuilder ? [...functions, ...builders] : functions }] };
 }

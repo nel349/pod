@@ -6,9 +6,9 @@
  * statement, as a header in its environment: never in the door's address, which git writes into its
  * command line where anybody on the machine can list it. Anything git prints is scrubbed of it too.
  */
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { PLAIN_GIT } from "../plainGit.ts";
 
 export interface Committer {
@@ -77,6 +77,17 @@ export class WorkingCopy {
       await mkdir(dirname(at), { recursive: true });
       await writeFile(at, contents);
     }
+  }
+
+  /** The files the copy holds under a folder, by their paths from the copy's root, in a steady order. */
+  async filesUnder(folder: string): Promise<readonly string[]> {
+    const entries = await readdir(join(this.path, folder), { recursive: true, withFileTypes: true }).catch(() => []);
+    return entries.filter((entry) => entry.isFile()).map((entry) => relative(this.path, join(entry.parentPath, entry.name))).sort();
+  }
+
+  /** Empty a folder of the copy, so what is written next is all it holds. */
+  async clear(folder: string): Promise<void> {
+    await rm(join(this.path, folder), { recursive: true, force: true });
   }
 
   async read(file: string): Promise<string | undefined> {

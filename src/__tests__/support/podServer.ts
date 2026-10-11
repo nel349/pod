@@ -12,7 +12,7 @@ import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, JobList, Not
 import type { Grants } from "../../mandate.ts";
 import { sealSpec, type Role, type Spec } from "../../job.ts";
 import { policyMet, post, readJob, readSeats, readTerms } from "../../jobs.ts";
-import { checksDigest, podJobsV2Abi } from "../../jobsV2.ts";
+import { checksDigest, isLocked, podJobsV2Abi } from "../../jobsV2.ts";
 import { openJob } from "../../publish.ts";
 import type { Registries } from "../../registry.ts";
 import { PLAIN_GIT } from "../../plainGit.ts";
@@ -69,6 +69,7 @@ export function doorChainOn(anvil: Anvil, jobs: Address, counting: { readonly jo
     readJob: (id) => { counting.jobRead?.(); return readJob(reading, id); },
     readSeats: (id) => { counting.seatsRead?.(); return readSeats(reading, id); },
     readTerms: (id) => readTerms(reading, id),
+    readLocked: (id) => isLocked(reading, id).catch(() => false),
     latestBlockTime: async () => (await anvil.publicClient.getBlock()).timestamp,
   });
 }
@@ -111,15 +112,24 @@ export async function aPodServer(input: {
    * beside it as the earlier one, as on Monad after the switch.
    */
   readonly prepared?: boolean;
+  /**
+   * Post on the contract on which the poster has the last word, giving them this many seconds to
+   * answer a delivery. The job is prepared there as on the one before it, and the first contract is
+   * deployed beside it as the earlier one.
+   */
+  readonly lastWordWithin?: bigint;
   /** what the wallets granted, for a seat worked under a mandate; without it only a seat's own key is let in */
   readonly grants?: Grants;
 }): Promise<RunningPodServer> {
   const anvil = await startAnvil();
   const validator = privateKeyToAccount(VALIDATOR).address;
   const earlierJobs = await anvil.deploy("PodJobs", [validator]);
-  const jobs = input.prepared
-    ? await anvil.deploy("PodJobsV2", [validator, privateKeyToAccount(WRITER).address, 1n, WRITING_PRICE, PAYOUT_GAS])
-    : earlierJobs;
+  const isPrepared = input.prepared === true || input.lastWordWithin !== undefined;
+  const jobs = input.lastWordWithin !== undefined
+    ? await anvil.deploy("PodJobsV3", [validator, privateKeyToAccount(WRITER).address, 1n, WRITING_PRICE, PAYOUT_GAS, input.lastWordWithin])
+    : input.prepared
+      ? await anvil.deploy("PodJobsV2", [validator, privateKeyToAccount(WRITER).address, 1n, WRITING_PRICE, PAYOUT_GAS])
+      : earlierJobs;
   const token = await anvil.deploy("PodToken", [privateKeyToAccount(VALIDATOR).address]);
   const registries = await deployRegistries(anvil);
   for (const agent of input.fund) await anvil.fund(agent.address);
@@ -130,11 +140,16 @@ export async function aPodServer(input: {
   const now = (await anvil.publicClient.getBlock()).timestamp;
   const seconds = BigInt(Math.round((input.hours ?? 1) * 3600));
   const seal = await sealSpec(input.spec);
-  const { onChainId, endsAt } = input.prepared
+  const { onChainId, endsAt } = isPrepared
     ? await postPrepared(anvil, jobs, seal, seconds, input.spec.price)
     : { onChainId: await post({ ...reading, wallet: anvil.wallet(ANVIL_KEYS[1]) }, { seal, endsAt: now + seconds, reviewers: 1, price: input.spec.price }), endsAt: now + seconds };
   const opened = await openJob(store, { jobId: input.jobId, seal, spec: input.spec, endsAt: new Date(Number(endsAt) * 1000), seats: [] });
-  await store.save({ ...opened, chain: { network: "monad-testnet", jobId: String(onChainId), jobs } }, input.files);
+  // as the worker leaves a job it puts on the wall: on a contract where the poster has the last word, it says so, and who they are
+  await store.save({
+    ...opened,
+    chain: { network: "monad-testnet", jobId: String(onChainId), jobs, ...(input.lastWordWithin !== undefined ? { lastWord: true as const } : {}) },
+    ...(input.lastWordWithin !== undefined ? { poster: privateKeyToAccount(POSTER).address } : {}),
+  }, input.files);
   await store.saveSpec(input.jobId, input.spec);
 
   const keeper = new Doorkeeper({ store, chain: doorChainOn(anvil, jobs), ...(input.grants ? { grants: input.grants } : {}) });

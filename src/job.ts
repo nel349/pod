@@ -26,24 +26,73 @@ export type Role = "lead" | "builder" | "reviewer" | "qa" | "security";
 /**
  * What is being built, as far as grading is concerned.
  *
- * Grading drives the work from outside, over the network, so both are something that answers on a
- * port: a page a person opens, or a service another program calls. The difference is what a check
- * looks at — what a person would see, or the data that comes back — and the check writer needs to
- * know which. Anything else (a command-line tool, a library, a contract) cannot be graded from
- * outside the box yet, and is not offered.
+ * Grading drives the work from outside, over the network, so each is something that answers on a
+ * port: a website, a folder of files served as they are; a service another program calls; or a page
+ * a program of the pod's own draws, which is how a job asked for a page before websites were files.
+ * The difference is what a check looks at (what a person would see, or the data that comes back)
+ * and the check writer needs to know which. Anything else (a command-line tool, a library, a
+ * contract) cannot be graded from outside the box yet, and is not offered.
  */
-export const KINDS = ["page", "service"] as const;
+export const KINDS = ["page", "service", "site"] as const;
 
 export type Kind = (typeof KINDS)[number];
+
+/**
+ * The kinds a new job may be: a website, which is published at a live address when it is delivered,
+ * or a service. A page drawn by a program is still read and graded for the jobs that asked for one.
+ */
+export const OFFERED_KINDS = ["site", "service"] as const satisfies readonly Kind[];
 
 /** Where the work answers inside its box, which is what every check is pointed at. */
 export const PORT = 3000;
 
-/** The one file posted work is */
+/** The one file posted work is, when it is a program */
 export const WORK_FILE = "server.js";
 
-/** How posted work is started in its box: one file, run by node, answering on PORT. */
+/** How posted work is started in its box, when it is a program: one file, run by node, answering on PORT. */
 export const START = `node ${WORK_FILE}`;
+
+/** The folder a website is: its files as they are served, with its front page at the top */
+export const SITE_FOLDER = "site";
+export const SITE_FRONT_PAGE = "index.html";
+
+/**
+ * How a website is served in its box, for its checks: the files in its folder and nothing else, on
+ * PORT. The pod supplies no program here, so none of theirs runs; this one is the same for every
+ * website, and is written into each receipt, so anybody repeating a verdict serves the files the
+ * same way. A file is found at its own address, as a folder's front page, or with .html left off,
+ * the way the hosts websites go live on find them. Nothing above the folder is ever served, and
+ * neither is a link, wherever it points: a link is not published either, so it is not checked.
+ *
+ * Written as one line with no single quote in it, since it is handed to a shell inside one pair.
+ */
+const SITE_SERVER = [
+  `const http=require("http"),fs=require("fs"),path=require("path");`,
+  `const root=(()=>{try{return fs.realpathSync(${JSON.stringify(SITE_FOLDER)})}catch{return path.resolve(${JSON.stringify(SITE_FOLDER)})}})();`,
+  `const types={".html":"text/html; charset=utf-8",".css":"text/css; charset=utf-8",".js":"text/javascript; charset=utf-8",".mjs":"text/javascript; charset=utf-8",".json":"application/json",".svg":"image/svg+xml",".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".gif":"image/gif",".webp":"image/webp",".ico":"image/x-icon",".txt":"text/plain; charset=utf-8",".woff2":"font/woff2"};`,
+  `const inside=(file)=>file===root||file.startsWith(root+path.sep);`,
+  `const isFile=(file)=>{try{return fs.lstatSync(file).isFile()&&inside(fs.realpathSync(file))}catch{return false}};`,
+  `http.createServer((request,response)=>{`,
+  `let asked;try{asked=decodeURIComponent(new URL(request.url,"http://site").pathname)}catch{response.writeHead(400,{"content-type":"text/plain; charset=utf-8"});response.end("not an address");return}`,
+  `const at=path.join(root,asked);`,
+  `const found=[at,path.join(at,${JSON.stringify(SITE_FRONT_PAGE)}),at+".html"].find((file)=>inside(file)&&isFile(file));`,
+  `if(!found){response.writeHead(404,{"content-type":"text/plain; charset=utf-8"});response.end("not found");return}`,
+  `response.writeHead(200,{"content-type":types[path.extname(found).toLowerCase()]||"application/octet-stream"});`,
+  `fs.createReadStream(found).pipe(response);`,
+  `}).listen(${PORT});`,
+].join("");
+
+export const SERVE_THE_SITE = `node -e '${SITE_SERVER}'`;
+
+/** How a job's work is started in its box: a website's files are served as they are, and a program is run. */
+export function startFor(kind: Kind | undefined): string {
+  return kind === "site" ? SERVE_THE_SITE : START;
+}
+
+/** The one file the reference builder writes for a job: a website's front page, or the program. */
+export function workFileFor(kind: Kind | undefined): string {
+  return kind === "site" ? `${SITE_FOLDER}/${SITE_FRONT_PAGE}` : WORK_FILE;
+}
 
 /** One thing that must be true before anyone is paid. Objective, or it does not belong here. */
 export interface Check {
@@ -120,6 +169,13 @@ export const SHARES: Record<Role, number> = { lead: 20, builder: 40, reviewer: 1
 
 /** The seats ours thinks for with a model. The lead and QA never ask it anything */
 export const NEEDS_A_MODEL: readonly Role[] = ["builder", "reviewer", "security"];
+
+/**
+ * The seats ours thinks for with a model where the builder puts its own work forward: the lead too,
+ * which no longer names what ships there and judges the work like any other seat. QA still runs the
+ * checks, and asks nothing.
+ */
+export const NEEDS_A_MODEL_TO_JUDGE: readonly Role[] = ["lead", ...NEEDS_A_MODEL];
 
 /** A seat's deposit, as a percentage of what that seat is paid, as the contract has it (DEPOSIT_PERCENT). */
 export const DEPOSIT_PERCENT = 10;

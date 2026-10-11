@@ -183,10 +183,10 @@ async function aHeldVerdict(job: MadeJob): Promise<void> {
 
 /** Checks the writer wrote and proved, as a writing keeps them: the rain one visible, the dry one hidden. */
 const PROVEN: Written[] = [
-  { checkable: true, says: WET, secret: false, asks: "Asks while it is raining", expects: "Take a coat", nearMiss: "It never says take a coat",
-    file: "check-1.mjs", source: good(0).check, proof: { working: true, nearMiss: true, nothing: true }, saw: { working: "", nearMiss: "", nothing: "" } },
-  { checkable: true, says: DRY, secret: true, asks: "Asks while it is dry", expects: "No coat needed", nearMiss: "It always says take a coat",
-    file: "check-2.mjs", source: good(1).check, proof: { working: true, nearMiss: true, nothing: true }, saw: { working: "", nearMiss: "", nothing: "" } },
+  { checkable: true, says: WET, secret: false, asks: "Asks while it is raining", expects: "Take a coat",
+    file: "check-1.mjs", source: good(0).check, proof: { nothing: true }, saw: { nothing: "" } },
+  { checkable: true, says: DRY, secret: true, asks: "Asks while it is dry", expects: "No coat needed",
+    file: "check-2.mjs", source: good(1).check, proof: { nothing: true }, saw: { nothing: "" } },
 ];
 
 /**

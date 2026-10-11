@@ -64,9 +64,12 @@ export const podJobsV2Abi = parseAbi([
   "error PaymentFailed()",
 ]);
 
-/** A job's state on the new contract, in the contract's order: preparing was added last. */
-export type JobStateV2 = "open" | "working" | "settled" | "refunded" | "preparing";
-const STATES_V2: readonly JobStateV2[] = ["open", "working", "settled", "refunded", "preparing"];
+/**
+ * A job's state on a contract that prepares jobs, in the contract's order: preparing was added by the
+ * second contract, and delivered by the third, on which a job waits there for its poster's answer.
+ */
+export type JobStateV2 = "open" | "working" | "settled" | "refunded" | "preparing" | "delivered";
+const STATES_V2: readonly JobStateV2[] = ["open", "working", "settled", "refunded", "preparing", "delivered"];
 
 /** The contract's state number, in words, or an error for a number it never gives. */
 export function stateOfV2(state: number): JobStateV2 {

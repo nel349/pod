@@ -18,6 +18,11 @@
  * is cheap to make, so neither may stand in for the key that held the seat. And it answers only once
  * the chain agrees with the verdict: work paid for a pass, a poster refunded for a failure.
  *
+ * Where a builder puts its own work forward and the other seats say whether they stand behind it, a
+ * verdict is the record of the seats that did: the builder, and each seat that said yes. A seat that
+ * held its place and said nothing took no part in the work the verdict is about, and is written
+ * neither a pass it did not back nor a failure it did not sign.
+ *
  * The registry keeps which runner a request names but not which job it is about: that is in the
  * request's link, which only the event carries. So the worker reads the events, a little further each
  * time it looks, in slices as wide as Monad's public node allows, and remembers how far it got. A
@@ -58,6 +63,8 @@ export interface RegistryAnswersOptions {
   readonly jobs: Contract;
   /** the contract that prepares jobs before a pod can start, whose jobs are answered for the same way */
   readonly prepared?: Contract;
+  /** a contract that prepared jobs before that one, its jobs finished and still answered for */
+  readonly second?: Contract;
   readonly registries: Registries;
   readonly runner: Address;
   /** where job pages are served, so an answer points at the receipt it is about */
@@ -70,6 +77,15 @@ export interface RegistryAnswersOptions {
 }
 
 type Outcome = "answered" | "held" | "ignored";
+
+/**
+ * Whether a seat held its place on a job without standing behind the work, where that is a thing a
+ * seat can do: on the contract where a builder puts its own work forward, which is the one the poster
+ * has the last word on. The contract keeps who stood behind it after the job has ended.
+ */
+function didNotStandBehindIt(record: JobRecord, seat: HeldSeat): boolean {
+  return record.chain?.lastWord === true && !seat.approved;
+}
 type Settled = { readonly is: "yes"; readonly signed: SignedReceipt } | { readonly is: "not yet" } | { readonly is: "never" };
 
 export class RegistryAnswers {
@@ -157,6 +173,11 @@ export class RegistryAnswers {
       say(`${jobId}: agent #${named.agentId} is no longer the ${named.role}'s own, so nothing is written`);
       return;
     }
+    if (didNotStandBehindIt(record, seat)) {
+      await store.save({ ...record, identities: (record.identities ?? []).filter((one) => !sameSeat(one)) });
+      say(`${jobId}: the ${seat.role} did not stand behind the work, so its verdict is not agent #${named.agentId}'s, and nothing is written`);
+      return;
+    }
 
     const verdict = { kind: settled.signed.receipt.verdict };
     const tag = registryTag(verdict, seat.role);
@@ -220,6 +241,10 @@ export class RegistryAnswers {
       say(`agent #${request.agentId} asked about ${jobId}, and is not the key that held a seat on it, so nothing is recorded`);
       return "ignored";
     }
+    if (didNotStandBehindIt(record, seat)) {
+      say(`agent #${request.agentId} asked about ${jobId}, and held the ${seat.role}'s seat without standing behind the work, so its verdict is not theirs and nothing is recorded`);
+      return "ignored";
+    }
     const already = record.recorded?.find((recorded) => recorded.role === seat.role && isAddressEqual(recorded.agent, seat.agent));
     // recorded once, whichever way it was: an entry this worker wrote itself answers no request at all
     if (already && already.key?.toLowerCase() !== request.key.toLowerCase()) {
@@ -251,22 +276,26 @@ export class RegistryAnswers {
    * Whether the chain agrees with the job's verdict yet: a pass paid, a failure refunded by the
    * worker, runs that disagreed left to end. "never" when it ended some other way, such as a verdict
    * that came too late and the poster taking the money back.
+   *
+   * Where the poster has the last word, the verdict is what the checks found and stands as that
+   * however the poster answered: recorded once they have, or once their time ran out.
    */
   private async settledAsGraded(record: JobRecord, onChainId: bigint, contract: Contract): Promise<Settled> {
     const state = (await readJob(contract, onChainId)).state;
     const signed = record.signed;
     if (!signed || record.tile.verdict === "running") return { is: state === "working" ? "not yet" : "never" };
-    if (state === "working" || state === "open") return { is: "not yet" };
+    if (state === "working" || state === "open" || state === "delivered") return { is: "not yet" };
+    if (record.chain?.answer) return { is: "yes", signed };
     const verdict = signed.receipt.verdict;
     if (verdict === "passed") return state === "settled" ? { is: "yes", signed } : { is: "never" };
     if (verdict === "failed") return state === "refunded" && record.chain?.settled !== undefined ? { is: "yes", signed } : { is: "never" };
     return { is: "yes", signed };
   }
 
-  /** Which of the contracts this worker answers for a job is on, if either. */
+  /** Which of the contracts this worker answers for a job is on, if any. */
   private contractOf(address: Address): Contract | undefined {
-    const { jobs, prepared } = this.options;
-    return [jobs, prepared].find((contract): contract is Contract => contract !== undefined && isAddressEqual(contract.address, address));
+    const { jobs, prepared, second } = this.options;
+    return [jobs, prepared, second].find((contract): contract is Contract => contract !== undefined && isAddressEqual(contract.address, address));
   }
 
   /** The seat an identity held, if it is that seat's own key: as the identity's owner, or as the wallet it acts with. */

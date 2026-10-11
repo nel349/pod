@@ -8,17 +8,30 @@
  */
 import { z } from "zod";
 
-/** What trying one check found. Each is true only when the check did what it has to. */
+/**
+ * What trying one check found. Each is true only when the check did what it has to.
+ *
+ * A check is tried once before it can be sealed: against a server with nothing built. What it is
+ * worth against real work is found out when the pod's work is graded, which is what the pod is for.
+ */
 export const ProofSchema = z.object({
-  /** it passed a version that does everything asked, so it can be passed at all */
-  working: z.boolean(),
-  /** it failed a version with its one thing wrong, so it catches that mistake */
-  nearMiss: z.boolean(),
   /** it failed when nothing was built, so it does not pay for no work */
   nothing: z.boolean(),
+  /**
+   * Its own program loads. A program that does not fails against anything, so its failing against
+   * nothing built is no trial, and no work could pass it. Absent on a writing from before this was asked.
+   */
+  loads: z.boolean().optional(),
+  /**
+   * Only on writings kept from before 11 Oct 2026, when a check was also tried against a version
+   * written for the purpose and one with that sentence's thing wrong. Such a writing stays as it was
+   * judged then.
+   */
+  working: z.boolean().optional(),
+  nearMiss: z.boolean().optional(),
 });
 
-const SawSchema = z.object({ working: z.string(), nearMiss: z.string(), nothing: z.string() });
+const SawSchema = z.object({ nothing: z.string(), working: z.string().optional(), nearMiss: z.string().optional() });
 
 export const WrittenSchema = z.discriminatedUnion("checkable", [
   z.object({
@@ -36,19 +49,13 @@ export const WrittenSchema = z.discriminatedUnion("checkable", [
     asks: z.string(),
     /** what a good answer looks like, in everyday words */
     expects: z.string(),
-    /** the mistake the near miss makes, which is what this check is known to catch */
-    nearMiss: z.string(),
+    /** what the sentence asks for that this check does not decide, when there is anything: a real payment, how it looks */
+    leavesOut: z.string().optional(),
     file: z.string(),
     source: z.string(),
     proof: ProofSchema,
-    /** what the check printed each time, which is what a poster reads when a trial fails */
+    /** what the check printed when it was tried, which is what a poster reads when the trial fails */
     saw: SawSchema,
-    /**
-     * The other sentences whose checks failed against this one's near miss as well. Said to the poster,
-     * and never a reason to refuse the check: sentences that lean on each other break together.
-     * Absent on a writing kept from before this was recorded.
-     */
-    nearMissAlsoBroke: z.array(z.string()).readonly().optional(),
   }),
 ]);
 
@@ -77,7 +84,7 @@ export interface WrittenSet {
   readonly howItIsAsked?: z.infer<typeof HowItIsAskedSchema>;
 }
 export type Written = z.infer<typeof WrittenSchema>;
-/** A sentence that became a check and was tried, whether or not it passed its trials. */
+/** A sentence that became a check and was tried, whether or not it held. */
 export type TriedCheck = Extract<Written, { readonly checkable: true }>;
 export type Stage = (typeof STAGES)[number];
 export type Writing = z.infer<typeof WritingSchema>;
@@ -87,12 +94,12 @@ export function isStillWriting(writing: Writing | undefined): writing is Extract
   return writing !== undefined && STAGES.some((stage) => stage === writing.stage);
 }
 
-/** Whether a sentence became a check that passed all three trials. */
+/** Whether a sentence became a check that held in every trial it was given. */
 export function isProven(check: Written): check is TriedCheck {
-  return check.checkable && check.proof.working && check.proof.nearMiss && check.proof.nothing;
+  return check.checkable && check.proof.loads !== false && check.proof.nothing && check.proof.working !== false && check.proof.nearMiss !== false;
 }
 
-/** Whether every sentence became a check that passed all three of its trials. */
+/** Whether every sentence became a check that held in its trial. */
 export function readyToSeal(checks: readonly Written[]): boolean {
   return checks.length > 0 && checks.every(isProven);
 }

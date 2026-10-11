@@ -11,10 +11,16 @@ export const STEPS = ["idea", "brief", "exam", "checks", "terms", "pay"] as cons
  */
 export const PAY_FIRST_STEPS = ["idea", "brief", "exam", "terms", "pay", "approve"] as const;
 
+/**
+ * A paid job its poster comes back to: reading the checks and approving them is what they came for,
+ * so it comes first, and their own words follow for the case that a check reads wrong.
+ */
+export const PREPARED_STEPS = ["approve", "idea", "brief", "exam"] as const;
+
 export type StepName = (typeof STEPS)[number] | (typeof PAY_FIRST_STEPS)[number];
 
 /** Either order: five steps for the seal's five wedges, and the one that puts its centre in place. */
-export type StepOrder = typeof STEPS | typeof PAY_FIRST_STEPS;
+export type StepOrder = typeof STEPS | typeof PAY_FIRST_STEPS | typeof PREPARED_STEPS;
 
 /** A step's place in posting, counting from one, which is what the sheet is stamped with. */
 export const stepNumber = (name: StepName, order: StepOrder = STEPS): number => (order as readonly StepName[]).indexOf(name) + 1;

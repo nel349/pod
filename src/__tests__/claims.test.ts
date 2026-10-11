@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Address, Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { Claims } from "../claims.ts";
+import { netlify, siteMadeFor } from "../hosting/index.ts";
 import { claimToSign } from "../messages.ts";
 import { claimApiPath, jobPath } from "../routes.ts";
 import { NotClaimableSchema } from "../web/claim/state/index.ts";
@@ -85,6 +86,45 @@ describe.skipIf(!available)("claiming a POD's repository", () => {
     expect(await whyOf(answer)).toContain("GitHub would not send the invitation");
     expect((await store.read(JOB))?.invited).toBeUndefined();
   }, 60_000);
+
+  test("a live website goes with the title: the holder is given the link that takes it, GitHub or no GitHub, and nobody else is", async () => {
+    const record = await store.read(JOB);
+    if (!record) throw new Error("the titled job is not on the wall");
+    const live = { host: "Netlify", siteId: "site-1", url: "https://pod-a-coat-to-claim.netlify.app", at: new Date().toISOString() };
+    await store.save({ ...record, live });
+    const withASite = new Claims({
+      store, token: { address: tokenAddress, publicClient: anvil.publicClient },
+      siteHost: netlify({ token: "t", clientId: "the-app", clientSecret: "the-secret" }),
+    });
+    const claim = async (key: Hex): Promise<Response> => {
+      const signature = await privateKeyToAccount(key).signMessage({ message: claimToSign({ jobId: JOB, tokenId, toAccount: "octocat" }) });
+      return withASite.handle(new Request(`http://pod.test${claimApiPath(JOB)}`, { method: "POST", body: JSON.stringify({ toAccount: "octocat", signature }) }));
+    };
+    try {
+      // what there is to claim says where it is live, to everybody
+      const claimable = await (await withASite.handle(new Request(`http://pod.test${claimApiPath(JOB)}`))).json() as { live?: string };
+      expect(claimable.live).toBe(live.url);
+
+      // a stranger's signature gets no link
+      const stranger = await claim(anAgent().key);
+      expect(stranger.status).toBe(403);
+      expect(await stranger.json()).not.toHaveProperty("site");
+
+      // the holder's does, though GitHub refuses the repository here: the site is theirs on their signature
+      const held = await withGitHubRefusing(() => claim(POSTER));
+      expect(held.status).toBe(502);
+      const answer = await held.json() as { why: string; site?: { host: string; takeIt: string } };
+      expect(answer.site?.host).toBe("Netlify");
+      expect(answer.site?.takeIt).toBe(await netlify({ token: "t", clientId: "the-app", clientSecret: "the-secret" }).handoverLink(siteMadeFor(record)));
+      expect(held.headers.get("cache-control")).toContain("no-store");
+
+      // a site taken down is not there to hand over
+      await store.save({ ...record, live: { ...live, removedAt: new Date().toISOString() } });
+      expect(await (await withGitHubRefusing(() => claim(POSTER))).json()).not.toHaveProperty("site");
+    } finally {
+      await store.save(record);
+    }
+  });
 
   test("a title that was sold carries the claim: the old holder is refused, the new one reaches GitHub", async () => {
     const buyer = anAgent();

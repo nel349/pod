@@ -27,7 +27,7 @@ export const WriteRequestSchema = z.object({
   idea: z.string({ error: "say what you want built, in a sentence or more" }).trim()
     .min(SHORTEST_IDEA, "say what you want built, in a sentence or more")
     .max(LONGEST_IDEA, `keep what you want built under ${LONGEST_IDEA} characters`),
-  kind: z.enum(KINDS, { error: "say whether it is a page or a service" }),
+  kind: z.enum(KINDS, { error: "say whether it is a website or a service" }),
   statements: z.array(StatementSchema, { error: "say at least one thing that would prove it works" })
     .min(1, "say at least one thing that would prove it works")
     .max(MOST_STATEMENTS, `at most ${MOST_STATEMENTS} things, so each one is checked properly`)

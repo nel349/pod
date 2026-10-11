@@ -4,8 +4,9 @@ import { refusalOf } from "../checkwriting/request.ts";
 import { PostingSchema } from "../posting.ts";
 import type { TriedCheck, Written } from "../checkwriting/written.ts";
 import {
+  checkStandingOf,
   asSentence, canPress, COPY, cutTheSeal, draftKey, formOfPaidJob, isWorthKeeping, keepDraft, readDraft, isFresh, keepPayment, keptPaymentKey, readKeptPayment, nextPosting, paymentWords, PostFormSchema, priceInWei, progressOf, requestKey, sealJob,
-  stepId, stepNumber, STEPS, toWriteRequest, trialsOf, verdictOn, whatIsMissing, windowInWords, writingLine,
+  stepId, stepNumber, STEPS, toWriteRequest, verdictOn, whatIsMissing, windowInWords, writingLine,
   type PostForm, type WrittenFor,
 } from "../web/post/state/index.ts";
 import { targetFrom } from "../web/refund/state/index.ts";
@@ -19,19 +20,20 @@ import { COAT_IDEA, DRY, WET } from "./support/coat.ts";
 const FORM: PostForm = {
   idea: COAT_IDEA, kind: "service",
   brief: [{ says: WET }, { says: "  " }], exam: [{ says: DRY }],
-  price: "0.1", mode: "flash", name: "a-coat-or-not",
+  price: "0.1", mode: "flash", name: "a-coat-or-not", tell: "",
 };
 
-const triedCheck = (says: string, secret: boolean, file: string, proof = { working: true, nearMiss: true, nothing: true }): TriedCheck => ({
-  checkable: true, says, secret, asks: "asks", expects: "expects", nearMiss: "It never says take a coat.",
+const triedCheck = (says: string, secret: boolean, file: string, hasFailedOnNothing = true): TriedCheck => ({
+  checkable: true, says, secret, asks: "asks", expects: "expects",
   file, source: `// ${says}\nprocess.exit(0);\n`,
-  proof,
-  saw: { working: "ok", nearMiss: "it let the near miss through", nothing: "caught" },
+  proof: { nothing: hasFailedOnNothing },
+  saw: { nothing: hasFailedOnNothing ? "caught" : "fine" },
 });
 
 const WET_CHECK = triedCheck(WET, false, "check-1.mjs");
 const DRY_CHECK = triedCheck(DRY, true, "check-2.mjs");
-const SHAKY_DRY_CHECK = triedCheck(DRY, true, "check-2.mjs", { working: true, nearMiss: false, nothing: true });
+/** a check that passes with nothing built, which cannot be used */
+const SHAKY_DRY_CHECK = triedCheck(DRY, true, "check-2.mjs", false);
 const CHECKS: readonly Written[] = [WET_CHECK, DRY_CHECK];
 const writtenFor = (form: PostForm, checks: readonly Written[] = CHECKS): WrittenFor =>
   ({ key: requestKey(toWriteRequest(form)), checks, writtenAt: 1 });
@@ -111,42 +113,23 @@ describe("what the checks step says", () => {
     expect(verdictOn(CHECKS, true)).toEqual({ state: "ready", ...COPY.checks.verdict.ready(2) });
   });
 
-  test("one weak check out of two is counted, and the poster is told to reword it", () => {
+  test("one check out of two that cannot be used is counted, and the poster is told to have them written again", () => {
     expect(verdictOn([WET_CHECK, SHAKY_DRY_CHECK], true)).toEqual({ state: "short", ...COPY.checks.verdict.short(1, 2) });
+    // our writer's fault is not put on the poster's wording
+    expect(COPY.checks.verdict.short(1, 2).says).toStartWith("Write them again");
   });
 
-  test("a failed trial shows what the check printed, and a passed one shows nothing extra", () => {
-    const [working, nearMiss, nothing] = trialsOf(SHAKY_DRY_CHECK);
-    expect(working).toEqual({ name: "working", hasHeld: true, says: COPY.checks.trials.working.held, saw: undefined, also: undefined });
-    expect(nearMiss).toEqual({
-      name: "nearMiss", hasHeld: false,
-      says: "Let a near miss through: it never says take a coat.",
-      saw: COPY.checks.trials.saw("it let the near miss through"),
-      also: undefined,
-    });
-    expect(nothing).toEqual({ name: "nothing", hasHeld: true, says: COPY.checks.trials.nothing.held, saw: undefined, also: undefined });
+  test("a check that fails on nothing built is ready, and one that passes there says why it cannot be used", () => {
+    expect(checkStandingOf(WET_CHECK)).toEqual({ isReady: true });
+    expect(checkStandingOf(SHAKY_DRY_CHECK)).toEqual({ isReady: false, why: COPY.checks.notUsable.passesNothing });
   });
 
-  test("a near miss that failed other checks too still proves its own, and the poster is told which lines", () => {
-    const [, alone] = trialsOf(WET_CHECK);
-    expect(alone?.also).toBeUndefined();
-
-    const [, withOne] = trialsOf({ ...WET_CHECK, nearMissAlsoBroke: [DRY] });
-    expect(withOne).toEqual({
-      name: "nearMiss", hasHeld: true, says: "Fails a near miss: it never says take a coat", saw: undefined,
-      also: `The same mistake also fails "${DRY}".`,
-    });
-
-    // a long brief is not quoted back whole: two lines are named and the rest are counted
-    const [, withMany] = trialsOf({ ...WET_CHECK, nearMissAlsoBroke: [DRY, "It says so in words.", "A third", "A fourth"] });
-    expect(withMany?.also).toBe(`The same mistake also fails "${DRY}", "It says so in words" and 2 more of your lines.`);
-  });
-
-  test("what else a near miss broke is not said of a check that let its near miss through", () => {
-    // the line under a failed trial is what the check printed, which is the thing to act on
-    const [, nearMiss] = trialsOf({ ...SHAKY_DRY_CHECK, nearMissAlsoBroke: [WET] });
-    expect(nearMiss?.hasHeld).toBe(false);
-    expect(nearMiss?.also).toBeUndefined();
+  test("a check from when each was tried two more ways stands as it was judged then", () => {
+    const heldThen: TriedCheck = { ...WET_CHECK, proof: { working: true, nearMiss: true, nothing: true } };
+    const looseThen: TriedCheck = { ...WET_CHECK, proof: { working: true, nearMiss: false, nothing: true } };
+    expect(checkStandingOf(heldThen)).toEqual({ isReady: true });
+    expect(checkStandingOf(looseThen)).toEqual({ isReady: false, why: COPY.checks.notUsable.old });
+    expect(verdictOn([heldThen, looseThen], true).state).toBe("short");
   });
 
   test("out of date wins over everything else, because those checks are for a different job", () => {
@@ -291,7 +274,7 @@ describe("a payment kept in the browser until its job is published", () => {
     const kept = await paidFor();
     expect(formOfPaidJob(kept)).toEqual({
       idea: COAT_IDEA, kind: "service", brief: [{ says: WET }], exam: [{ says: DRY }],
-      price: "1.25", mode: "flash", name: "a-coat-kept",
+      price: "1.25", mode: "flash", name: "a-coat-kept", tell: "",
     });
   });
 

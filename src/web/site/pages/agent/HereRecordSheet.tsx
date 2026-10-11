@@ -8,7 +8,7 @@ export function HereRecordSheet({ record }: { readonly record: readonly RoleReco
   if (record.length === 0) return null;
   const columns = SITE.agent.columns;
   return (
-    <Sheet number={2} id="record" title={SITE.agent.recordTitle} stamp={false}>
+    <Sheet number={3} id="record" title={SITE.agent.recordTitle} stamp={false}>
       <div className="sideways">
         <table className="record">
           <thead>

@@ -1,11 +1,11 @@
 import type { ReactElement } from "react";
-import { DEPOSIT_PERCENT, NEEDS_A_MODEL, SHARES } from "../../../job.ts";
+import { DEPOSIT_PERCENT, NEEDS_A_MODEL, NEEDS_A_MODEL_TO_JUDGE, SHARES } from "../../../job.ts";
 import { CONNECTOR_INSTALL, CONNECTOR_NOTES, MANDATE_STEPS, SKILL_INSTALL, WALLET_ADDRESS } from "../../../mandate.ts";
 import { ROUTES } from "../../../routes.ts";
 import { SEATS } from "../../../seal.ts";
 import { Copyable, Sheet } from "../../shared/index.ts";
 import { InTheBrowser, PageBill, Poster } from "../components/index.ts";
-import { SEAT_DOES, SITE } from "../copy.ts";
+import { seatDoes, SITE } from "../copy.ts";
 import { useSite } from "../hooks/index.ts";
 import { AgentKeySheet } from "./agents/index.ts";
 
@@ -17,7 +17,12 @@ const inWords = (items: readonly string[]): string =>
 export function AgentsPage(): ReactElement {
   const { site, coin, market } = useSite();
   const words = SITE.agents;
-  const bill = <PageBill words={{ eyebrow: words.eyebrow, shout: words.shout, strap: words.strap, stand: words.stand }} />;
+  // what a seat is paid for is what the contract jobs are posted to says
+  const rule = market?.lastWord;
+  const bill = <PageBill words={{
+    eyebrow: words.eyebrow, shout: words.shout,
+    strap: rule ? words.lastWord.strap : words.strap, stand: rule ? words.lastWord.stand(rule) : words.stand,
+  }} />;
   return (
     <Poster bill={bill}>
       <Sheet number={1} id="seats" title={words.seatsTitle}>
@@ -25,10 +30,10 @@ export function AgentsPage(): ReactElement {
         <table className="record">
           <thead><tr><th scope="col">{words.columns.seat}</th><th scope="col">{words.columns.does}</th><th scope="col">{words.columns.share}</th></tr></thead>
           <tbody>
-            {SEATS.map((seat) => <tr key={seat}><th scope="row">{seat}</th><td>{SEAT_DOES[seat]}</td><td>{`${SHARES[seat]}%`}</td></tr>)}
+            {SEATS.map((seat) => <tr key={seat}><th scope="row">{seat}</th><td>{seatDoes(seat, rule !== undefined)}</td><td>{`${SHARES[seat]}%`}</td></tr>)}
           </tbody>
         </table>
-        <p className="note">{words.deposit(DEPOSIT_PERCENT)}</p>
+        <p className="note">{rule ? words.lastWord.deposit(DEPOSIT_PERCENT) : words.deposit(DEPOSIT_PERCENT)}</p>
       </Sheet>
       <Sheet number={2} id="point" title={words.pointTitle}>
         <p className="guide">{words.pointGuide}</p>
@@ -37,7 +42,7 @@ export function AgentsPage(): ReactElement {
         <p className="guide">{words.needsTitle}</p>
         <ul className="needs">
           <li>{words.needs.key(coin)}</li>
-          <li>{words.needs.model(inWords(NEEDS_A_MODEL))}</li>
+          <li>{words.needs.model(inWords(rule ? NEEDS_A_MODEL_TO_JUDGE : NEEDS_A_MODEL))}</li>
           <li>{words.needs.docker}</li>
           <li>{words.needs.identity}</li>
         </ul>

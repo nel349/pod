@@ -1,6 +1,7 @@
 /**
  * How each judging seat decides, given the candidate's files in a folder of their own.
  *
+ *   lead       the model holds the work to each line the poster wrote, where the lead judges at all
  *   reviewer   the model reads the work against the brief
  *   security   the model reads the work for what a job must not do
  *   QA         the visible checks run against the work, in the same sealed box a verdict uses
@@ -12,14 +13,17 @@ import { lstat, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { grade, type CheckToRun } from "../../blackbox.ts";
-import { PORT, START } from "../../job.ts";
+import { PORT, startFor } from "../../job.ts";
 import { readableToTheBox } from "../../sandbox.ts";
 import { verdictFrom, type Verdict } from "../protocol.ts";
 import { briefFor, type Seated } from "../Seated.ts";
 import type { Judgement } from "./Judge.ts";
 
-/** How much of the work is shown to the model: enough for a small service, not a repository dump */
-const MOST_SOURCE_SHOWN = 60_000;
+/**
+ * How much of the work is shown to the model: enough for a service or a website of a few dozen pages,
+ * not a repository dump. A judge that is not shown a file cannot stand behind it, and says so.
+ */
+const MOST_SOURCE_SHOWN = 300_000;
 /** How long a judging seat waits for its model */
 const MODEL_MAY_TAKE_MS = 3 * 60_000;
 /** How much of a check's own words go into QA's note */
@@ -39,15 +43,52 @@ export const reviewing: Judgement = async (seated, files) => askTheModel(seated,
   await sourcesIn(files),
 ]);
 
+/**
+ * The lead's judgement, where the builder puts its own work forward and the lead no longer names what
+ * ships: it answers for the whole job to whoever posted it, so it goes down what they asked for line
+ * by line and says which line the work does not answer. The reviewer reads how the work is made; the
+ * lead reads whether all of it is there.
+ */
+export const holdingToTheBrief: Judgement = async (seated, files) => askTheModel(seated, [
+  "You are the lead on a small team. You answer to the person who asked for this work, and they will open it and decide whether to pay.",
+  "Go down what they asked for, one line at a time, and find where the work answers each line.",
+  "Refuse if any line is not answered at all, naming that line. Do not refuse for how it is written, or for anything they did not ask for.",
+  "",
+  "Reply with one line: APPROVE followed by why, or REFUSE followed by the line that is not answered.",
+  "",
+  "## What was asked for",
+  briefFor(seated.listed),
+  "",
+  "## What was shipped",
+  await sourcesIn(files),
+]);
+
+/** What a job must not do, which depends on where its work runs: on a server, or in a visitor's browser. */
+function mustNot(seated: Seated): readonly string[] {
+  const allowed = seated.listed.allowedHosts.map((host) => host.host);
+  if (seated.listed.kind === "site") {
+    return [
+      "The work is a website: files that run in the browser of whoever opens them, and nowhere else.",
+      "You judge whether a page does anything to its visitor that a page must not do:",
+      "- send what a visitor types, holds or signs to a host the page does not plainly say it is for",
+      "- ask a visitor's wallet for anything but what the page says it is doing, in the page's own words",
+      "- load a script that hides what it does, or one made to be unreadable",
+      "- take a visitor somewhere else without their asking",
+      "Loading fonts, pictures and well-known libraries from the hosts that serve them is ordinary, and not a fault.",
+    ];
+  }
+  return [
+    `Answering requests on port ${PORT}, from anywhere, is what the work is for: listening there is required, not a fault.`,
+    "You judge whether it does anything a job must not do:",
+    allowed.length === 0 ? "- open a connection out to any other host" : `- open a connection out to any host but ${allowed.join(", ")}`,
+    "- read environment variables, secrets, or files outside its own folder",
+    "- start other programs, or change the machine it runs on",
+  ];
+}
+
 export const securityReading: Judgement = async (seated, files) => askTheModel(seated, [
   "You are the security seat on a small team. You do not judge whether the work is good; somebody else does.",
-  `Answering requests on port ${PORT}, from anywhere, is what the work is for: listening there is required, not a fault.`,
-  "You judge whether it does anything a job must not do:",
-  seated.listed.allowedHosts.length === 0
-    ? "- open a connection out to any other host"
-    : `- open a connection out to any host but ${seated.listed.allowedHosts.map((allowed) => allowed.host).join(", ")}`,
-  "- read environment variables, secrets, or files outside its own folder",
-  "- start other programs, or change the machine it runs on",
+  ...mustNot(seated),
   "",
   "Reply with one line: APPROVE followed by why it is safe, or REFUSE followed by exactly what it does that it must not.",
   "",
@@ -69,7 +110,7 @@ export const qaRunning: Judgement = async (seated, files) => {
     await readableToTheBox(files);
     const toRun: CheckToRun[] = visible.map((check) => ({ says: check.says, command: check.run, hidden: false }));
     const graded = await grade({
-      artefact: files, start: START, checks, toRun, image: seated.image,
+      artefact: files, start: startFor(seated.listed.kind), checks, toRun, image: seated.image,
       allowedHosts: seated.listed.allowedHosts.map((allowed) => allowed.host),
     });
     const failed = graded.checks.filter((check) => check.exitCode !== 0);

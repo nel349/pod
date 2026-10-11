@@ -4,7 +4,7 @@
  * The seal lies in shards on the bill and assembles as the job does: each finished step flies one
  * wedge into place, writing the checks makes theirs tremble, proven checks flash it, and paying locks
  * the centre and stamps it. The sheets hold the form: what it is, the brief and the exam as numbered
- * lines, the checks and their trials, the terms, and paying.
+ * lines, the checks, the terms, and paying.
  */
 
 /* ================= the seal, in shards ================= */
@@ -173,17 +173,16 @@ button.add:hover { background: var(--ink); color: var(--yellow); text-decoration
 .readback dt { font: 400 12px/1.2 var(--type); letter-spacing: 0.1em; text-transform: uppercase; color: var(--grey); }
 .readback dd { margin: 4px 0 0; font-size: 16px; }
 
-.trials { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-weight: 600; font-size: 15px; }
-.trial { position: relative; padding-left: 30px; width: fit-content; animation: stampIn 380ms var(--slam) backwards; }
-.trial:nth-child(2) { animation-delay: 140ms; }
-.trial:nth-child(3) { animation-delay: 280ms; }
-.trial::before { position: absolute; left: 0; top: -2px; font: 900 22px/1 var(--shout); }
-/* the marker is drawn on the trial's own words, from under its tick, so a note beneath them is left plain */
-.trial.held .words { margin-left: -30px; padding-left: 30px; background: linear-gradient(transparent 52%, var(--yellow) 52%, var(--yellow) 92%, transparent 92%); }
-.trial.held::before { content: "✓"; }
-.trial.broke { color: var(--pink); }
-.trial.broke::before { content: "✕"; }
-.trial .saw, .trial .also { display: block; margin-top: 2px; font: 400 13px/1.4 var(--type); color: var(--grey); }
+/* what a line asks for that its check cannot look at: said plainly, before anybody pays */
+.leaves-out { margin: 0 0 14px; max-width: 60ch; font-size: 15px; }
+.leaves-out .label { font: 400 12px/1.2 var(--type); letter-spacing: 0.1em; text-transform: uppercase; color: var(--grey); }
+
+.standing { position: relative; margin: 0; padding-left: 30px; width: fit-content; max-width: 60ch; font-weight: 600; font-size: 15px; animation: stampIn 380ms var(--slam) backwards; }
+.standing::before { position: absolute; left: 0; top: -2px; font: 900 22px/1 var(--shout); }
+.standing.ready { background: linear-gradient(transparent 52%, var(--yellow) 52%, var(--yellow) 92%, transparent 92%); }
+.standing.ready::before { content: "✓"; }
+.standing.not { color: var(--pink); }
+.standing.not::before { content: "✕"; }
 @keyframes stampIn { 0% { transform: scale(1.35) rotate(-3deg); opacity: 0; } 100% { transform: none; opacity: 1; } }
 
 .cannot-why { margin: 0; color: var(--pink); font-weight: 600; max-width: 60ch; }
@@ -308,3 +307,8 @@ button.add:hover { background: var(--ink); color: var(--yellow); text-decoration
 /* a draft brought back: said once, above the first sheet, with the way to throw it away */
 .draft-back { margin: 0; padding: 12px 16px; font: 400 15px/1.4 var(--type); color: var(--ink); background: var(--yellow); box-shadow: 5px 5px 0 var(--pink); }
 .draft-back button.quiet { color: var(--ink); }
+
+/* where to be told of the delivery: asked last and marked as something a poster may leave empty */
+.field.tell { margin-top: 22px; margin-bottom: 8px; }
+.field .optional { margin-left: 6px; padding: 2px 6px 0; font: 400 12px/1.3 var(--type); letter-spacing: 0.06em; text-transform: uppercase; color: var(--grey); border: 1px solid var(--rule); }
+.sheets .field.tell input[type="text"] { font: 400 16px/1.2 var(--type); }

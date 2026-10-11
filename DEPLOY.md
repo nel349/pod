@@ -48,6 +48,7 @@ a laptop runs it.
 | `MONAD_TESTNET_RPC` | both | The public endpoint unless said |
 | `POD_JOBS_ADDRESS` | both | The contract new jobs are posted to. Without it the server is the wall and nothing else |
 | `POD_OLD_JOBS_ADDRESS` | both | The first contract, whose jobs are still read and graded |
+| `POD_SECOND_JOBS_ADDRESS` | both | Set once `POD_JOBS_ADDRESS` is the contract on which the poster has the last word: the contract it replaced, which prepared jobs and settled on the verdict alone. Its jobs are finished, and are still read |
 | `POD_TOKEN_ADDRESS` | both | The title contract |
 | `POD_VALIDATOR_ADDRESS` | worker | The address the validator's key has to be the key for. The worker refuses to start with any other |
 | `POD_WRITER_KEY` | server | Secret |
@@ -55,6 +56,13 @@ a laptop runs it.
 | `OPENROUTER_API_KEY` | server | Secret. Needed only when `POD_CHECKS_MODEL` names a model of OpenRouter's; the server refuses to start without it then |
 | `POD_VALIDATOR_KEY` | worker | Secret |
 | `POD_GITHUB_OWNER` | worker | The GitHub organisation work that passes is published under |
+| `POD_NETLIFY_TOKEN` | both | Secret. A personal access token of the Netlify account delivered websites go live in. The worker publishes with it and takes a site down with it. Left out, a website is delivered with its evidence and nowhere to open it |
+| `POD_NETLIFY_TEAM` | worker | The Netlify team sites are made in. Left out, the account's own |
+| `POD_NETLIFY_CLIENT_ID` | server | The Netlify OAuth application a live site is handed to its title's holder as. With its secret, or not at all |
+| `POD_NETLIFY_CLIENT_SECRET` | both | Secret. Signs the link that hands a live site over, and is what each site's own word is worked out from, so the worker and the server have to hold the same one |
+| `POD_BREVO_KEY` | both | Secret. The server only asks a poster for an address when this and the sender are set, so it never promises a message nobody sends. The key of the Brevo account mail is sent through. With it and a sender, a poster who left an email address when posting is told when their job is delivered, and once more a day before their time to answer runs out. Left out, nobody is told by mail |
+| `POD_MAIL_FROM` | both | The address mail is sent from: one the Brevo account has confirmed, which takes a click on a link and no domain. With the key, or not at all |
+| `POD_MAIL_FROM_NAME` | worker | Who a message says it is from. Left out, POD |
 | `POD_GITHUB_TOKEN` | both | Secret. The worker publishes with it, and the server hands a repository to its title's holder with it. Left out, each falls back to whatever `gh` is signed in with |
 
 Each process checks its settings before it answers, the contracts against the chain: a contract
@@ -78,9 +86,12 @@ Deployed once, from a laptop that holds the deployer's key, not from the host.
 ```
 ./scripts/deploy-testnet.sh      # the first jobs contract and the title contract
 ./scripts/deploy-jobs-v2.sh      # the contract that prepares jobs, numbered on from the first
+./scripts/deploy-jobs-v3.sh      # the contract on which the poster has the last word, numbered on from the second
 ```
 
-Both read `.env`, refuse to run rather than guess, and write the addresses back into it. The first
+The third needs `POD_ANSWER_SECONDS` in `.env`, how long a poster has to accept or refuse a delivery, in seconds and fixed for good once it is deployed (259200 is three days). How long the other seats have to review what a builder put forward is not a setting: it is a quarter of each job's window, in the contract. It refuses while any job on the second contract is unfinished: one still being prepared is taken back by its poster first, since nothing finishes it after the switch. It names the contract it replaced as `POD_SECOND_JOBS_ADDRESS`; the same three addresses then go where the server and the worker run.
+
+All three read `.env`, refuse to run rather than guess, and write the addresses back into it. The first
 refuses if the deployer has no MON, and refuses again once a title contract is named, since running
 it twice would replace the title contract. The second refuses while any job on the first contract is
 unfinished, if the writer's key is not the writer's, or if the writer is the validator.

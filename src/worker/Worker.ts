@@ -7,6 +7,11 @@
  * branch. Then, for every agent that asks, it records the verdict on its seat in ERC-8004 (see
  * RegistryAnswers.ts). So no party has to be trusted to press a button, and no pod can stall a job by never asking.
  *
+ * On the contract where the poster has the last word it settles nothing. It reports what the checks
+ * found, which moves no money, and the job waits for its poster. If they say nothing in their time,
+ * it settles the job as the checks found, which anybody may do; and whichever way the job ends, it
+ * writes that down, and mints the title and publishes the work when the pod was paid.
+ *
  * Every step asks what has already happened before it acts, and the answers live where the wall and
  * the chain already keep them: the job's record, the contract, the token, the repository. A worker
  * that dies half way picks up where it stopped, and a step done twice is the same as a step done
@@ -20,23 +25,27 @@ import { privateKeyToAccount } from "viem/accounts";
 import { isAddressEqual, zeroHash, type Address, type Hex } from "viem";
 import { branchFor } from "../door/seat.ts";
 import { firstLine } from "../errors.ts";
-import { START } from "../job.ts";
-import { policyMet, readApprovals, readJob, readSeats, settle, type Contract, type OnChainJob } from "../jobs.ts";
+import { SITE_FOLDER, SITE_FRONT_PAGE, startFor } from "../job.ts";
+import { NotAWebsite, siteFilesIn, siteMadeFor, siteNameFor, type SiteHost } from "../hosting/index.ts";
+import { policyMet, readApprovals, readJob, readSeats, readSeatsTaken, settle, type Contract, type HeldSeat, type OnChainJob } from "../jobs.ts";
 import { closeJob, isLocked, releaseLock, settleV2, type VerdictOnChain } from "../jobsV2.ts";
+import { readAnswerBy, readHowItEnded, readReviewBy, readTheAnswersTransaction, readWhenPutForward, report, settleUnanswered } from "../jobsV3.ts";
+import { MOST_BLOCKS_A_LOG_READ_COVERS, MOST_BLOCKS_LOOKED_BACK_FOR_APPROVALS } from "../jobs.ts";
 import { longestRunSeconds } from "../blackbox.ts";
 import { pause } from "../pause.ts";
 import { gradeCommit } from "../pipeline.ts";
 import { publish } from "../publish.ts";
 import { publishJob } from "../github.ts";
-import { BRANCH, bundle, bytes32ToCommit, commitToBytes32, existingRepository, has, onBranch, openRepository, putOnMain, shortCommit, type Repository } from "../repo.ts";
+import { BRANCH, bundle, bytes32ToCommit, checkout, commitToBytes32, existingRepository, has, onBranch, openRepository, putOnMain, shortCommit, type Repository } from "../repo.ts";
 import { moneyMove } from "../runner.ts";
 import { bundlePath, jobPath } from "../routes.ts";
 import { SEATS } from "../seal.ts";
 import type { Registries } from "../registry.ts";
 import { readableToTheBox } from "../sandbox.ts";
 import type { SignedReceipt } from "../receipt.ts";
-import { isPublished, type JobRecord, type JobStore, type OnChain, type Tries } from "../store.ts";
+import { isPublished, wasThePodPaid, type JobRecord, type JobStore, type OnChain, type Told, type Tries, type UnderReview } from "../store.ts";
 import { mintPod, sealOfTitle, tokenOfJob } from "../token.ts";
+import { deliveredMail, lastDayMail, type Mailer } from "../mail/index.ts";
 import { RegistryAnswers } from "./RegistryAnswers.ts";
 import type { PreparingStore } from "../preparing/PreparingStore.ts";
 import type { BoxSlots } from "../docker/index.ts";
@@ -48,6 +57,30 @@ import { specFromTheWire, SpecOnTheWireSchema } from "../specWire.ts";
 export const GRADED_AT_ONCE = 2;
 /** How often the worker looks at every job */
 export const LOOK_EVERY_MS = 10_000;
+
+/** How long before a poster's time runs out they are told once more that their answer is waited for. */
+export const LAST_DAY_SECONDS = 24n * 60n * 60n;
+
+/** How long a message that could not be sent waits before it is tried again: doubled after each failure, up to the longest wait. */
+export const MAIL_AGAIN_AFTER_MS = 5 * 60_000;
+export const LONGEST_MAIL_WAIT_MS = 2 * 60 * 60_000;
+
+/** The wait before the next try of a message that has failed this many times. */
+export const mailWait = (failed: number, first: number = MAIL_AGAIN_AFTER_MS): number =>
+  Math.min(first * 2 ** Math.max(failed - 1, 0), LONGEST_MAIL_WAIT_MS);
+
+/**
+ * Which message a poster is owed now, if any: that the job is delivered, as soon as it is; and that a
+ * day is left, when one is and the first message went out before that day began. A poster given a day
+ * or less to answer gets the one message.
+ */
+export function whatToTell(told: Told | undefined, answerBy: bigint, now: bigint): "delivered" | "lastDay" | undefined {
+  if (!told?.delivered) return "delivered";
+  if (told.lastDay) return undefined;
+  const lastDayStarts = answerBy - LAST_DAY_SECONDS;
+  const toldAt = BigInt(Math.floor(new Date(told.delivered).getTime() / 1000));
+  return now >= lastDayStarts && toldAt < lastDayStarts ? "lastDay" : undefined;
+}
 /** How long a job whose grading failed is left before it is graded again: Docker, the chain and the disk have bad moments */
 export const GRADE_AGAIN_AFTER_MS = 5 * 60_000;
 /**
@@ -57,6 +90,20 @@ export const GRADE_AGAIN_AFTER_MS = 5 * 60_000;
 export const GRADING_START_SECONDS = 180;
 /** How many gradings in a row may fail on our side before a locked job is let go */
 export const FAILED_TRIES_BEFORE_RELEASE = 3;
+/**
+ * How far back the transaction that ended a delivered job is looked for, for the link on its page. A
+ * worker that is running sees a job end within one look of it happening, so this is generous; one
+ * that was stopped for longer writes down how the job ended, which the contract says, without the link
+ */
+export const MOST_BLOCKS_LOOKED_BACK_FOR_AN_ANSWER = 1_000n;
+/**
+ * How long a website that could not be put live, or taken down, is left before its host is asked
+ * again, doubled each time it fails in a row and never more than the longest. A host counts what it
+ * is asked: Netlify takes three deploys a minute and a hundred a day, for every job together, and a
+ * job asked about on every look would spend the day's in a quarter of an hour
+ */
+export const HOST_AGAIN_AFTER_MS = 60_000;
+export const HOST_AGAIN_AT_MOST_MS = 2 * 60 * 60_000;
 
 export interface WorkerOptions {
   readonly store: JobStore;
@@ -70,6 +117,13 @@ export interface WorkerOptions {
    * closed when their window ends with no verdict. Left out, only the first contract is worked.
    */
   readonly prepared?: Contract;
+  /**
+   * Whether the poster has the last word on the contract that prepares jobs: the worker then reports
+   * what the checks found and settles nothing, until the poster's time to answer has run out.
+   */
+  readonly hasTheLastWord?: boolean;
+  /** a contract that prepared jobs before that one: its jobs are finished, and still answered for in ERC-8004 */
+  readonly second?: Contract;
   /** how long after a grading started a release may be sent: a full grading's time unless said */
   readonly releaseAfterMs?: number;
   /**
@@ -103,6 +157,20 @@ export interface WorkerOptions {
    * leaves this server.
    */
   readonly publishTo?: { readonly owner: string };
+  /**
+   * Where a delivered website is put live, at an address of its own, for its poster to open before
+   * they answer. Left out, a website is delivered with its evidence and nowhere to open it.
+   */
+  readonly siteHost?: SiteHost;
+  /**
+   * How a poster who left an address is told their job was delivered. Left out, nobody is told: the
+   * job's page and their own list of jobs are where they find out.
+   */
+  readonly mailer?: Mailer;
+  /** how long a message that could not be sent waits before it is tried again */
+  readonly mailAgainAfterMs?: number;
+  /** how long after a host first fails a job it is asked again: HOST_AGAIN_AFTER_MS unless said */
+  readonly hostAgainAfterMs?: number;
   readonly say?: (what: string) => void;
 }
 
@@ -121,6 +189,12 @@ export class Worker {
   private readonly grading = new Map<string, Promise<void>>();
   /** when each job's last grading failed, so a job that keeps failing is not graded again every look */
   private readonly failedAt = new Map<string, number>();
+  /** messages that could not be sent, by job: how many times, and when last */
+  private readonly mailTries = new Map<string, { readonly failed: number; readonly at: number }>();
+  /** the messages this worker has sent, by job and kind, so none goes twice while it runs */
+  private readonly mailed = new Set<string>();
+  /** how often in a row each job's host has failed it, and when last, so a host that keeps failing is asked less and less */
+  private readonly hostFailed = new Map<string, { readonly times: number; readonly at: number }>();
   /** the look under way, so two never run at once */
   private looking?: Promise<void>;
   /** every chain write, in order: one key, one nonce stream */
@@ -134,6 +208,7 @@ export class Worker {
       this.answers = new RegistryAnswers({
         store: options.store, jobs: options.jobs, runner: this.runner,
         ...(options.prepared ? { prepared: options.prepared } : {}),
+        ...(options.second ? { second: options.second } : {}),
         registries: options.registry.registries, stateFolder: options.registry.stateFolder,
         ...(options.site ? { site: options.site } : {}),
         onTheChain: (write) => this.onTheChain(write),
@@ -181,13 +256,19 @@ export class Worker {
 
   private async advance(jobId: string): Promise<void> {
     const { store } = this.options;
-    const record = await store.read(jobId);
-    const on = record?.chain ? this.contractOf(record.chain.jobs) : undefined;
-    if (!record?.chain || !on) return;
-    if (this.grading.has(jobId) || this.isFinished(record)) return;
-    const { contract: jobs, isPreparedFirst } = on;
-    const onChainId = BigInt(record.chain.jobId);
+    const kept = await store.read(jobId);
+    const on = kept?.chain ? this.contractOf(kept.chain.jobs) : undefined;
+    if (!kept?.chain || !on) return;
+    if (this.grading.has(jobId) || this.isFinished(kept)) return;
+    const { contract: jobs, isPreparedFirst, hasTheLastWord } = on;
+    const onChainId = BigInt(kept.chain.jobId);
     const onChain = await readJob(jobs, onChainId);
+    // who is seated and what is under review is for the job's page: a node that will not answer for
+    // it is said, and never holds up closing a job, delivering it or grading it
+    const record = await this.withWhereItStands(kept, jobs, onChainId, onChain, hasTheLastWord).catch((error: unknown) => {
+      this.say(`${jobId}: who is on it could not be read just now, and is asked again on the next look: ${firstLine(error)}`);
+      return kept;
+    });
 
     // its money went back to its poster before there was any verdict: the job is closed, written down once
     if (onChain.state === "refunded" && record.tile.verdict === "running") {
@@ -209,6 +290,9 @@ export class Worker {
     // a window that ended with nobody's money moved: anybody may close it, and the worker is always here
     if (isPreparedFirst && (await this.closeIfOver(record, jobs, onChainId, onChain))) return;
 
+    // delivered, where the poster has the last word: the job waits for them, and is written down when it ends
+    if (hasTheLastWord && (await this.whileDelivered(record, jobs, onChainId, onChain))) return;
+
     const signed = record.signed;
     if (signed && record.tile.verdict !== "running") {
       const graded = signed.receipt;
@@ -224,6 +308,10 @@ export class Worker {
           if (record.waitingBecause !== why) await store.save({ ...record, waitingBecause: why });
           return;
         }
+        if (hasTheLastWord) {
+          await this.report(record.jobId, signed, onChainId, jobs);
+          return;
+        }
         await this.settle(record.jobId, signed, onChainId, on);
         // and straight on to the title and main for work that passed, rather than a look later: a
         // worker stopped between the two would leave a paid job with no title until it started again
@@ -232,8 +320,9 @@ export class Worker {
         }
         return;
       }
-      if (onChain.state === "settled" && graded.verdict === "passed") {
-        await this.titleAndMain(record, signed, onChainId, jobs);
+      // settled is the pod paid in full: by a pass, or, where the poster has the last word, by their yes
+      if (onChain.state === "settled" && (graded.verdict === "passed" || hasTheLastWord)) {
+        await this.titleAndMain((await store.read(jobId)) ?? record, signed, onChainId, jobs);
         return;
       }
       // a verdict that did not settle (the runs disagreed) leaves the job to the pod: if it approves
@@ -241,17 +330,19 @@ export class Worker {
       if (onChain.state !== "working" || onChain.commit === zeroHash || bytes32ToCommit(onChain.commit) === graded.commit) return;
     }
 
-    const ready = await this.readyToGrade(onChain, onChainId, jobs);
+    // where the poster has the last word, no seat can hold work back either: its builder puts it forward
+    const isPutForward = hasTheLastWord;
+    const ready = await this.readyToGrade(onChain, onChainId, jobs, isPutForward);
     if (!ready) return;
-    const notOnTheLeadsBranch = await this.whyNotGradable(jobId, onChainId, ready, jobs);
-    if (notOnTheLeadsBranch) {
-      if (record.waitingBecause !== notOnTheLeadsBranch) await store.save({ ...record, waitingBecause: notOnTheLeadsBranch });
+    const notGradable = await this.whyNotGradable(jobId, onChainId, ready, jobs, isPutForward);
+    if (notGradable) {
+      if (record.waitingBecause !== notGradable) await store.save({ ...record, waitingBecause: notGradable });
       return;
     }
     const failed = this.failedAt.get(jobId);
     if (failed !== undefined && Date.now() - failed < (this.options.gradeAgainAfterMs ?? GRADE_AGAIN_AFTER_MS)) return;
     if (this.grading.size >= (this.options.gradedAtOnce ?? GRADED_AT_ONCE)) return;
-    const work = this.grade(record, onChainId, ready, jobs)
+    const work = this.grade(record, onChainId, ready, jobs, isPutForward)
       .then(() => { this.failedAt.delete(jobId); })
       // a grading that failed is said, and tried again later: it never takes the worker down with it
       .catch(async (error: unknown) => {
@@ -265,16 +356,108 @@ export class Worker {
   }
 
   /**
-   * Why an approved commit cannot be graded, or nothing if it can. It has to be in the repository and
-   * on the lead's branch: the lead names the candidate, and a commit that no branch holds was never
-   * checked by the git door's rules, whoever it says wrote it.
+   * Tell a poster who left an address that their job was delivered, and once more when a day of their
+   * time to answer is left. Each message is sent once and written down with the job. A send that
+   * fails is said once and tried again after a wait that doubles, for as long as their time runs:
+   * a mail service having a bad hour must not cost a poster the message. Mail is a kindness all the
+   * same, and no delivery waits on it.
+   *
+   * A message is sent before it is written down, so a worker stopped between the two sends it again
+   * when it starts: twice is the lesser fault than never. Within one worker a sent message is
+   * remembered at once, so a record that cannot be saved does not send it on every look.
    */
-  private async whyNotGradable(jobId: string, onChainId: bigint, commit: string, jobs: Contract): Promise<string | undefined> {
+  private async tellItsPoster(record: JobRecord, answerBy: bigint): Promise<void> {
+    const { mailer, preparing, site, store } = this.options;
+    if (!mailer || !preparing || !site || !record.chain || !record.signed) return;
+    const which = whatToTell(record.told, answerBy, await this.now());
+    if (!which || this.mailed.has(`${record.jobId}:${which}`)) return;
+    const tried = this.mailTries.get(record.jobId);
+    if (tried && Date.now() - tried.at < mailWait(tried.failed, this.options.mailAgainAfterMs ?? MAIL_AGAIN_AFTER_MS)) return;
+    const to = (await preparing.readSetUp(record.chain.jobId))?.tell;
+    if (!to) return;
+    const delivery = {
+      idea: record.tile.idea, checksPassed: record.signed.receipt.verdict === "passed",
+      answerBy: new Date(Number(answerBy) * 1000), page: new URL(jobPath(record.jobId), site).toString(),
+    };
+    try {
+      await mailer.send({ to, ...(which === "delivered" ? deliveredMail(delivery) : lastDayMail(delivery)) });
+    } catch (error) {
+      this.mailTries.set(record.jobId, { failed: (tried?.failed ?? 0) + 1, at: Date.now() });
+      // why is the mail service's own word: should it ever repeat the address, the address is taken out of it
+      if (!tried) this.say(`${record.jobId}: its poster could not be told by mail, and is tried again: ${firstLine(error).replaceAll(to, "their address")}`);
+      return;
+    }
+    this.mailed.add(`${record.jobId}:${which}`);
+    this.mailTries.delete(record.jobId);
+    await store.save({ ...((await store.read(record.jobId)) ?? record), told: { ...record.told, [which]: new Date().toISOString() } });
+    this.say(which === "delivered"
+      ? `${record.jobId}: its poster was told by mail that it is delivered`
+      : `${record.jobId}: its poster was told by mail that a day is left to answer`);
+  }
+
+  /**
+   * The job with whoever has sat down so far and, where a builder puts its own work forward, the work
+   * under review: both as the contract has them. Its page, the wall and its agents' pages read these
+   * from the record, so without this a job being built would read as one nobody took until its work
+   * was graded. Seats are only ever added, so how many there are says whether there is anybody new;
+   * who stands behind work under review can change on any look, so that is read while a review runs.
+   */
+  private async withWhereItStands(record: JobRecord, jobs: Contract, onChainId: bigint, onChain: OnChainJob, isPutForward: boolean): Promise<JobRecord> {
+    if (record.tile.verdict !== "running") return record;
+    const isUnderReview = isPutForward && onChain.state === "working" && onChain.commit !== zeroHash;
+    // with no review to follow, how many seats are taken is all there is to ask, and it costs half as much
+    if (!isUnderReview && !record.review && (await readSeatsTaken(jobs, onChainId)) === record.tile.pod.length) return record;
+    const seats = await readSeats(jobs, onChainId);
+    const isSeatedAsKept = seats.length === record.tile.pod.length;
+    const review = isUnderReview ? await this.reviewOf(record, seats, jobs, onChainId, onChain.commit) : undefined;
+    if (isSeatedAsKept && JSON.stringify(review) === JSON.stringify(record.review)) return record;
+    // written over the record as it is now, not as it was before the chain was asked: a seat that named
+    // its identity in the meantime keeps what it said
+    const { review: _before, ...rest } = (await this.options.store.read(record.jobId)) ?? record;
+    const pod = seats.map((seat) => ({ role: seat.role, agent: seat.agent, owner: seat.owner }));
+    const standing = { ...rest, tile: { ...rest.tile, pod }, ...(review ? { review } : {}) };
+    await this.options.store.save(standing);
+    if (!isSeatedAsKept) this.say(`${record.jobId}: seated so far: ${pod.map((seat) => seat.role).join(", ")}`);
+    return standing;
+  }
+
+  /** The work a builder put forward, with when its review runs out and who stands behind it so far. */
+  private async reviewOf(record: JobRecord, seats: readonly HeldSeat[], jobs: Contract, onChainId: bigint, named: Hex): Promise<UnderReview | undefined> {
+    const reviewBy = await readReviewBy(jobs, onChainId);
+    if (reviewBy === undefined) return undefined;
+    const commit = bytes32ToCommit(named);
+    // when it was put forward does not change, so it is read from the chain's events once for a commit
+    const putForwardAt = record.review?.commit === commit
+      ? record.review.putForwardAt
+      : await this.whenPutForward(jobs, onChainId, named);
+    return {
+      commit, reviewBy: isoOf(reviewBy), ...(putForwardAt ? { putForwardAt } : {}),
+      behind: SEATS.filter((role) => seats.some((seat) => seat.role === role && seat.approved)),
+    };
+  }
+
+  private async whenPutForward(jobs: Contract, onChainId: bigint, named: Hex): Promise<string | undefined> {
+    const when = await readWhenPutForward(jobs, onChainId, named, MOST_BLOCKS_LOOKED_BACK_FOR_APPROVALS);
+    return when ? isoOf(when.at) : undefined;
+  }
+
+  /**
+   * Why the commit the chain names cannot be graded, or nothing if it can. It has to be in the
+   * repository, on the branch of the seat that named it: a commit that branch does not hold was never
+   * checked by the git door's rules, whoever it says wrote it. Where a builder puts its own work
+   * forward that is the builder's branch; on the contracts before, the lead named the candidate by
+   * bringing it into its own.
+   */
+  private async whyNotGradable(jobId: string, onChainId: bigint, commit: string, jobs: Contract, isPutForward: boolean): Promise<string | undefined> {
     const repo = await openRepository(this.options.repositories, jobId);
-    if (!(await has(repo, commit))) return `the pod approved ${commit}, which was never pushed to the job's repository, so there is nothing to grade`;
-    const lead = (await readSeats(jobs, onChainId)).find((seat) => seat.role === "lead");
-    if (!lead || !(await onBranch(repo, commit, branchFor("lead", lead.agent)))) {
-      return `the pod approved ${commit}, which is not on the lead's branch, so it is not graded: a commit the pod ships is one the lead brought in`;
+    const named = isPutForward ? "the builder put forward" : "the pod approved";
+    if (!(await has(repo, commit))) return `${named} ${commit}, which was never pushed to the job's repository, so there is nothing to grade`;
+    const namedBy = isPutForward ? "builder" : "lead";
+    const seat = (await readSeats(jobs, onChainId)).find((one) => one.role === namedBy);
+    if (!seat || !(await onBranch(repo, commit, branchFor(namedBy, seat.agent)))) {
+      return isPutForward
+        ? `the builder put forward ${commit}, which is not on the builder's own branch, so it is not graded: a builder puts forward what it pushed`
+        : `the pod approved ${commit}, which is not on the lead's branch, so it is not graded: a commit the pod ships is one the lead brought in`;
     }
     return undefined;
   }
@@ -286,7 +469,8 @@ export class Worker {
   private isFinished(record: JobRecord): boolean {
     if (record.tile.verdict === "withdrawn") return true;
     if (!(record.chain?.settled || record.chain?.moneyMovedAt) || !record.signed) return false;
-    if (record.signed.receipt.verdict !== "passed") return true;
+    // a pod not paid: finished once its website, if one went live, has been taken down
+    if (!wasThePodPaid(record)) return !this.options.siteHost || !record.live || record.live.removedAt !== undefined;
     const titled = !this.options.token || record.chain.tokenId !== undefined;
     const published = !this.options.publishTo || record.opensOnMain === true;
     return titled && published;
@@ -296,16 +480,21 @@ export class Worker {
     return (await this.options.jobs.publicClient.getBlock()).timestamp;
   }
 
-  /** The commit to grade, if the chain says the pod is done with one and there is still time to settle it. */
-  private async readyToGrade(onChain: OnChainJob, onChainId: bigint, jobs: Contract): Promise<string | undefined> {
+  /**
+   * The commit to grade, if the chain says it is time to and there is still time to settle it. Where
+   * a builder puts its own work forward, that is when the contract says the job is locked on it: the
+   * whole pod stands behind it, or the time for reviewing it has run out, whoever does. On the
+   * contracts before, it is when every approval the policy asks for is in.
+   */
+  private async readyToGrade(onChain: OnChainJob, onChainId: bigint, jobs: Contract, isPutForward: boolean): Promise<string | undefined> {
     if (onChain.state !== "working" || onChain.commit === zeroHash) return undefined;
     // the contract refuses a settlement after the window, so a verdict then would change nothing
     if ((await this.now()) >= onChain.endsAt) return undefined;
-    if (!(await policyMet(jobs, onChainId, onChain.commit))) return undefined;
-    return bytes32ToCommit(onChain.commit);
+    const isTime = isPutForward ? await isLocked(jobs, onChainId) : await policyMet(jobs, onChainId, onChain.commit);
+    return isTime ? bytes32ToCommit(onChain.commit) : undefined;
   }
 
-  private async grade(record: JobRecord, onChainId: bigint, commit: string, jobs: Contract): Promise<void> {
+  private async grade(record: JobRecord, onChainId: bigint, commit: string, jobs: Contract, isPutForward: boolean): Promise<void> {
     const { store } = this.options;
     const spec = await store.spec(record.jobId);
     if (!spec) {
@@ -323,7 +512,7 @@ export class Worker {
       await readableToTheBox(checks);
       const grading = (): ReturnType<typeof gradeCommit> => gradeCommit({
         repo, repository: fetchFrom.url,
-        commit, seal: record.seal, start: START, checks,
+        commit, seal: record.seal, start: startFor(spec.kind), checks,
         toRun: spec.checks.map((check) => ({ says: check.says, command: check.run, hidden: check.hidden })),
         image: this.options.image,
         allowedHosts: spec.allowed.map((allowed) => allowed.host),
@@ -333,13 +522,19 @@ export class Worker {
       });
       const report = this.options.boxes ? await this.options.boxes.inASlot(grading) : await grading();
 
+      // who stands behind the commit, as the contract has it. Where a builder puts its own work
+      // forward this cannot change any more: the job is locked, and nobody signs on while it is graded
       const seats = await readSeats(jobs, onChainId);
       const approved = seats.filter((seat) => seat.approved);
       const { found, lookedBackTo } = await readApprovals(jobs, onChainId, commitToBytes32(commit), approved);
-      // each approving seat with the time the contract recorded; one approved longer ago than was
-      // read back says so, rather than a time being made up for it
+      const putForward = isPutForward ? await readWhenPutForward(jobs, onChainId, commitToBytes32(commit), MOST_BLOCKS_LOOKED_BACK_FOR_APPROVALS) : undefined;
+      // each seat behind it with the time the contract recorded: a builder when it put the commit
+      // forward, another seat when it approved. One longer ago than was read back says so, rather
+      // than a time being made up for it
       const approvals = approved.map((seat) => {
-        const when = found.find((approval) => approval.role === seat.role && isAddressEqual(approval.agent, seat.agent));
+        const when = seat.role === "builder" && putForward && isAddressEqual(putForward.builder, seat.agent)
+          ? putForward
+          : found.find((approval) => approval.role === seat.role && isAddressEqual(approval.agent, seat.agent));
         return { role: seat.role, agent: seat.agent, commit, at: when ? isoOf(when.at) : `before ${isoOf(lookedBackTo)}` };
       });
 
@@ -397,7 +592,148 @@ export class Worker {
   }
 
   /**
-   * On a job that passed and settled: the work on the main branch, then the title to whoever paid.
+   * Report what the checks found, once, where the poster has the last word. No money moves: the job
+   * is delivered, and its poster's time to answer starts. A held verdict reports nothing.
+   */
+  private async report(jobId: string, signed: SignedReceipt, onChainId: bigint, jobs: Contract): Promise<void> {
+    if (moneyMove(signed.receipt.verdict) === "hold") return;
+    const commit = commitToBytes32(signed.receipt.commit);
+    const hash = await this.onTheChain(async () => {
+      // read again inside the queue: another look may have reported it while this one waited, or the
+      // pod moved to another commit
+      const now = await readJob(jobs, onChainId);
+      if (now.state !== "working" || now.commit.toLowerCase() !== commit.toLowerCase()) return undefined;
+      return report(jobs, onChainId, commit, verdictOnChain(signed), signed.hash);
+    });
+    if (!hash) return;
+    const answerBy = await readAnswerBy(jobs, onChainId);
+    await this.remember(jobId, { reported: hash, ...(answerBy === undefined ? {} : { answerBy: isoOf(answerBy) }) });
+    this.say(`${jobId}: delivered. Its poster has ${answerBy === undefined ? "their time" : `until ${isoOf(answerBy)}`} to accept or refuse`);
+  }
+
+  /**
+   * A job on the contract where the poster has the last word, from its delivery on. While it waits for
+   * its poster nothing is done; once their time has run out it is settled as its checks found, which
+   * anybody may do and the worker is always here to; and when it has ended, however it did, that is
+   * written down once. True when there is nothing more to do on this look.
+   */
+  private async whileDelivered(record: JobRecord, jobs: Contract, onChainId: bigint, onChain: OnChainJob): Promise<boolean> {
+    if (!record.chain || !record.signed) return false;
+    if (onChain.state === "delivered") {
+      const answerBy = await readAnswerBy(jobs, onChainId);
+      if (answerBy === undefined) return true;
+      // a worker stopped between reporting and writing it down finds the report on the chain
+      if (!record.chain.answerBy) await this.remember(record.jobId, { answerBy: isoOf(answerBy) });
+      // a website is put live for its poster to open while their time runs, and tried again on each look until it is
+      await this.putLive((await this.options.store.read(record.jobId)) ?? record);
+      if ((await this.now()) < answerBy) {
+        await this.tellItsPoster((await this.options.store.read(record.jobId)) ?? record, answerBy);
+        return true;
+      }
+      const hash = await this.onTheChain(async () => ((await readJob(jobs, onChainId)).state === "delivered" ? settleUnanswered(jobs, onChainId) : undefined));
+      if (hash) this.say(`${record.jobId}: its poster said nothing in their time, so it is settled as its checks found`);
+      return true;
+    }
+    if (onChain.state !== "settled" && onChain.state !== "refunded") return false;
+    if (record.chain.answer) {
+      // written down on an earlier look, with its website still to take down
+      if (!wasThePodPaid(record)) await this.takeDown(record);
+      return false;
+    }
+    const how = await readHowItEnded(jobs, onChainId);
+    // ended without ever being delivered, which the rest of the look knows what to do with
+    if (!how) return false;
+    const latest = await jobs.publicClient.getBlockNumber({ cacheTime: 0 });
+    const found = await readTheAnswersTransaction(jobs, onChainId, {
+      fromBlock: latest > MOST_BLOCKS_LOOKED_BACK_FOR_AN_ANSWER ? latest - MOST_BLOCKS_LOOKED_BACK_FOR_AN_ANSWER : 0n,
+      toBlock: latest, sliceBlocks: MOST_BLOCKS_A_LOG_READ_COVERS,
+    }).catch((error: unknown) => {
+      // the link is a kindness: how the job ended is the contract's word, and is written down without it
+      this.say(`${record.jobId}: the transaction that ended it could not be looked up: ${firstLine(error)}`);
+      return undefined;
+    });
+    const at = new Date().toISOString();
+    await this.remember(record.jobId, {
+      moneyMovedAt: at,
+      answer: {
+        how, at,
+        ...(found ? { hash: found.hash } : {}),
+        ...(found?.keptByThePod === undefined ? {} : { keptByThePod: found.keptByThePod.toString() }),
+      },
+    });
+    this.say(`${record.jobId}: ${how === "accepted" ? "accepted by its poster" : how === "refused" ? "refused by its poster" : "its poster said nothing, and its checks decided"}`);
+    // a website its pod was not paid for is not left standing at an address: it was the pod's to show, and is not the poster's to keep
+    const ended = (await this.options.store.read(record.jobId)) ?? record;
+    if (!wasThePodPaid(ended)) await this.takeDown(ended);
+    // not the end of the look: a pod paid in full is titled and its work published straight away
+    return false;
+  }
+
+  /**
+   * Put a delivered website live, once: the files of the commit that was graded, at an address of
+   * their own. Work that is no website to publish is said once and not tried again; a host having a
+   * bad moment is said and tried again on the next look, and holds up nothing else.
+   */
+  /** Whether a job's host failed it too lately to be asked again yet: each failure in a row doubles the wait. */
+  private isTooSoonForTheHost(jobId: string): boolean {
+    const failed = this.hostFailed.get(jobId);
+    if (!failed) return false;
+    const wait = Math.min((this.options.hostAgainAfterMs ?? HOST_AGAIN_AFTER_MS) * 2 ** (failed.times - 1), HOST_AGAIN_AT_MOST_MS);
+    return Date.now() - failed.at < wait;
+  }
+
+  private theHostFailed(jobId: string): void {
+    this.hostFailed.set(jobId, { times: (this.hostFailed.get(jobId)?.times ?? 0) + 1, at: Date.now() });
+  }
+
+  private async putLive(record: JobRecord): Promise<void> {
+    const { siteHost, store } = this.options;
+    if (!siteHost || record.live || record.notLiveBecause || !record.signed) return;
+    if ((await store.spec(record.jobId))?.kind !== "site") return;
+    if (this.isTooSoonForTheHost(record.jobId)) return;
+    const laid = await mkdtemp(join(tmpdir(), "pod-worker-site-"));
+    try {
+      const repo = await openRepository(this.options.repositories, record.jobId);
+      await checkout(repo, record.signed.receipt.commit, laid);
+      const files = await siteFilesIn(join(laid, SITE_FOLDER), SITE_FRONT_PAGE);
+      const live = await siteHost.publish({ name: siteNameFor(record), files, madeFor: siteMadeFor(record) });
+      const fresh = (await store.read(record.jobId)) ?? record;
+      await store.save({ ...fresh, live: { host: siteHost.name, siteId: live.siteId, url: live.url, at: new Date().toISOString() } });
+      this.hostFailed.delete(record.jobId);
+      this.say(`${record.jobId}: live at ${live.url}`);
+    } catch (error) {
+      if (error instanceof NotAWebsite) {
+        const fresh = (await store.read(record.jobId)) ?? record;
+        await store.save({ ...fresh, notLiveBecause: error.message });
+        this.say(`${record.jobId}: not put live: ${error.message}`);
+        return;
+      }
+      this.theHostFailed(record.jobId);
+      this.say(`${record.jobId}: could not be put live, and is tried again later: ${firstLine(error)}`);
+    } finally {
+      await rm(laid, { recursive: true, force: true });
+    }
+  }
+
+  /** Take a live website down, once, and write down when. A host having a bad moment is said, and it is tried again. */
+  private async takeDown(record: JobRecord): Promise<void> {
+    const { siteHost, store } = this.options;
+    if (!siteHost || !record.live || record.live.removedAt) return;
+    if (this.isTooSoonForTheHost(record.jobId)) return;
+    try {
+      await siteHost.remove(record.live.siteId);
+      const fresh = (await store.read(record.jobId)) ?? record;
+      if (fresh.live) await store.save({ ...fresh, live: { ...fresh.live, removedAt: new Date().toISOString() } });
+      this.hostFailed.delete(record.jobId);
+      this.say(`${record.jobId}: its live address is taken down`);
+    } catch (error) {
+      this.theHostFailed(record.jobId);
+      this.say(`${record.jobId}: its live address could not be taken down, and is tried again later: ${firstLine(error)}`);
+    }
+  }
+
+  /**
+   * On a job whose pod was paid in full: the work on the main branch, then the title to whoever paid.
    * Main first: once the title is written down the job is finished and not looked at again.
    */
   private async titleAndMain(record: JobRecord, signed: SignedReceipt, onChainId: bigint, jobs: Contract): Promise<void> {
@@ -466,6 +802,9 @@ export class Worker {
   private async whereAnybodyFetches(record: JobRecord, repo: Repository, onChainId: bigint, jobs: Contract): Promise<{ readonly url: string; readonly onGitHub: boolean }> {
     await bundle(repo, this.options.store.historyFileOf(record.jobId));
     const onThisServer = { url: `${this.options.site ?? ""}${bundlePath(record.jobId)}`, onGitHub: false };
+    // where the poster has the last word, the code is the pod's until they accept: it goes nowhere public
+    // before that, and the receipt names this server's copy, which opens to anybody once the pod is paid
+    if (record.chain?.lastWord) return onThisServer;
     const owner = this.options.publishTo?.owner;
     if (!owner) return onThisServer;
     const lead = (await readSeats(jobs, onChainId)).find((seat) => seat.role === "lead");
@@ -528,16 +867,19 @@ export class Worker {
       jobId: setUp.name, seal: job.seal, spec, endsAt: new Date(Number(job.endsAt) * 1000),
       seats: SEATS.map((role) => ({ role })),
     });
-    await store.save({ ...opened, chain: { network: "monad-testnet", jobId: onChainId, jobs: prepared.address }, poster: setUp.poster }, approved.files);
+    await store.save({
+      ...opened, poster: setUp.poster,
+      chain: { network: "monad-testnet", jobId: onChainId, jobs: prepared.address, ...(this.options.hasTheLastWord ? { lastWord: true } : {}) },
+    }, approved.files);
     await store.saveSpec(setUp.name, spec);
     this.say(`${setUp.name}: its poster approved its checks, so it is on the wall and open to a pod`);
   }
 
   /** Which contract a job is on, if it is one this worker works. */
-  private contractOf(address: Address): { readonly contract: Contract; readonly isPreparedFirst: boolean } | undefined {
+  private contractOf(address: Address): { readonly contract: Contract; readonly isPreparedFirst: boolean; readonly hasTheLastWord: boolean } | undefined {
     const { jobs, prepared } = this.options;
-    if (isAddressEqual(address, jobs.address)) return { contract: jobs, isPreparedFirst: false };
-    if (prepared && isAddressEqual(address, prepared.address)) return { contract: prepared, isPreparedFirst: true };
+    if (isAddressEqual(address, jobs.address)) return { contract: jobs, isPreparedFirst: false, hasTheLastWord: false };
+    if (prepared && isAddressEqual(address, prepared.address)) return { contract: prepared, isPreparedFirst: true, hasTheLastWord: this.options.hasTheLastWord === true };
     return undefined;
   }
 
@@ -609,9 +951,16 @@ export class Worker {
   /** Send the one release, if it is due and the job is still locked; what the tries become once it is sent. */
   private async release(record: JobRecord, jobs: Contract, onChainId: bigint, why: string): Promise<Tries | undefined> {
     if (!(await this.isReleaseDue(record))) return undefined;
-    const hash = await this.onTheChain(async () => (await isLocked(jobs, onChainId)) ? releaseLock(jobs, onChainId) : undefined);
+    const hash = await this.onTheChain(async () => {
+      // read inside the queue. Nothing is let go of once the window has closed: nothing could be
+      // graded after it anyway, and the contract where a builder puts its work forward refuses,
+      // since a release says the work reached grading
+      const { endsAt } = await readJob(jobs, onChainId);
+      if ((await this.now()) >= endsAt || !(await isLocked(jobs, onChainId))) return undefined;
+      return releaseLock(jobs, onChainId);
+    });
     if (!hash) return undefined;
-    this.say(`${record.jobId}: let go once, since ${why}; the pod may approve again`);
+    this.say(`${record.jobId}: let go once, since ${why}; it is graded again once work is put forward or approved again`);
     return { failed: 0, released: { at: new Date().toISOString(), why }, ...(record.tries?.heldBefore ? { heldBefore: record.tries.heldBefore } : {}) };
   }
 

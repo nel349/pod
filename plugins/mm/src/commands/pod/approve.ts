@@ -1,6 +1,7 @@
 import { CommandError, type CommandIO, InputFieldType, type InputSchema, PluginCommand } from "@metamask/agent-wallet/plugin";
 import { encodeFunctionData, zeroHash, type Address, type Hex } from "viem";
 import { podJobsAbi, readJob, roleNumber } from "../../../../../src/jobs.ts";
+import { isPutForwardByItsBuilder } from "../../../../../src/jobsV3.ts";
 import { bytes32ToCommit, commitToBytes32 } from "../../../../../src/repo.ts";
 import { commitToApprove } from "../../candidate.ts";
 import { fromPod, JOB, ROLE, roleFrom, SITE, siteFrom } from "../../inputs.ts";
@@ -11,7 +12,7 @@ import { MetaMaskWallet } from "../../wallet.ts";
 const inputs = {
   job: JOB,
   role: ROLE,
-  commit: { type: InputFieldType.Text, flag: "commit", required: false, prompt: false, message: "The full commit id. The lead names the pod's candidate with it; every other seat approves the candidate there is" },
+  commit: { type: InputFieldType.Text, flag: "commit", required: false, prompt: false, message: "The full commit id, to be sure which one is approved. A seat approves the pod's candidate, which the builder puts forward" },
   site: SITE,
 } satisfies InputSchema;
 
@@ -24,15 +25,17 @@ interface Approved {
 }
 
 /**
- * Approve the pod's candidate on the contract, as the seat this wallet holds. Approving another commit
- * makes that one the candidate and clears every approval given so far, so only the lead may name one
- * here: every other seat approves the candidate the chain holds at that moment, or nothing.
+ * Approve the pod's candidate on the contract, as the seat this wallet holds: say it stands behind
+ * the work. Where the builder puts its own work forward, which is asked of the contract, every seat
+ * but the builder's approves the candidate the chain holds at that moment, or nothing, and only while
+ * its review runs. On the contracts before, approving another commit made that one the candidate and
+ * cleared every approval given so far, so only the lead may name one there.
  */
 export default class PodApprove extends PluginCommand<Approved> {
   static override description = "Approve a POD job's candidate commit on the contract, as the seat this wallet holds";
   static override examples = [
     "<%= config.bin %> pod approve --job a-link-shortener --role reviewer",
-    "<%= config.bin %> pod approve --job a-link-shortener --role lead --commit 1cede02ebf88bf81bfcd556351dc6fa8bdb74a5d",
+    "<%= config.bin %> pod approve --job a-link-shortener --role qa --commit 1cede02ebf88bf81bfcd556351dc6fa8bdb74a5d",
   ];
   static override requiresAuth = true;
   // a wallet of our own keys may be locked with a password, and a call outside the wallet's limits waits for its owner: both are the tool's own flags
@@ -48,8 +51,8 @@ export default class PodApprove extends PluginCommand<Approved> {
     const seat = wallet.address();
     const contract = { address: job.jobs, publicClient: wallet.reads };
     // read just before approving: the candidate is whatever the chain holds now
-    const held = (await readJob(contract, job.onChainId)).commit;
-    const toApprove = commitToApprove(role, told.commit, held === zeroHash ? undefined : bytes32ToCommit(held));
+    const [{ commit: held }, builderNames] = await Promise.all([readJob(contract, job.onChainId), isPutForwardByItsBuilder(contract)]);
+    const toApprove = commitToApprove(role, told.commit, held === zeroHash ? undefined : bytes32ToCommit(held), builderNames);
     if (!toApprove.ok) throw new CommandError(toApprove.code, toApprove.why, toApprove.hint);
     const { commit } = toApprove;
 
@@ -57,7 +60,7 @@ export default class PodApprove extends PluginCommand<Approved> {
     try {
       await wallet.reads.simulateContract({ ...approving, account: seat });
     } catch (error) {
-      throw new CommandError("APPROVAL_REFUSED", `The contract would refuse this approval: ${whyTheContractRefused(error)}.`, `Only the address that holds the ${role} seat may approve as it, and only while the job is open.`);
+      throw new CommandError("APPROVAL_REFUSED", `The contract would refuse this approval: ${whyTheContractRefused(error)}.`, `Only the address that holds the ${role} seat may approve as it, while the job is open and the candidate's review still runs.`);
     }
     io.progress?.(`Asking MetaMask to approve ${commit} as the ${role} seat on "${job.jobId}".`);
     const transaction = await wallet.send({ to: contract.address, data: encodeFunctionData(approving) });

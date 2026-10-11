@@ -166,6 +166,23 @@ describe.skipIf(!available)("the pages the server draws, in a browser", () => {
     expect(await errors(page)).toEqual([]);
   }, 120_000);
 
+  test("a browser wallet is disconnected from the header, the page stops saying the job is theirs, and a reload stays disconnected", async () => {
+    const page = await openAt(jobPath("a-coat"), POSTER);
+    await useTheBrowserWallet(page);
+    await page.until(`document.querySelector(".yours-marks")?.textContent.includes(${JSON.stringify(SITE.job.yourJob)})`, "the job to say it is theirs");
+
+    await page.click("#disconnect-wallet");
+    await page.until(`document.querySelector("#connect-wallet") && !document.querySelector(".wallet .who")`, "the header to offer connecting again");
+    await page.until(`!document.querySelector(".yours-marks")?.textContent.includes(${JSON.stringify(SITE.job.yourJob)})`, "the job to stop saying it is theirs");
+
+    // the wallet in the page still names its account when asked: the page must not take that as connected
+    await page.open(base + jobPath("a-coat"));
+    await page.until(`document.querySelector(${JSON.stringify(TAKEN_OVER)})`, "the job page to be taken over again");
+    await Bun.sleep(1500);
+    expect(await page.evaluate<boolean>(`!!document.querySelector("#connect-wallet") && !document.querySelector(".wallet .who")`)).toBe(true);
+    expect(await errors(page)).toEqual([]);
+  }, 120_000);
+
   test("with somebody else's wallet connected, the job says who paid, and that only that wallet can take the money back", async () => {
     const page = await openAt(jobPath("a-coat"), STRANGER);
     await useTheBrowserWallet(page);

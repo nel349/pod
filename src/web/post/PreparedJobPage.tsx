@@ -17,7 +17,7 @@ import {
 import { useConfig } from "wagmi";
 import { connected, useConnectedAccount } from "../shared/index.ts";
 import {
-  BLANK_FORM, COPY, formOfRequest, isThePoster, isWritingAsked, lastAsked, latestWriting, needsTopUp, nowLine, PAY_FIRST_STEPS, preparedProgressOf,
+  BLANK_FORM, COPY, formOfRequest, isThePoster, isWritingAsked, lastAsked, latestWriting, needsTopUp, nowLine, PREPARED_STEPS, preparedProgressOf,
   requestKey, standingOf, toWriteRequest, whyNotApprove, writingVerdict, type DraftForm, type PostForm, type Progress, type StepName,
 } from "./state/index.ts";
 
@@ -64,9 +64,9 @@ export function PreparedJobPage({ market, onChainId }: { readonly market: Market
   const since = useBusySince(view?.now);
   const seconds = useElapsed(since);
 
-  if (chain.isPending) return <PreparedSheets form={form} progress={preparedProgressOf("preparing")}><section className="sheet notice"><p>{COPY.loading}</p></section></PreparedSheets>;
+  if (chain.isPending) return <PreparedSheets rule={market.lastWord} form={form} progress={preparedProgressOf("preparing")}><section className="sheet notice"><p>{COPY.loading}</p></section></PreparedSheets>;
   if (!job) {
-    return <PreparedSheets form={form} progress={preparedProgressOf("preparing")}><section className="sheet notice"><p>{chain.error?.message ?? COPY.prepared.noSuchJob(onChainId)}</p></section></PreparedSheets>;
+    return <PreparedSheets rule={market.lastWord} form={form} progress={preparedProgressOf("preparing")}><section className="sheet notice"><p>{chain.error?.message ?? COPY.prepared.noSuchJob(onChainId)}</p></section></PreparedSheets>;
   }
 
   const standing = standingOf(job);
@@ -79,7 +79,7 @@ export function PreparedJobPage({ market, onChainId }: { readonly market: Market
     : COPY.prepared.writeAgain;
 
   return (
-    <PreparedSheets form={form} progress={preparedProgressOf(standing)} working={isBusy ? "approve" : undefined}>
+    <PreparedSheets rule={market.lastWord} form={form} progress={preparedProgressOf(standing)} working={isBusy ? "approve" : undefined}>
       <YourJobSheet
         market={market}
         job={{
@@ -91,9 +91,6 @@ export function PreparedJobPage({ market, onChainId }: { readonly market: Market
       {/* drawn once the poster's own lines are in, so nothing jumps under their finger as they arrive */}
       {standing === "preparing" && view && linesFor === onChainId && (
         <>
-          <IdeaStep />
-          <LinesStep lines="brief" />
-          <LinesStep lines="exam" />
           <ApproveStep
             view={{
               line: nowLine(view.now, seconds), writing, verdict: writing ? writingVerdict(writing, request) : undefined,
@@ -102,6 +99,10 @@ export function PreparedJobPage({ market, onChainId }: { readonly market: Market
             onWriteAgain={() => actions.writeAgain(request)}
             onApprove={actions.approve}
           />
+          {/* their own words come after: they are here only for a check that reads wrong */}
+          <IdeaStep />
+          <LinesStep lines="brief" />
+          <LinesStep lines="exam" />
         </>
       )}
     </PreparedSheets>
@@ -115,16 +116,18 @@ function problemOf(refusal: number | undefined, standing: string, said: string |
 }
 
 /** The poster on the left and the sheets on the right, in the pay-first order, around one form. */
-function PreparedSheets({ form, children, progress, working }: {
+function PreparedSheets({ form, children, progress, working, rule }: {
   readonly form: UseFormReturn<PostForm>;
   readonly children: ReactNode;
   readonly progress: Progress;
   readonly working?: StepName;
+  /** set where the poster has the last word, which the masthead says */
+  readonly rule?: MarketConfig["lastWord"];
 }): ReactElement {
   return (
-    <StepOrderContext.Provider value={PAY_FIRST_STEPS}>
+    <StepOrderContext.Provider value={PREPARED_STEPS}>
       <div className="poster">
-        <Bill progress={progress} working={working} />
+        <Bill progress={progress} working={working} rule={rule} />
         <FormProvider {...form}>
           <form id="post" className="sheets" noValidate onSubmit={(event) => event.preventDefault()}>
             <ProgressStrip progress={progress} working={working} />

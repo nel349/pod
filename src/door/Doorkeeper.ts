@@ -31,6 +31,12 @@ export interface DoorChain {
   seats(onChainId: bigint, afresh?: boolean): Promise<readonly HeldSeat[]>;
   /** what each seat pays and costs to take */
   terms(onChainId: bigint): Promise<Readonly<Record<Role, { readonly pay: bigint; readonly deposit: bigint }>>>;
+  /**
+   * Whether the job is locked for grading, so that no seat can be taken on it however many are free.
+   * Where a builder puts its own work forward that is common: it is graded as soon as every seat that
+   * is taken stands behind it, and nobody waits for the rest.
+   */
+  isLocked(onChainId: bigint): Promise<boolean>;
   /** the time of the chain's latest block, which is the time the contract's window is measured by */
   now(): Promise<bigint>;
 }
@@ -156,6 +162,8 @@ export class Doorkeeper {
     const job = await doorJob.chain.job(onChainId);
     if (!job) return `there is no job ${onChainId} on the contract`;
     if (job.state === "settled" || job.state === "refunded") return `job ${onChainId} is ${job.state}: nothing more can be added to it`;
+    // delivered: its checks have been run on what the pod agreed on, and it waits for its poster's answer
+    if (job.state === "delivered") return `job ${onChainId} is delivered and waits for its poster's answer: nothing more can be added to it`;
     if ((await doorJob.chain.now()) >= job.endsAt) {
       return `job ${onChainId}'s window closed at ${new Date(Number(job.endsAt) * 1000).toISOString()}: nothing more can be added to it`;
     }
@@ -210,6 +218,7 @@ export function doorChainFor(input: {
   readonly readJob: (onChainId: bigint) => Promise<ChainJob & { readonly poster: Address }>;
   readonly readSeats: (onChainId: bigint) => Promise<readonly HeldSeat[]>;
   readonly readTerms: DoorChain["terms"];
+  readonly readLocked: DoorChain["isLocked"];
   readonly latestBlockTime: () => Promise<bigint>;
 }): DoorChain {
   const seatsRead = new Map<bigint, { readonly at: number; readonly seats: Promise<readonly HeldSeat[]> }>();
@@ -231,6 +240,7 @@ export function doorChainFor(input: {
       return seats;
     },
     terms: input.readTerms,
+    isLocked: input.readLocked,
     now: input.latestBlockTime,
   };
 }

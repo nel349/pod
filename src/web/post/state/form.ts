@@ -8,6 +8,7 @@ import { z } from "zod";
 import { parseEther } from "viem";
 import type { DeepPartial, DefaultValues } from "react-hook-form";
 import { DEFAULT_MODE, KINDS, MODE_NAMES, type Kind } from "../../../job.ts";
+import { isEmail } from "../../../mail/Mailer.ts";
 import { WALL_NAME } from "../../../routes.ts";
 import { MOST_STATEMENTS, StatementSchema, WriteRequestSchema } from "../../../checkwriting/request.ts";
 import { COPY } from "./copy.ts";
@@ -26,6 +27,8 @@ export const PostFormSchema = z.object({
   price: z.string().refine((price) => priceInWei(price) !== undefined, COPY.problems.price),
   mode: z.enum(MODE_NAMES),
   name: z.string().regex(WALL_NAME, COPY.problems.name),
+  /** where to tell them it was delivered: an email address, or left empty */
+  tell: z.string().trim().refine((value) => value === "" || isEmail(value), COPY.problems.tell),
 }).superRefine((form, context) => {
   const lines = [...filled(form.brief), ...filled(form.exam)];
   if (lines.length === 0) context.addIssue({ code: "custom", path: ["brief"], message: COPY.problems.noLines });
@@ -57,6 +60,7 @@ export const BLANK_FORM: DefaultValues<PostForm> = {
   price: "1",
   mode: DEFAULT_MODE,
   name: "",
+  tell: "",
 };
 
 /** A price as the poster typed it, in wei, or nothing when it is not an amount more than zero. */

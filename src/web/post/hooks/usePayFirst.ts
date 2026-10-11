@@ -108,14 +108,16 @@ export function usePayFirst(market: MarketConfig, form: UseFormReturn<PostForm>,
           value: whatIsPaid(price, market.writing).total, chainId: market.chainId, account: wallet,
         });
         // from here the money may be on the chain, whatever happens next
-        setUp = { hash, poster: wallet, name: valid.name, price: valid.price, mode: valid.mode, salt, request };
+        setUp = { hash, poster: wallet, name: valid.name, price: valid.price, mode: valid.mode, salt, request, ...(valid.tell ? { tell: valid.tell } : {}) };
         remember(setUp);
       }
-      // the name and the lines are the poster's to change until the job is set up; the price and the
-      // time were paid for, and stay as they were
+      // the name, the lines and where to be told are the poster's to change until the job is set up; the
+      // price and the time were paid for, and stay as they were
       const lines = WriteRequestSchema.safeParse(toWriteRequest(valid));
-      if (setUp.name !== valid.name || (lines.success && JSON.stringify(lines.data) !== JSON.stringify(setUp.request))) {
-        setUp = { ...setUp, name: valid.name, ...(lines.success ? { request: lines.data } : {}) };
+      const tell = valid.tell || undefined;
+      if (setUp.name !== valid.name || setUp.tell !== tell || (lines.success && JSON.stringify(lines.data) !== JSON.stringify(setUp.request))) {
+        const { tell: _before, ...kept } = setUp;
+        setUp = { ...kept, name: valid.name, ...(lines.success ? { request: lines.data } : {}), ...(tell ? { tell } : {}) };
         remember(setUp);
       }
       let onChainId = setUp.onChainId;
@@ -211,11 +213,11 @@ async function jobMadeBy(config: Config, market: MarketConfig, hash: `0x${string
 
 /** Hand the lines to the server, which sets the job up only if the chain and the signature agree. */
 async function sendToBeWritten(input: KeptSetUp & { readonly onChainId: string; readonly signature: `0x${string}` }): Promise<void> {
-  const { onChainId, name, mode, salt, request, poster, signature } = input;
+  const { onChainId, name, mode, salt, request, poster, signature, tell } = input;
   const response = await fetch(ROUTES.preparing, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ onChainId, name, mode, salt, request, poster, signature }),
+    body: JSON.stringify({ onChainId, name, mode, salt, request, poster, signature, ...(tell ? { tell } : {}) }),
   });
   const answer = await readAnswer(response, AnswerSchema);
   if (!response.ok) throw new Error(answer.why ?? `the server said ${response.status}`);

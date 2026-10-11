@@ -2,7 +2,7 @@
  * How the reference agents talk to each other, through signed notes. The only convention they share.
  *
  * The candidate itself needs no note: it is the commit the contract's approvals are bound to, which
- * every seat reads from the chain. Notes carry what the chain cannot: why a seat refused, so the
+ * every seat reads from the chain, whoever named it there. Notes carry what the chain cannot: why a seat refused, so the
  * builder can do better, and what a seat saw when it approved, so the record says more than yes.
  * Outside agents are free to write whatever they like; these are only the reference agents' words.
  */
@@ -12,8 +12,12 @@ export const APPROVED = "Approved: ";
 export const REFUSED = "Refused: ";
 export const BROUGHT_IN = "Brought in: ";
 
-/** The seats whose refusals the builder answers, because they judge the work rather than make it */
-export const JUDGES: readonly Role[] = ["reviewer", "qa", "security"];
+/**
+ * The seats whose refusals the builder answers, because they judge the work rather than make it. The
+ * lead is one of them where a builder puts its own work forward; where the lead names the candidate
+ * instead, it refuses nothing in a note, so naming it here changes nothing there
+ */
+export const JUDGES: readonly Role[] = ["lead", "reviewer", "qa", "security"];
 
 /** How many times a builder rebuilds after a refusal before it stops and says so */
 export const MOST_REBUILDS = 3;

@@ -53,18 +53,21 @@ export type Standing =
   /** open, nobody seated: the poster may take it back now, on a contract that prepares jobs */
   | { readonly kind: "take back now" }
   /** still preparing: taken back on its own page, where its checks are */
-  | { readonly kind: "preparing"; readonly page: string };
+  | { readonly kind: "preparing"; readonly page: string }
+  /** delivered, where the poster has the last word: nothing is taken back, the poster answers on the job's page */
+  | { readonly kind: "delivered" };
 
 export function standingOf(job: OnChainNow, way: Way = "first", onChainId = ""): Standing {
   if (job.state === "settled") return { kind: "settled" };
   if (job.state === "refunded") return { kind: "refunded" };
   if (job.state === "preparing") return { kind: "preparing", page: preparingPagePath(onChainId) };
+  if (job.state === "delivered") return { kind: "delivered" };
   if (job.now < job.endsAt) return way === "prepares" && job.state === "open" ? { kind: "take back now" } : { kind: "too early", endsAt: job.endsAt };
   return { kind: "ready" };
 }
 
 /** Whether there is no money left in the job to take: it was paid out, or taken back already. */
-export const isOver = (standing: Standing): boolean => standing.kind === "settled" || standing.kind === "refunded";
+export const isOver = (standing: Standing): boolean => standing.kind === "settled" || standing.kind === "refunded" || standing.kind === "delivered";
 
 /** Whether the button may be pressed: while the money is the poster's to take. */
 export const canTake = (standing: Standing): boolean => standing.kind === "ready" || standing.kind === "take back now";
@@ -137,6 +140,7 @@ export const COPY = {
         case "ready": return "The window has closed and the job was never settled. The money is the poster's to take back.";
         case "take back now": return "Nobody has taken a seat yet, so the poster can take the money back now, without waiting for the window to close.";
         case "preparing": return "Its checks are still being written and read. The money is taken back on its own page, where the checks are.";
+        case "delivered": return "The pod has delivered, so there is nothing to take back here: whoever posted the job accepts or refuses it on the job's own page, and if they say nothing its checks decide.";
       }
     },
   },

@@ -5,6 +5,7 @@ import type { JobRecord } from "../../../store.ts";
 import { jobView, TitleViewSchema, type ChainSays } from "./job.ts";
 import { MS_IN_A_SECOND, WEI, WHEN } from "./kinds.ts";
 import { MoneyViewSchema, type MoneyView } from "./money.ts";
+import { SEATS } from "../../../seal.ts";
 import { tileView, TileViewSchema } from "./tile.ts";
 
 /** A job on your own page, with what its money and its title let you do. */
@@ -37,10 +38,32 @@ export const UnpublishedViewSchema = z.object({
 });
 export type UnpublishedView = z.infer<typeof UnpublishedViewSchema>;
 
-/** A wallet's own page: the jobs it paid for, those that never reached the wall, and the titles it holds. */
+/**
+ * What a seat got or stands to get, by where its job stands: nothing while it is built; its pay if the
+ * poster accepts, when it stands behind the work; its pay, part of it, or nothing once the job has ended.
+ */
+export const SEAT_OUTCOMES = ["seated", "awaiting", "paid", "keptPart", "notBehind", "nothing"] as const;
+export type SeatOutcome = (typeof SEAT_OUTCOMES)[number];
+
+/** A seat on a job that a wallet's agent holds, or that the wallet holds itself, with what it paid. */
+export const SeatOfYoursSchema = z.object({
+  jobId: z.string(),
+  idea: z.string(),
+  standing: z.string(),
+  role: z.enum(SEATS),
+  agent: z.string(),
+  /** the seat's share of the job's price */
+  pay: WEI,
+  outcome: z.enum(SEAT_OUTCOMES),
+});
+export type SeatOfYours = z.infer<typeof SeatOfYoursSchema>;
+
+/** A wallet's own page: the jobs it paid for, those that never reached the wall, the titles it holds, and the seats its agents hold. */
 export const YoursViewSchema = z.object({
   address: z.string(),
   posted: z.array(YoursEntrySchema),
+  /** every seat this wallet owns or holds itself, newest job first */
+  seats: z.array(SeatOfYoursSchema),
   /** absent when the contract could not be read just now, which is not the same as there being none */
   unpublished: z.array(UnpublishedViewSchema).optional(),
   holds: z.array(YoursEntrySchema),
@@ -49,7 +72,39 @@ export type YoursView = z.infer<typeof YoursViewSchema>;
 
 export function yoursEntry(record: JobRecord, chainSays: ChainSays): YoursEntry {
   const view = jobView(record, [], chainSays);
-  return { tile: tileView(record.tile, record.signed !== undefined), ...(view.money ? { money: view.money } : {}), ...(view.title ? { title: view.title } : {}) };
+  return { tile: tileView(record.tile, record.signed !== undefined, view.answer), ...(view.money ? { money: view.money } : {}), ...(view.title ? { title: view.title } : {}) };
+}
+
+/**
+ * The seats on a job that a wallet owns, as an agent's owner does under a grant, or holds with its
+ * own key, each with what it paid. Read from the job's record as its page reads it.
+ */
+export function seatsOfYours(record: JobRecord, wallet: string): SeatOfYours[] {
+  const wanted = wallet.toLowerCase();
+  const mine = record.tile.pod.filter((seat) => seat.owner.toLowerCase() === wanted || seat.agent.toLowerCase() === wanted);
+  if (mine.length === 0) return [];
+  const view = jobView(record, [], {});
+  return mine.flatMap((seat) => {
+    const drawn = view.seats.find((one) => one.role === seat.role);
+    if (!drawn) return [];
+    return [{
+      jobId: record.jobId, idea: view.idea, standing: view.standing, role: drawn.role, agent: seat.agent, pay: drawn.pay,
+      outcome: seatOutcomeOf(view, drawn.role),
+    }];
+  });
+}
+
+/** What a seat got from its job, as the job's page already says it of the whole pod. */
+function seatOutcomeOf(view: ReturnType<typeof jobView>, role: SeatOfYours["role"]): SeatOutcome {
+  const { delivery } = view;
+  // on a contract that settles on the verdict alone, every seat is paid when the work passes
+  if (!delivery) return view.verdict === "passed" && view.money?.kind === "paid" ? "paid" : view.verdict === "failed" ? "nothing" : "seated";
+  const isBehind = delivery.behind.includes(role);
+  if (delivery.answer === "awaited") return isBehind ? "awaiting" : "notBehind";
+  const isPaid = delivery.answer === "accepted" || (delivery.answer === "unanswered" && delivery.checksPassed);
+  if (isPaid) return isBehind ? "paid" : "notBehind";
+  if (delivery.answer === "refused" && delivery.checksPassed) return isBehind ? "keptPart" : "notBehind";
+  return "nothing";
 }
 
 /**
@@ -66,6 +121,7 @@ export function unpublishedView(paid: PaidJob, isSetUp = false): UnpublishedView
   const takeBack = refundByNumberPath(onChainId, paid.jobs);
   const endsAt = new Date(Number(job.endsAt) * MS_IN_A_SECOND).toISOString();
   if (paid.prepares && job.state === "open") return { onChainId, price: job.price.toString(), money: { kind: "approved", endsAt, takeBack } };
+  // a delivered job is always on the wall, so one not on it is never waiting for its poster's answer
   const money: MoneyView = job.state === "refunded" ? { kind: "refunded" }
     : job.state === "settled" ? { kind: "paid" }
     : { kind: "held", endsAt, takeBack };

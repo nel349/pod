@@ -20,9 +20,13 @@ async function fetchJob(jobId: string): Promise<JobView> {
   return await readAnswer(response, JobViewSchema);
 }
 
+/** Whether a job's page can still change without anybody reloading it. */
+const canStillChange = (job: JobView | undefined): boolean =>
+  job?.verdict === "running" || job?.verdict === "graded" || job?.answer === "awaited";
+
 /**
  * The job as it stands, starting from what the server drew and asking again while it runs, so seats,
- * notes and the verdict appear without a reload. Once there is a verdict nothing changes, and it stops.
+ * notes, the verdict and the poster's answer appear without a reload. Once nothing can change, it stops.
  */
 export function useFollowedJob(drawn: JobView): FollowedJob {
   const { drawnAt } = useSite();
@@ -32,8 +36,8 @@ export function useFollowedJob(drawn: JobView): FollowedJob {
     initialData: drawn,
     initialDataUpdatedAt: new Date(drawnAt).getTime(),
     staleTime: FOLLOW_EVERY_MS,
-    // followed while it can still change: being built, or graded with its verdict not yet public
-    refetchInterval: (query) => (query.state.data?.verdict === "running" || query.state.data?.verdict === "graded" ? FOLLOW_EVERY_MS : false),
+    // followed while it can still change: being built, graded with its verdict not yet public, or waiting for its poster's answer
+    refetchInterval: (query) => (canStillChange(query.state.data) ? FOLLOW_EVERY_MS : false),
   });
   return { job: answer.data, lostTouch: answer.isError };
 }

@@ -7,7 +7,7 @@ import { claimToSign } from "../../../messages.ts";
 import { claimApiPath } from "../../../routes.ts";
 import { readAnswer } from "../../shared/index.ts";
 import { connected } from "../../shared/index.ts";
-import { ClaimedSchema, WhySchema, type Claimable, type ClaimStatus, type ClaimStep } from "../state/index.ts";
+import { ClaimedSchema, ClaimStopped, NotClaimedSchema, type Claimable, type ClaimStatus, type ClaimStep } from "../state/index.ts";
 import { CLAIM_QUERY_KEYS } from "./queryKeys.ts";
 
 /**
@@ -38,14 +38,20 @@ export function useClaim(claimable: Claimable): { readonly status: ClaimStatus; 
       const response = await fetch(claimApiPath(claimable.jobId), {
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ toAccount, signature }),
       });
-      if (!response.ok) throw new Error((await readAnswer(response, WhySchema)).why);
-      return (await readAnswer(response, ClaimedSchema)).invited;
+      if (!response.ok) {
+        const refused = await readAnswer(response, NotClaimedSchema);
+        throw new ClaimStopped(refused.why, refused.site);
+      }
+      return await readAnswer(response, ClaimedSchema);
     },
-    onSuccess: (invited) => {
-      setStatus({ kind: "sent", invited });
+    onSuccess: (claimed) => {
+      setStatus({ kind: "sent", invited: claimed.invited, ...(claimed.site ? { site: claimed.site } : {}) });
       void client.invalidateQueries({ queryKey: CLAIM_QUERY_KEYS.claimable(claimable.jobId) });
     },
-    onError: (error) => setStatus({ kind: "stopped", step: step.current, why: firstLine(error) }),
+    onError: (error) => setStatus({
+      kind: "stopped", step: step.current, why: firstLine(error),
+      ...(error instanceof ClaimStopped && error.site ? { site: error.site } : {}),
+    }),
   });
 
   return { status, claim: (toAccount) => claiming.mutate(toAccount) };

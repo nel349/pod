@@ -48,12 +48,30 @@
 }
 .strap-line { margin: 0; font: 400 15px/1.35 var(--type); }
 
+/* how it works, for a first visit: three steps a stranger can read, each of our own words said plainly once */
+.how h2 { margin: 0 0 8px; font: 900 20px/1 var(--shout); text-transform: uppercase; letter-spacing: 0.02em; }
+.how ol { margin: 0; padding: 0; list-style: none; counter-reset: step; display: grid; gap: 10px; max-width: 48ch; }
+.how li { counter-increment: step; position: relative; padding-left: 34px; font: 500 15.5px/1.45 var(--read); }
+.how li::before {
+  content: counter(step);
+  position: absolute; left: 0; top: 1px;
+  width: 24px; height: 24px;
+  display: grid; place-items: center;
+  font: 900 16px/1 var(--shout);
+  background: var(--ink); color: var(--yellow);
+}
+/* the two things a visitor can do: have something built, or bring an agent to build */
+.doors { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px; }
+.doors .quiet { color: var(--ink); font: 400 15px/1.3 var(--type); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.so-far { display: grid; gap: 6px; }
+.so-far-title { margin: 0; font: 900 20px/1 var(--shout); text-transform: uppercase; letter-spacing: 0.02em; }
+.so-far-note { margin: 0; font: 400 14px/1.4 var(--type); }
 .tally { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; font: 400 15px/1.2 var(--type); }
-.tally b { font: 900 40px/1 var(--shout); margin-right: 2px; }
-.tally .passed b { color: var(--paid-ink); }
-.tally .failed b { color: var(--refused-ink); }
-.tally .not-reproducible b { color: var(--unsure-ink); }
-.tally .running b { color: var(--open-ink); }
+.tally b { font: 900 34px/1 var(--shout); margin-right: 2px; }
+.tally .paid b { color: var(--paid-ink); }
+.tally .failed b, .tally .refused b { color: var(--refused-ink); }
+.tally .unsure b { color: var(--unsure-ink); }
+.tally .open b, .tally .delivered b { color: var(--open-ink); }
 
 .job-seal { position: relative; display: grid; justify-items: center; gap: 10px; margin: 6px 0 0; }
 .bill-stamp {
@@ -124,6 +142,10 @@
 .flyer.failed .flyer-stamp { color: var(--refused-ink); }
 .flyer.not-reproducible .flyer-stamp { color: var(--unsure-ink); }
 .flyer.running .flyer-stamp { color: var(--open-ink); }
+/* delivered, where the poster has the last word: the stamp follows their answer, whatever the checks found */
+.flyer.answer-awaited .flyer-stamp { color: var(--open-ink); }
+.flyer.answer-accepted .flyer-stamp { color: var(--paid-ink); }
+.flyer.answer-refused .flyer-stamp { color: var(--refused-ink); }
 
 .flyer-said { display: grid; gap: 8px; align-content: start; }
 .flyer h2 { margin: 0 64px 0 0; font: 800 20px/1.25 var(--read); text-wrap: balance; }
@@ -344,3 +366,54 @@ a.primary.small, button.primary.small { font-size: 18px; padding: 10px 16px 8px;
 /* graded, the verdict not yet public: grey, like a job with no verdict to show */
 .seal.graded .piece.held { fill: var(--grey); }
 .flyer.graded .flyer-stamp { color: var(--grey); }
+
+/* a delivered job, for whoever posted it: the two things they can say, pinned where the money is said */
+.your-answer { margin: 0 0 18px; padding: 16px 18px 6px; background: var(--yellow); box-shadow: 5px 5px 0 var(--ink); max-width: 62ch; }
+.your-answer h3 { margin: 0 0 8px; font: 900 22px/1 var(--shout); text-transform: uppercase; }
+.your-answer p { margin: 0 0 12px; }
+.your-answer .note { color: var(--ink); }
+/* the two answers, side by side and the same size, stacked on a phone: neither is the one the page leans on */
+.answer-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; margin: 0 0 14px; align-items: start; }
+.answer-choice { display: grid; gap: 8px; align-content: start; }
+.answer-choice .note { margin: 0; }
+.answer-choice button.answer { width: 100%; min-height: 64px; padding: 12px 14px 9px; border: 3px solid var(--ink); background: var(--ink); color: var(--yellow); font: 900 21px/1.05 var(--shout); letter-spacing: 0.01em; text-transform: uppercase; cursor: pointer; box-shadow: 4px 4px 0 var(--pink); }
+.answer-choice button.answer { text-wrap: balance; }
+.answer-choice button.answer:hover:not(:disabled) { color: var(--white); }
+.answer-choice button.answer:disabled { opacity: 0.45; cursor: default; }
+@media (max-width: 640px) { .answer-choices { grid-template-columns: minmax(0, 1fr); } }
+
+/* how an agent's jobs have ended before this one, under its address: small, since most rows say the same */
+.seat-record { display: block; margin-top: 2px; font: 400 12px/1.3 var(--type); color: var(--grey); }
+
+/* a delivered website: the one thing to press before deciding */
+.live-site { margin: 0 0 18px; }
+.live-site p { margin: 0 0 6px; }
+.live-site .primary { margin-right: 12px; }
+
+/* where the record of a delivered job starts: said on the night ground, between the answer and the sheets behind it */
+.record-starts { margin: 12px 0 -8px; color: var(--paper); }
+.record-starts h2 { margin: 0 0 6px; font: 900 clamp(26px, 3vw, 38px)/0.95 var(--shout); text-transform: uppercase; color: var(--yellow); }
+.record-starts p { margin: 0; max-width: 60ch; font: 400 14px/1.45 var(--type); color: var(--rule); }
+
+/* work under review: when it goes to its checks, and that there is nothing to do until then */
+.review { margin: 0 0 18px; padding: 14px 18px 6px; background: var(--yellow); box-shadow: 5px 5px 0 var(--ink); max-width: 62ch; }
+.review p { margin: 0 0 10px; }
+.review .note { color: var(--ink); }
+
+/* the door to a built job's live website, on its card: the one thing to press there */
+.flyer-links .open-it { margin-right: 14px; padding: 5px 10px 3px; background: var(--ink); color: var(--yellow); font: 900 15px/1.1 var(--shout); letter-spacing: 0.04em; text-transform: uppercase; text-decoration: none; box-shadow: 3px 3px 0 var(--pink); }
+.flyer-links .open-it:hover { color: var(--white); }
+/* what a first-time poster needs, said under the two doors on the bill */
+.bill .needs { margin: -6px 0 0; font: 400 14px/1.4 var(--type); }
+
+/* on a wallet's own page: how many of its jobs wait for its answer, said above the list */
+.needs-you { margin: 0 0 14px; padding: 8px 12px 5px; width: fit-content; background: var(--ink); color: var(--yellow); font: 900 20px/1.1 var(--shout); letter-spacing: 0.02em; text-transform: uppercase; box-shadow: 4px 4px 0 var(--pink); }
+
+/* why a check failed, in the check's own last word, on a line of its own under the check */
+.checks .check-said { flex-basis: 100%; padding-left: 4px; font: 400 14px/1.4 var(--type); color: var(--grey); overflow-wrap: anywhere; }
+
+/* said to a job's own poster only: what is asked of them now */
+.for-you { margin: 0 0 16px; padding: 10px 14px 8px; max-width: 62ch; background: var(--yellow); box-shadow: 4px 4px 0 var(--ink); font-weight: 500; }
+
+/* on a wallet's own page: what one of its agents' seats paid, under the job it sat on */
+.yours-list .seat-outcome { margin: 4px 0 0; font: 400 15px/1.45 var(--read); max-width: 60ch; }

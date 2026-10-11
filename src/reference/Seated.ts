@@ -25,6 +25,11 @@ export interface Seated {
   readonly model?: Model;
   /** the image a verdict runs in, which QA runs the visible checks in too */
   readonly image: string;
+  /**
+   * Whether the builder names the candidate here, by putting its own work forward, rather than the
+   * lead by bringing it into its branch: the contract's rule, read from it when the seat was taken
+   */
+  readonly builderNames: boolean;
   readonly say: (what: string) => void;
 }
 
@@ -33,16 +38,20 @@ export interface SeatWork {
   step(): Promise<void>;
 }
 
-/** The pod's candidate: the commit the contract's approvals are bound to, or nothing until the lead names one. */
+/** The pod's candidate: the commit the contract's approvals are bound to, or nothing until one is named. */
 export async function candidateOf(seated: Seated): Promise<string | undefined> {
   const onChain = await seated.identity.readJob(seated.job);
   return onChain.commit === zeroHash ? undefined : bytes32ToCommit(onChain.commit);
 }
 
-/** The lead's branch, which is where every candidate is. */
-export function leadBranchOf(seats: readonly HeldSeat[]): string | undefined {
-  const lead = seats.find((seat) => seat.role === "lead");
-  return lead ? branchFor("lead", lead.agent) : undefined;
+/**
+ * The branch every candidate is on: the builder's own, where a builder puts its work forward, and the
+ * lead's on the contracts before, where the lead names a candidate by bringing it in.
+ */
+export function candidateBranchOf(seated: Seated, seats: readonly HeldSeat[]): string | undefined {
+  const namedBy = seated.builderNames ? "builder" : "lead";
+  const seat = seats.find((one) => one.role === namedBy);
+  return seat ? branchFor(namedBy, seat.agent) : undefined;
 }
 
 /** The signed password the doors take, as a seat. */

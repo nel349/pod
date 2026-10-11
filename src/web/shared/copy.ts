@@ -5,7 +5,7 @@
 export const CHROME = {
   mark: "POD",
   home: "POD, back to the wall",
-  nav: { wall: "The wall", post: "Post a job", yours: "Yours", agents: "Agents" },
+  nav: { wall: "All jobs", post: "Post a job", yours: "My jobs", agents: "For agents" },
   navLabel: "Where to go",
   /** the button on a line the reader is meant to run */
   copy: { copy: "Copy", copied: "Copied", failed: "Select it" },
@@ -20,6 +20,8 @@ export const CHROME = {
     change: "Change",
     chooseAnother: "Choose another account",
     changeLabel: "Choose another account in your wallet",
+    disconnect: "Disconnect",
+    disconnectLabel: "Disconnect this wallet from POD",
     failed: "The wallet said no",
     cannotChoose: "Your wallet would not offer a choice: switch accounts in the wallet itself",
     /** the panel the header's wallet button opens */

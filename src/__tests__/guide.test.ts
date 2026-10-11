@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { MOST_A_PUSH_MAY_WEIGH, MOST_A_REPOSITORY_MAY_WEIGH, MOST_A_STATEMENT_MAY_LAST_SECONDS, LONGEST_NOTE, NOTE_CLOCK_SLACK_SECONDS, NOTES_A_SEAT_MAY_WRITE_A_MINUTE, PUSHES_A_SEAT_MAY_MAKE_A_MINUTE, GISTS_READ_A_MINUTE, LIST_FRESH_FOR_MS, SEATS_FRESH_FOR_MS, SEATS_RECHECK_MS, agentEmail, branchFor } from "../door/index.ts";
-import { SHARES } from "../job.ts";
+import { SHARES, SITE_FOLDER, SITE_FRONT_PAGE } from "../job.ts";
+import { REFUSAL_SHARE_PERCENT, REVIEW_SHARE_PERCENT } from "../jobsV3.ts";
+import { SITE_LIMITS } from "../hosting/index.ts";
 import { roleNumber } from "../jobs.ts";
 import { creditEmail, SIGNED } from "../credit.ts";
 import { seatAllowance, SESSION_KEY_PLUGIN } from "../mandate.ts";
@@ -26,7 +28,7 @@ import { registryTag } from "../verdict.ts";
 const GUIDE = await readFile(new URL("../../public/llms.txt", import.meta.url), "utf8");
 /** the contract that prepares jobs, as it was compiled: what an agent's calls actually meet */
 const CONTRACT_ABI: readonly { readonly type: string; readonly name?: string; readonly inputs: readonly { readonly type: string }[] }[] =
-  JSON.parse(await readFile(new URL("../../contracts/out/PodJobsV2.sol/PodJobsV2.json", import.meta.url), "utf8")).abi;
+  JSON.parse(await readFile(new URL("../../contracts/out/PodJobsV3.sol/PodJobsV3.json", import.meta.url), "utf8")).abi;
 
 /** The worked example the guide uses throughout */
 const EXAMPLE = {
@@ -127,6 +129,12 @@ describe("the guide for outside agents", () => {
     });
     // and both are calls the guide teaches, so an agent is never allowed something it was not told about
     for (const signature of allowance.calls[0]?.functions ?? []) expect(GUIDE).toContain(`${signature.slice(0, signature.indexOf("("))}(`);
+
+    // where a builder puts its own work forward, a wallet has to allow that too, or its builder could never deliver
+    const withABuildersCall = seatAllowance(EXAMPLE.jobs, true);
+    expect(withABuildersCall.calls[0]?.functions).toEqual(["takeSeat(uint256,uint8,address)", "approve(uint256,uint8,bytes32)", "putForward(uint256,bytes32)"]);
+    for (const signature of withABuildersCall.calls[0]?.functions ?? []) expect(GUIDE).toContain(`${signature.slice(0, signature.indexOf("("))}(`);
+    expect(GUIDE).toContain("`seatAllowance`");
   });
 
   test("the plugin it tells an agent its grant is read from is the one the doors ask", () => {
@@ -139,7 +147,17 @@ describe("the guide for outside agents", () => {
     }
   });
 
-  test("every contract call it names is one the contract that prepares jobs has, with the same arguments", () => {
+  test("what it says a refusal leaves a pod, and what a website may be, are the contract's and the host's own limits", () => {
+    expect(GUIDE).toContain(`each seat that stood behind it keep ${REFUSAL_SHARE_PERCENT}% of their pay`);
+    // and how long a review is: a quarter of the job's window, as the contract has it and as the pages say it
+    expect(REVIEW_SHARE_PERCENT).toBe(25);
+    expect(GUIDE).toContain("a quarter of the job's window later");
+    expect(GUIDE).toContain(`at most ${SITE_LIMITS.files} files, ${SITE_LIMITS.bytesEach / 1024 / 1024} MB each and ${SITE_LIMITS.bytesInAll / 1024 / 1024} MB in all`);
+    expect(GUIDE).toContain(`a folder named \`${SITE_FOLDER}\``);
+    expect(GUIDE).toContain(`\`${SITE_FRONT_PAGE}\` as its front page`);
+  });
+
+  test("every contract call it names is one the contract jobs are posted to has, with the same arguments", () => {
     const calls = [...GUIDE.matchAll(/`([a-zA-Z]+)\(([^`)]*)\)`/g)].map(([, name, args]) => ({ name, args: args ?? "" }));
     const known = new Map(CONTRACT_ABI.filter((item) => item.type === "function").map((item) => [item.name, item.inputs.map((input) => input.type)]));
     for (const { name, args } of calls) {
@@ -150,6 +168,8 @@ describe("the guide for outside agents", () => {
       const spelled = args.split(",").map((one) => one.trim().split(" ")[0]).filter((type) => type && /^(uint|address|bytes|bool|string)/.test(type));
       if (spelled.length > 0) expect(spelled).toEqual(types ?? []);
     }
-    expect(calls.map((call) => call.name)).toEqual(expect.arrayContaining(["takeSeat", "approve", "close", "withdraw", "owed", "locked"]));
+    expect(calls.map((call) => call.name)).toEqual(expect.arrayContaining([
+      "takeSeat", "approve", "close", "withdraw", "owed", "locked", "report", "accept", "refuse", "settleUnanswered", "posters", "agents",
+    ]));
   });
 });

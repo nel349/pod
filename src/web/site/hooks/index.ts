@@ -8,3 +8,4 @@ export * from "./useYours.ts";
 export * from "./usePageData.ts";
 export * from "./useLinksInPlace.ts";
 export * from "./useAgentKey.ts";
+export * from "./useAnswer.ts";

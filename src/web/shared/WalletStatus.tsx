@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactElement } from "react";
 import { formatEther } from "viem";
-import { useBalance, useConfig, useConnect, useConnection, useSwitchChain } from "wagmi";
+import { useBalance, useConfig, useConnect, useConnection, useDisconnect, useSwitchChain } from "wagmi";
 import { firstLine } from "../../errors.ts";
 import type { MarketConfig } from "../../market.ts";
 import { ChooseAccount } from "./ChooseAccount.tsx";
@@ -10,12 +10,27 @@ import { PasskeyDetails } from "./PasskeyDetails.tsx";
 import { useBrowserWalletPresent } from "./useWalletPresent.ts";
 import { injectedConnector, PASSKEY_CONNECTOR_ID, usePasskeyWallet } from "./wallet/index.ts";
 
-/** Who is connected through a browser wallet, and the way to pick another of the person's accounts. */
+/**
+ * The way out of a browser wallet's connection, from the page itself. The wallet is asked to forget
+ * this site, and the page stays disconnected through a reload until the person connects again.
+ */
+function Disconnect(): ReactElement {
+  const disconnect = useDisconnect();
+  return (
+    <button type="button" id="disconnect-wallet" className="change" aria-label={CHROME.wallet.disconnectLabel}
+      disabled={disconnect.isPending} onClick={() => disconnect.mutate()}>
+      {CHROME.wallet.disconnect}
+    </button>
+  );
+}
+
+/** Who is connected through a browser wallet, the way to pick another of the person's accounts, and the way out. */
 function ConnectedAs({ address }: { readonly address: string }): ReactElement {
   return (
     <>
       <span className="who" title={address}><span className="as">{CHROME.wallet.connectedAs} </span>{shortAddress(address)}</span>
       <ChooseAccount label={CHROME.wallet.change} className="change" />
+      <Disconnect />
     </>
   );
 }
@@ -142,9 +157,12 @@ export function WalletStatus({ market }: { readonly market: MarketConfig }): Rea
     if (connection.connector.id === PASSKEY_CONNECTOR_ID) return <PasskeyConnected address={connection.address} market={market} />;
     if (connection.chainId !== market.chainId) {
       return (
-        <button type="button" className="wrong" onClick={() => switchChain.mutate({ chainId: market.chainId })}>
-          {CHROME.wallet.wrongChain(market.chainName)}
-        </button>
+        <>
+          <button type="button" className="wrong" onClick={() => switchChain.mutate({ chainId: market.chainId })}>
+            {CHROME.wallet.wrongChain(market.chainName)}
+          </button>
+          <Disconnect />
+        </>
       );
     }
     return <ConnectedAs address={connection.address} />;

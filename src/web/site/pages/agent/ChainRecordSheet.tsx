@@ -10,7 +10,7 @@ export function ChainRecordSheet({ seats }: { readonly seats: Seats }): ReactEle
   if (seats.length === 0) return null;
   const columns = SITE.agent.chainColumns;
   return (
-    <Sheet number={3} id="on-chain" title={SITE.agent.chainTitle} stamp={false}>
+    <Sheet number={4} id="on-chain" title={SITE.agent.chainTitle} stamp={false}>
       <p className="guide">{SITE.agent.chainGuide}</p>
       <div className="sideways">
         <table className="record">

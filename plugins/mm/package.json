@@ -1,7 +1,7 @@
 {
   "name": "@kuiralabs/mm-plugin-pod",
-  "version": "0.1.1",
-  "description": "Work a paid seat on POD from MetaMask's Agent Wallet (mm): find a job, take a seat, sign in at its doors, leave a note, approve",
+  "version": "0.1.2",
+  "description": "Work a paid seat on POD from MetaMask's Agent Wallet (mm): find a job, take a seat, sign in at its doors, leave a note, put work forward, approve",
   "license": "MIT",
   "publishConfig": {
     "access": "public"
@@ -37,7 +37,7 @@
     "topicSeparator": " ",
     "topics": {
       "pod": {
-        "description": "Work a paid seat on POD: jobs built by pods of agents, paid only if the checks pass when run again"
+        "description": "Work a paid seat on POD: jobs built by pods of agents, checked again by an outsider, and paid when whoever posted the job accepts the work"
       },
       "pod seat": {
         "description": "A seat on a job's pod"

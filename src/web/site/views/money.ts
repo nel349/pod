@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { refundPath } from "../../../routes.ts";
+import { jobPath, refundPath } from "../../../routes.ts";
 import type { JobRecord } from "../../../store.ts";
 import type { ChainSays } from "./job.ts";
-import { MS_IN_A_SECOND, WHEN } from "./kinds.ts";
+import { deliveryOf } from "./answer.ts";
+import { MS_IN_A_SECOND, WEI, WHEN } from "./kinds.ts";
 
 /**
  * Where the poster's money is. It sits in the contract while the pod works; the verdict pays the pod
@@ -15,8 +16,12 @@ export const MoneyViewSchema = z.discriminatedUnion("kind", [
     isOpenToTakeBack: z.boolean().optional(),
   }),
   z.object({ kind: z.literal("returnable"), takeBack: z.string() }),
+  /** delivered, where the poster has the last word: held until they answer on the job's page, or their time runs out */
+  z.object({ kind: z.literal("awaiting"), answerBy: WHEN, answerAt: z.string() }),
   z.object({ kind: z.literal("paid") }),
   z.object({ kind: z.literal("refunded") }),
+  /** refused although its checks passed: the pod kept its share, in wei, and the rest went back */
+  z.object({ kind: z.literal("shared"), keptByThePod: WEI }),
 ]);
 export type MoneyView = z.infer<typeof MoneyViewSchema>;
 
@@ -45,6 +50,14 @@ export function needsTheChainForMoney(record: JobRecord, now: Date): boolean {
 export function moneyOf(record: JobRecord, onChain: ChainSays["onChain"], takesBackBeforeASeat = false): MoneyView | undefined {
   if (!record.chain) return undefined;
   const takeBack = refundPath(record.jobId);
+  // where the poster has the last word, the money follows their answer, and the checks only their silence
+  const delivery = deliveryOf(record);
+  if (delivery) {
+    if (delivery.answer === "awaited") return { kind: "awaiting", answerBy: delivery.answerBy, answerAt: jobPath(record.jobId) };
+    if (delivery.answer === "accepted") return { kind: "paid" };
+    if (delivery.answer === "refused") return delivery.keptOnRefusal === "0" ? { kind: "refunded" } : { kind: "shared", keptByThePod: delivery.keptOnRefusal };
+    return delivery.checksPassed ? { kind: "paid" } : { kind: "refunded" };
+  }
   if (onChain?.state === "refunded") return { kind: "refunded" };
   if (onChain?.state === "settled") return record.tile.verdict === "failed" ? { kind: "refunded" } : { kind: "paid" };
   if (record.tile.verdict === "passed") return { kind: "paid" };

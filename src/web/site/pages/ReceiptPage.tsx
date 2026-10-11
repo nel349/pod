@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { Sheet } from "../../shared/index.ts";
 import { PageBill, Poster, When } from "../components/index.ts";
-import { SITE, STAMP } from "../copy.ts";
+import { SITE, stampAfter } from "../copy.ts";
 import type { ReceiptView } from "../views/index.ts";
 
 const FACTS = SITE.receipt.facts;
@@ -17,10 +17,10 @@ export function ReceiptPage({ receipt }: { readonly receipt: ReceiptView }): Rea
   );
   return (
     <Poster bill={bill}>
-      <Sheet number={1} id="ran" title={SITE.receipt.ranTitle} stamp={STAMP[receipt.verdict]}>
+      <Sheet number={1} id="ran" title={SITE.receipt.ranTitle} stamp={stampAfter(receipt.verdict, receipt.answer)}>
         <dl className="facts">
           <dt>{FACTS.verdict}</dt><dd>{receipt.verdict}</dd>
-          <dt>{FACTS.commit}</dt><dd><code>{receipt.commit}</code> in <a href={receipt.repository}>{receipt.repository}</a></dd>
+          <dt>{FACTS.commit}</dt><dd><code>{receipt.commit}</code> in {receipt.isCodePrivate ? SITE.receipt.codeIsPrivate : <a href={receipt.repository}>{receipt.repository}</a>}</dd>
           <dt>{FACTS.tree}</dt><dd><code>{receipt.tree}</code></dd>
           <dt>{FACTS.image}</dt><dd><code>{receipt.image}</code></dd>
           <dt>{FACTS.start}</dt><dd><code>{receipt.start}</code></dd>

@@ -18,11 +18,26 @@ export const ClaimableSchema = z.object({
   tokenId: z.string(),
   holder: AddressSchema,
   repository: z.url(),
+  /** where the work is live, when it is a website */
+  live: z.url().optional(),
   invited: InvitationSchema.optional(),
 });
 
-export const ClaimedSchema = z.object({ invited: InvitationSchema });
+/** The link that takes a live website into the holder's own account at its host. */
+export const SiteToTakeSchema = z.object({ host: z.string(), takeIt: z.url() });
+export type SiteToTake = z.infer<typeof SiteToTakeSchema>;
+
+export const ClaimedSchema = z.object({ invited: InvitationSchema, site: SiteToTakeSchema.optional() });
 export const WhySchema = z.object({ why: z.string() });
+/** A claim GitHub would not take, from the title's own holder: why, and their live website all the same */
+export const NotClaimedSchema = z.object({ why: z.string(), site: SiteToTakeSchema.optional() });
+
+/** A claim that stopped, which may still have handed over the live site: the holder's signature was good. */
+export class ClaimStopped extends Error {
+  constructor(why: string, readonly site: SiteToTake | undefined) {
+    super(why);
+  }
+}
 /** Why there is nothing to claim, and the job's own page when there is a job */
 export const NotClaimableSchema = z.object({ why: z.string(), job: z.string().optional() });
 
@@ -38,9 +53,9 @@ export function jobIdFrom(pathname: string): string {
 export type ClaimStatus =
   | { readonly kind: "idle" }
   | { readonly kind: "working"; readonly step: ClaimStep }
-  | { readonly kind: "sent"; readonly invited: Invitation }
+  | { readonly kind: "sent"; readonly invited: Invitation; readonly site?: SiteToTake }
   /** the step it stopped at, and why */
-  | { readonly kind: "stopped"; readonly step: ClaimStep; readonly why: string };
+  | { readonly kind: "stopped"; readonly step: ClaimStep; readonly why: string; readonly site?: SiteToTake };
 
 export type ClaimStep = "wallet" | "sign" | "github";
 
@@ -99,5 +114,11 @@ export const COPY = {
   },
   sent: (invited: Invitation, repository: string) =>
     `GitHub is handing ${shortRepository(repository)} to ${invited.account}. If ${invited.account} does not already own where it lives, GitHub emails an invitation, which has to be accepted within a day. Until it is, the repository stays where it is.`,
+  /** the live website, which goes with the title as the repository does */
+  site: {
+    live: "It is live at",
+    takeIt: (host: string) => `Take the live site into your own ${host} account`,
+    takeItSays: (host: string) => `The site stays where it is, at the same address, and becomes yours to change or move. Whoever opens this link takes it, so keep it to yourself. No ${host} account yet? Opening it offers to make one.`,
+  },
   before: (invited: Invitation) => `An invitation was sent to ${invited.account} on ${invited.at.slice(0, 10)}. Claim again if it lapsed.`,
 } as const;

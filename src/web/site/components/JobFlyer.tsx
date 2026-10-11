@@ -13,11 +13,11 @@ import { Seal } from "./Seal.tsx";
 export function JobFlyer({ tile, coin }: { readonly tile: TileView; readonly coin: string }): ReactElement {
   const facts = [
     inCoins(tile.price, coin),
-    tile.mode,
+    SITE.tile.timeToBuild[tile.mode],
     ...(tile.seconds ? [SITE.tile.ranIn(lengthOf(tile.seconds))] : []),
   ];
   return (
-    <article className={`flyer ${tile.verdict}`}>
+    <article className={`flyer ${tile.verdict}${tile.answer ? ` answer-${tile.answer}` : ""}`}>
       <p className="flyer-stamp" aria-hidden="true">{stampOf(tile)}</p>
       <Seal tile={tile} />
       <div className="flyer-said">
@@ -36,7 +36,8 @@ export function JobFlyer({ tile, coin }: { readonly tile: TileView; readonly coi
           {tile.commit && <> · {SITE.tile.commit} <code>{tile.commit.slice(0, 7)}</code></>}
         </p>
         <p className="flyer-links">
-          {tile.receipt ? <a href={tile.receipt}>{SITE.tile.receipt}</a> : <span className="none">{SITE.tile.noReceipt}</span>}
+          {tile.live && <a className="open-it" href={tile.live} rel="noopener noreferrer">{SITE.tile.open}</a>}
+          {tile.receipt ? <a href={tile.receipt}>{SITE.tile.receipt}</a> : <span className="none">{tile.verdict === "withdrawn" ? SITE.tile.neverTested : SITE.tile.noReceipt}</span>}
         </p>
       </div>
     </article>

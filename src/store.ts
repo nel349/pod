@@ -16,7 +16,7 @@ import type { Invitation } from "./claims.ts";
 import type { Tile } from "./gallery.ts";
 import type { Approval } from "./jobpage.ts";
 import type { SignedReceipt } from "./receipt.ts";
-import type { Spec } from "./job.ts";
+import type { Role, Spec } from "./job.ts";
 import { NoteSchema, type Note } from "./note.ts";
 import { isSafeName } from "./routes.ts";
 import { specFromTheWire, SpecOnTheWireSchema, specToTheWire } from "./specWire.ts";
@@ -45,6 +45,8 @@ export interface CheckSaid {
   readonly hidden: boolean;
   /** absent on a job nobody has graded yet: a check with no outcome is not a check that passed */
   readonly exitCode?: number;
+  /** the last line a check that failed printed, which is its own word for why: kept beside the receipt, not in it */
+  readonly said?: string;
 }
 
 /**
@@ -63,6 +65,62 @@ export interface OnChain {
   readonly moneyMovedAt?: string;
   readonly minted?: string;
   readonly tokenId?: string;
+  /**
+   * On the contract where the poster has the last word: the validator's report of what the checks
+   * found, which moves no money and starts the poster's time to answer. The transaction, when the
+   * worker that sent it is the one that wrote this down.
+   */
+  readonly reported?: string;
+  /** until when the poster may refuse, after which anybody may settle the job as the checks found */
+  readonly answerBy?: string;
+  /** how the job ended once it was delivered, as the contract says */
+  readonly answer?: Answered;
+  /** the job is on a contract where its poster has the last word: its code is the pod's until they accept */
+  readonly lastWord?: true;
+}
+
+/** A website put live at an address of its own when its pod delivered it. */
+export interface Live {
+  /** the host it is on, by name */
+  readonly host: string;
+  /** the host's own name for the site */
+  readonly siteId: string;
+  readonly url: string;
+  readonly at: string;
+  /** when it was taken down, which is what happens to a delivery its pod was not paid for */
+  readonly removedAt?: string;
+}
+
+/** How a delivered job ended: what its poster said, or that they said nothing in time and the checks decided. */
+export interface Answered {
+  readonly how: "accepted" | "refused" | "unanswered";
+  /** when the worker saw the chain say so */
+  readonly at: string;
+  /** the transaction that ended it, when it was found */
+  readonly hash?: string;
+  /** what the pod kept of the price, in the chain's smallest unit, when the poster refused work whose checks passed */
+  readonly keptByThePod?: string;
+}
+
+/**
+ * Whether anybody may fetch a job's code from this server. Where the poster has the last word, the
+ * code is the pod's until the pod is paid for it: a poster who could clone it first could refuse it and
+ * keep it. Everywhere else it is public from the first push, as it always was.
+ */
+export function isCodePublic(record: JobRecord): boolean {
+  if (!record.chain?.lastWord) return true;
+  return record.chain.answer !== undefined && wasThePodPaid(record);
+}
+
+/**
+ * Whether a job's pod was paid in full: by the verdict on the contracts that settle on it, and on the
+ * contract where the poster has the last word, by their yes, or by the checks passing when they said
+ * nothing. A pod paid in full is what a title is minted for and the work published on main for.
+ */
+export function wasThePodPaid(record: JobRecord): boolean {
+  const answer = record.chain?.answer;
+  if (answer) return answer.how === "accepted" || (answer.how === "unanswered" && record.signed?.receipt.verdict === "passed");
+  return record.signed?.receipt.verdict === "passed";
 }
 
 /** One graded job, as the runner leaves it behind. */
@@ -88,6 +146,10 @@ export interface JobRecord {
   readonly invited?: Invitation;
   /** why the worker has not graded it although the pod says it is done, such as the approved commit never having been pushed */
   readonly waitingBecause?: string;
+  /** what its poster was told by mail, and when: each message is sent once */
+  readonly told?: Told;
+  /** the work its builder has put forward, while the other seats may still sign on: gone once it is graded or let go */
+  readonly review?: UnderReview;
   /** the verdicts recorded in ERC-8004 for this job's seats: one per seat, and which request it answered */
   readonly recorded?: readonly RecordedVerdict[];
   /** the identities this job's seats said are theirs, each waiting for the job to settle before it is written to */
@@ -104,6 +166,10 @@ export interface JobRecord {
   readonly tries?: Tries;
   /** why the job ended with no verdict moving its money, such as its window closing with the pod not done */
   readonly endedBecause?: string;
+  /** where the delivered website is live, when the job is one and this server has somewhere to put it */
+  readonly live?: Live;
+  /** why a delivered website could not be put live, when the work itself is why: said once, not tried again */
+  readonly notLiveBecause?: string;
 }
 
 /** The worker's tries at grading one job. It lets go of a job once, whatever the reason, and never twice. */
@@ -160,7 +226,9 @@ const HISTORY = "history.bundle";
  * Only once there is a verdict and either the money has moved on the chain or the job's window has
  * closed. Publishing sooner let a pod read the exam, or even just see "failed", between the grading
  * and the settlement, and approve another commit so the settlement was skipped and the new commit
- * graded with the exam in hand. A job with no verdict, withdrawn or still running, publishes nothing,
+ * graded with the exam in hand. On the contract where the poster has the last word, the report of the
+ * verdict does what the settlement did: once it is on the chain nothing else can be graded, and the
+ * poster needs the evidence to decide. A job with no verdict, withdrawn or still running, publishes nothing,
  * since nothing was judged. Jobs from before the chain was wired keep the rule they were published
  * under: public with their verdict.
  */
@@ -170,6 +238,8 @@ export function isPublished(record: JobRecord, now: Date = new Date()): boolean 
   if (!record.chain) return true;
   // the money has moved: the settlement, or the title that only a settlement leads to
   if (record.chain.settled || record.chain.moneyMovedAt || record.chain.minted || record.chain.tokenId) return true;
+  // delivered: reported to the contract, which takes one report for a job and no more
+  if (record.chain.reported || record.chain.answerBy) return true;
   const endsAt = record.brief?.endsAt;
   return endsAt !== undefined && new Date(endsAt) <= now;
 }
@@ -189,6 +259,23 @@ export function publicRecord(record: JobRecord, now: Date = new Date()): JobReco
     tile: { ...tile, verdict: verdict === "not-reproducible" ? verdict : "graded" },
     checksSaid: record.checksSaid.filter((check) => !check.hidden).map(({ says, hidden }) => ({ says, hidden })),
   };
+}
+
+/** The messages sent to a job's poster at the address they left, each with when. */
+export interface Told {
+  readonly delivered?: string;
+  readonly lastDay?: string;
+}
+
+/** Work a builder put forward, as the contract has it while its review runs. */
+export interface UnderReview {
+  readonly commit: string;
+  /** when the builder put it forward, where that could be read back */
+  readonly putForwardAt?: string;
+  /** when the review runs out and the work goes to its checks, whoever stands behind it by then */
+  readonly reviewBy: string;
+  /** the seats that stand behind it so far, its builder among them */
+  readonly behind: readonly Role[];
 }
 
 /**

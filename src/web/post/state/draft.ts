@@ -43,6 +43,7 @@ const DraftSchema = z.object({
     price: z.string().optional(),
     mode: z.enum(MODE_NAMES).optional(),
     name: z.string().optional(),
+    tell: z.string().optional(),
   }),
   written: z.object({
     key: z.string(),

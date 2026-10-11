@@ -9,6 +9,7 @@ import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/an
 import { walletInThePage } from "./support/wallet.ts";
 import { COAT_IDEA, DRY, GOOD_REPLY, WET, replying, writerWith } from "./support/coat.ts";
 import { serve, type Market } from "../server.ts";
+import type { Model } from "../broker.ts";
 import { JobStore } from "../store.ts";
 import { readerFor } from "../posting.ts";
 import { readJob } from "../jobs.ts";
@@ -16,12 +17,13 @@ import { CheckWriting, ProvenChecks } from "../checkwriting/index.ts";
 import { checkFilePath, checksPath, jobApiPath, jobPath, ROUTES } from "../routes.ts";
 import { COPY, draftKey } from "../web/post/state/index.ts";
 import { dockerAvailable } from "./support/tools.ts";
+import { SITE } from "../web/site/copy.ts";
 
 /**
  * A stranger posts a job, from a browser, with their own wallet, without writing a line of code.
  *
  * Everything here is the real thing: the page, the check writer's program in its box, every check
- * tried against a working version, a near miss and nothing at all, the seal, the contract call, the
+ * tried against nothing built, the seal, the contract call, the
  * payment, the signature, the server's checks, and the chain. Two things stand in: the model behind
  * the writer answers from a script, and the wallet is the standard browser interface backed by a
  * chain whose accounts sign for themselves. What is missing is a model's judgement and a person
@@ -61,13 +63,23 @@ beforeAll(async () => {
 let port = 0;
 let market: Market;
 
+/** A writer's model that takes its time, as a real one does: long enough that a test can act while the writing is under way. */
+const SLOW_MODEL_MS = 8_000;
+function aSlowModel(): Model {
+  const { model } = replying(GOOD_REPLY);
+  return async (prompt, signal) => {
+    await Bun.sleep(SLOW_MODEL_MS);
+    return model(prompt, signal);
+  };
+}
+
 /** The market this server runs, with a check writer of its own that remembers only what it wrote itself. */
-function aMarket(): Market {
+function aMarket(model: Model = replying(GOOD_REPLY).model): Market {
   const proven = new ProvenChecks(provenFolder);
   return {
     page: { chainId: 31337, chainName: "a local chain", rpc: anvil.rpc, jobs, explorer: "http://explorer.invalid", coin: "ETH" },
     chain: readerFor({ jobs, read: (id) => readJob({ address: jobs, publicClient: anvil.publicClient }, id), now: async () => (await anvil.publicClient.getBlock()).timestamp }),
-    writing: new CheckWriting({ writer: writerWith(replying(GOOD_REPLY).model), proven }),
+    writing: new CheckWriting({ writer: writerWith(model), proven }),
     proven,
   };
 }
@@ -127,7 +139,7 @@ async function onChainIdOf(name: string): Promise<bigint> {
 }
 
 describe.skipIf(!available)("a stranger posts a job from a browser", () => {
-  test("the page asks for sentences, never for code, and shows every check's trials in plain words", async () => {
+  test("the page asks for sentences, never for code, and says of each line how it is checked and that it is ready", async () => {
     const page = await openThePage(false);
     await describeTheJob(page, "words-not-code");
     await writeTheChecks(page);
@@ -135,9 +147,10 @@ describe.skipIf(!available)("a stranger posts a job from a browser", () => {
     const shown = await page.evaluate<string>(`document.querySelector("#written").innerText`);
     expect(shown).toContain(WET);
     expect(shown).toContain("Asks while it is raining");
-    expect(shown).toContain("Passes a version that works");
-    expect(shown).toContain("Fails a near miss: it never says take a coat");
-    expect(shown).toContain("Fails when nothing is built");
+    expect(shown).toContain(COPY.checks.ready);
+    // nothing of how a check was tried is put in front of the poster
+    expect(shown).not.toContain("near miss");
+    expect(shown).not.toContain("nothing is built");
     // the code is there for whoever opens it, and not in anybody's way
     expect(await page.evaluate<boolean>(`[...document.querySelectorAll("#written details.source")].every((d) => !d.open)`)).toBe(true);
     // the words a poster would not understand appear nowhere on the page they read
@@ -234,7 +247,7 @@ describe.skipIf(!available)("a stranger posts a job from a browser", () => {
     const text = (await page.text()).toLowerCase();
     expect(text).toContain(WET.toLowerCase());
     expect(text).not.toContain(DRY.toLowerCase());
-    expect(text).toContain("1 more check is sealed until there is a verdict");
+    expect(text).toContain(SITE.job.sealedCount(1).toLowerCase());
     // nor anywhere in what the server sent, the data the page is brought to life with included
     const source = await (await fetch(base + jobPath("the-exam-stays-sealed"))).text();
     expect(source).not.toContain(DRY);
@@ -354,6 +367,14 @@ describe.skipIf(!available)("a stranger posts a job from a browser", () => {
   }, 300_000);
 
   test("a server that restarts while writing is noticed: the poster is told to write again, and the page stops asking", async () => {
+    // a writer whose model takes a few seconds, as a real one does: with one that answers at once the
+    // writing can be over before the server is, and there is no restart in the middle of anything
+    server?.stop();
+    const quick = market;
+    market = aMarket(aSlowModel());
+    server = serve(store, port, { market });
+    await quick.writing.whenIdle();
+
     const page = await openThePage(false);
     await describeTheJob(page, "written-through-a-restart");
     await page.click("#write");

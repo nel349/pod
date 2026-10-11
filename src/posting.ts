@@ -125,8 +125,8 @@ export async function acceptPosting(store: JobStore, chain: ChainReader, asked: 
   const files = await filesMatchSeal(spec, posting.files);
   if (!files.ok) return refuse(409, files.why ?? "the files are not the files that were sealed");
 
-  // and every one of them passed its three trials here: a check nobody could pass, or one that
-  // passes anything, is refused even if the poster wrote it by hand and sent it without the page
+  // and every one of them was written and tried here: a check that passes with nothing built is
+  // refused even if the poster wrote it by hand and sent it without the page
   for (const check of spec.checks) {
     if (!check.digest || !(await proven.has(check.digest))) {
       return refuse(409, `"${check.says}" was never tried here: write the checks on the posting page, and post the ones that passed`);

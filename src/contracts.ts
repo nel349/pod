@@ -3,14 +3,16 @@
  * answers anybody: settings that cannot work are refused with a sentence, never found at the first job.
  *
  * Before the switch-over the jobs contract is the first one and nothing is prepared. After it, the jobs
- * contract prepares jobs and the old setting names the first one. Either way round, a contract named
- * in the wrong place, or a writer that is the validator, would only show up as reverts or, worse, as
- * the validator's key living on the web server.
+ * contract prepares jobs and the old setting names the first one. Once the contract on which the
+ * poster has the last word replaces the one that settled on the verdict alone, that one is named as
+ * the second. Whichever way round, a contract named in the wrong place, or a writer that is the
+ * validator, would only show up as reverts or, worse, as the validator's key living on the web server.
  */
 import { isAddressEqual, type Address, type PublicClient } from "viem";
 import { readValidator } from "./jobs.ts";
 import { readWriter } from "./jobsV2.ts";
-import { OLD_JOBS_SETTING, WRITER_KEY_SETTING } from "./live.ts";
+import { hasTheLastWord } from "./jobsV3.ts";
+import { OLD_JOBS_SETTING, SECOND_JOBS_SETTING, WRITER_KEY_SETTING } from "./live.ts";
 
 /** The setting naming the contract new jobs are posted to */
 export const JOBS_ADDRESS_SETTING = "POD_JOBS_ADDRESS";
@@ -27,10 +29,15 @@ export async function confirmTheContracts(input: {
   readonly publicClient: PublicClient;
   readonly jobs: Address;
   readonly earlier?: Address;
+  /** the contract that prepared jobs before `jobs`, when `jobs` is the one on which the poster has the last word */
+  readonly second?: Address;
   /** the writer's address, on a server that writes checks */
   readonly writer?: Address;
 }): Promise<void> {
-  const { publicClient, jobs, earlier, writer } = input;
+  const { publicClient, jobs, earlier, second, writer } = input;
+  if (second && !earlier) {
+    throw new Error(`${SECOND_JOBS_SETTING} is set and ${OLD_JOBS_SETTING} is not: the second contract came after the first, which has to be named too`);
+  }
   if (earlier && isAddressEqual(earlier, jobs)) {
     throw new Error(`${OLD_JOBS_SETTING} and ${JOBS_ADDRESS_SETTING} both name ${jobs}: the old setting is the contract jobs were posted to before this one`);
   }
@@ -49,5 +56,19 @@ export async function confirmTheContracts(input: {
   }
   if (writer && !isAddressEqual(answersTo, writer)) {
     throw new Error(`${WRITER_KEY_SETTING} is the key for ${writer}, but the contract at ${jobs} takes written checks only from ${answersTo}`);
+  }
+  if (!second) return;
+  if (isAddressEqual(second, jobs) || (earlier && isAddressEqual(second, earlier))) {
+    throw new Error(`${SECOND_JOBS_SETTING} names ${second}, which another setting names too: it is the contract that prepared jobs between the first and the one they are posted to now`);
+  }
+  if (!(await writerOf(publicClient, second, SECOND_JOBS_SETTING))) {
+    throw new Error(`${SECOND_JOBS_SETTING} names ${second}, which does not prepare jobs: it has to be the contract that did before ${jobs}`);
+  }
+  const at = (address: Address): { readonly address: Address; readonly publicClient: PublicClient } => ({ address, publicClient });
+  if (await hasTheLastWord(at(second))) {
+    throw new Error(`${SECOND_JOBS_SETTING} names ${second}, on which the poster has the last word: it has to be the contract that settled on the verdict alone`);
+  }
+  if (!(await hasTheLastWord(at(jobs)))) {
+    throw new Error(`${JOBS_ADDRESS_SETTING} names ${jobs}, which settles on the verdict alone; with ${SECOND_JOBS_SETTING} set it has to be the contract that replaced ${second}`);
   }
 }

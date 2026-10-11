@@ -44,6 +44,13 @@ export function WhereSheet({ claimable, hasWallet, connected, status, onClaim }:
         {status.kind === "sent" && COPY.sent(status.invited, claimable.repository)}
         {status.kind === "idle" && claimable.invited && COPY.before(claimable.invited)}
       </p>
+      {claimable.live && status.kind !== "sent" && <p id="live" className="note">{COPY.site.live} <a href={claimable.live}>{claimable.live}</a>.</p>}
+      {(status.kind === "sent" || status.kind === "stopped") && status.site && (
+        <div id="take-the-site" className="take-the-site">
+          <p><a className="primary" href={status.site.takeIt}>{COPY.site.takeIt(status.site.host)}</a></p>
+          <p className="note">{COPY.site.takeItSays(status.site.host)}</p>
+        </div>
+      )}
       {status.kind !== "idle" && (
         <ol id="progress" className="progress" aria-live="polite">
           {CLAIM_STEPS.map((step) => (

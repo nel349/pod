@@ -16,7 +16,7 @@ export interface Sealed {
 }
 
 /**
- * Only checks that passed all three trials go in; each runs the standard command for its file, and
+ * Only checks that held when they were tried go in; each runs the standard command for its file, and
  * nothing outside may be reached. Whoever builds it decides whether the set was ready.
  */
 export async function sealWritten(input: {

@@ -11,6 +11,12 @@ function You({ holder }: { readonly holder: string }): ReactElement | null {
   return isViewer(holder) ? <> ({SITE.job.you})</> : null;
 }
 
+/** Whose the work becomes on a yes, said to the poster as "you" when the wallet here is theirs. */
+function OnAcceptance({ poster }: { readonly poster: string | undefined }): ReactElement {
+  const isViewer = useIsViewer();
+  return <>{isViewer(poster) ? SITE.job.titleOnAcceptanceYours : SITE.job.titleOnAcceptance}</>;
+}
+
 function Title({ title }: { readonly title: TitleView }): ReactElement {
   const { market } = useSite();
   return (
@@ -42,7 +48,11 @@ export function OwnsSheet({ job }: { readonly job: JobView }): ReactElement | nu
       {job.repository && (
         <p className="lede"><a href={job.repository}>{job.repository.replace(/^https:\/\/github\.com\//, "")}</a> {SITE.job.work}</p>
       )}
-      {job.title ? <Title title={job.title} /> : job.verdict === "passed" && <p>{SITE.job.noTitle}</p>}
+      {job.title
+        ? <Title title={job.title} />
+        : job.delivery?.answer === "awaited"
+          ? <p><InTheBrowser fallback={SITE.job.titleOnAcceptance}><OnAcceptance poster={job.poster} /></InTheBrowser></p>
+          : job.verdict === "passed" && <p>{SITE.job.noTitle}</p>}
       {job.chain && (
         <p className="note">
           {market ? <a href={explorerAddress(market.explorer, job.chain.jobs)}>{SITE.job.onChain(job.chain.jobId)}</a> : SITE.job.onChain(job.chain.jobId)}

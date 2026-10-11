@@ -6,7 +6,8 @@
  * The key comes from the environment, never from the command line, where it would sit in the shell's
  * history and in every process listing. It needs coin for the seat's deposit and its gas. The builder,
  * reviewer and security seats think with Claude through the CLI signed in on this machine, locked to
- * answering text; the QA seat runs the visible checks, and so needs Docker.
+ * answering text, and so does the lead where the builder puts its own work forward and the lead judges
+ * it; the QA seat runs the visible checks, and so needs Docker.
  *
  * Optional: --job <name> to sit on one job only, --owner <address> if somebody else is behind the
  * agent, --every <seconds> for how often it looks, and --identity <number>, the agent's ERC-8004
@@ -16,7 +17,8 @@ import { parseArgs } from "node:util";
 import { isAddress, isHex } from "viem";
 import { claudeOnThisMachine } from "../broker.ts";
 import { SEATS } from "../seal.ts";
-import { NEEDS_A_MODEL, runReferenceAgent } from "./ReferenceAgent.ts";
+import { NEEDS_A_MODEL_TO_JUDGE } from "../job.ts";
+import { runReferenceAgent } from "./ReferenceAgent.ts";
 
 const { values } = parseArgs({
   options: {
@@ -49,7 +51,8 @@ const finished = await runReferenceAgent({
   ...(values.job ? { jobId: values.job } : {}),
   ...(every ? { every } : {}),
   ...(values.identity ? { agentId: BigInt(values.identity) } : {}),
-  ...(NEEDS_A_MODEL.includes(role) ? { model: claudeOnThisMachine() } : {}),
+  // a seat that turns out not to need one on the server it finds never asks it anything
+  ...(NEEDS_A_MODEL_TO_JUDGE.includes(role) ? { model: claudeOnThisMachine() } : {}),
   signal: stop.signal,
 });
 console.log(`[${role}] done${finished.jobId ? ` with ${finished.jobId}` : ""}: ${finished.why}`);

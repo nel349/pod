@@ -9,6 +9,7 @@
  * receipt is missing. A missing source is a sentence, never a placeholder number.
  */
 import { acceptPosting, type ChainReader } from "./posting.ts";
+import type { Records } from "./records.ts";
 import type { CheckWriting, ProvenChecks } from "./checkwriting/index.ts";
 import type { MarketConfig } from "./market.ts";
 import { isAddress, isAddressEqual, type Address } from "viem";
@@ -21,7 +22,7 @@ import { JOBS_FOLDER_SETTING } from "./folders.ts";
 import type { Claims } from "./claims.ts";
 import type { CreditDoor, GitDoor, IdentityDoor, JobList, NoteBoard } from "./door/index.ts";
 import { renderCard } from "./card.ts";
-import { isPublished, JobStore, publicRecord } from "./store.ts";
+import { isCodePublic, isPublished, JobStore, publicRecord } from "./store.ts";
 import { cardPath, checkFilePath, isSafeName, isWallName, jobPath, preparingPath, QUERY, RECEIPT_FILE, ROUTES, WRITINGS, writingPath } from "./routes.ts";
 import type { Owners } from "./owners.ts";
 import { preparingToTheWire, type Preparing } from "./preparing/index.ts";
@@ -60,8 +61,8 @@ export const MOST_A_REQUEST_TO_WRITE_MAY_WEIGH = 32_000;
 export interface Market {
   readonly page: MarketConfig;
   readonly chain: ChainReader;
-  /** the contract jobs were posted to before this one, still read for their money (R12) */
-  readonly earlier?: ChainReader;
+  /** the contracts jobs were posted to before this one, newest first, still read for their money (R12) */
+  readonly earlier?: readonly ChainReader[];
   readonly writing: CheckWriting;
   /** the checks the writer proved, which every posting's checks must be among */
   readonly proven: ProvenChecks;
@@ -93,6 +94,8 @@ export interface Services {
   readonly agents?: AgentFactsReader;
   /** jobs paid for on the contract that prepares them, their checks written before a pod can start */
   readonly preparing?: Preparing;
+  /** how posters' and agents' jobs have ended, where the contract keeps count */
+  readonly records?: Records;
 }
 const BUNDLE = { "content-type": "application/x-git-bundle" } as const;
 
@@ -104,7 +107,7 @@ const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const guide = new URL("../public/llms.txt", import.meta.url);
 const MARKDOWN = { "content-type": "text/markdown; charset=utf-8" } as const;
 
-export async function handle(request: Request, store: JobStore, { site, market, door, notes, identities, jobList, credit, claims, owners, agents, preparing }: Services = {}): Promise<Response> {
+export async function handle(request: Request, store: JobStore, { site, market, door, notes, identities, jobList, credit, claims, owners, agents, preparing, records }: Services = {}): Promise<Response> {
   const { pathname } = new URL(request.url);
   const page = (head: Head, drawn: SitePage, status = 200): Response => {
     const data: SiteData = {
@@ -185,7 +188,7 @@ export async function handle(request: Request, store: JobStore, { site, market, 
     // a job on the contract named, which has to be one answered here; with none named, on the one jobs
     // are posted to now, or, when it has no such number, on the one they were posted to before
     const named = new URL(request.url).searchParams.get(QUERY.jobs);
-    const readers = [market.chain, ...(market.earlier ? [market.earlier] : [])];
+    const readers = [market.chain, ...(market.earlier ?? [])];
     const asked = named === null ? readers : readers.filter((reader) => isAddress(named) && isAddressEqual(named, reader.jobs));
     if (asked.length === 0) return Response.json({ why: `${named} is not a contract this server answers to` }, { status: 400 });
     for (const reader of asked) {
@@ -202,7 +205,7 @@ export async function handle(request: Request, store: JobStore, { site, market, 
     return Response.json(writing, { headers: NO_STORE });
   }
 
-  if (pathname === ROUTES.wall) return page({ title: SITE.wall.title }, await wallPage(store));
+  if (pathname === ROUTES.wall) return page({ title: market?.page.lastWord ? SITE.wall.lastWord.title : SITE.wall.title }, await wallPage(store));
   if (pathname === ROUTES.yours) return page({ title: SITE.yours.title }, { page: "yours" });
 
   if (pathname.startsWith(ROUTES.yoursApi)) {
@@ -213,7 +216,7 @@ export async function handle(request: Request, store: JobStore, { site, market, 
   }
 
   if (pathname.startsWith(ROUTES.jobApi)) {
-    const job = await jobData(store, owners, pathname.slice(ROUTES.jobApi.length), new Date());
+    const job = await jobData(store, owners, pathname.slice(ROUTES.jobApi.length), new Date(), records);
     return job ? Response.json(job, { headers: NO_STORE }) : Response.json({ why: "there is no job at that address" }, { status: 404 });
   }
 
@@ -239,7 +242,10 @@ export async function handle(request: Request, store: JobStore, { site, market, 
     return new Response(`${(await store.tiles()).length} jobs\n`, { headers: TEXT });
   }
 
-  if (pathname === ROUTES.agents) return page({ title: SITE.agents.title, description: SITE.agents.stand }, { page: "agents" });
+  if (pathname === ROUTES.agents) {
+    const rule = market?.page.lastWord;
+    return page({ title: SITE.agents.title, description: rule ? SITE.agents.lastWord.stand(rule) : SITE.agents.stand }, { page: "agents" });
+  }
 
   // posting, taking money back and claiming are drawn by the browser, from the wallet and what it keeps
   const app = appPageAt(pathname);
@@ -247,7 +253,7 @@ export async function handle(request: Request, store: JobStore, { site, market, 
 
   if (pathname.startsWith(ROUTES.job)) {
     const jobId = pathname.slice(ROUTES.job.length);
-    const job = await jobData(store, owners, jobId, new Date());
+    const job = await jobData(store, owners, jobId, new Date(), records);
     if (!job) return missing(`No job called ${jobId}`);
     return page({
       title: job.idea,
@@ -283,6 +289,7 @@ export async function handle(request: Request, store: JobStore, { site, market, 
     const jobId = pathname.slice(ROUTES.bundle.length);
     const record = await store.read(jobId);
     if (!record) return missing(`no job called ${jobId}`);
+    if (!isCodePublic(record)) return missing(`Job ${jobId}'s code is its pod's until whoever posted the job accepts it`);
     const file = await store.bundle(jobId);
     if (!file) return missing(`job ${jobId} has no history to hand over`);
     return new Response(file, { headers: BUNDLE });
@@ -308,7 +315,7 @@ export async function handle(request: Request, store: JobStore, { site, market, 
   if (pathname.startsWith(ROUTES.agent)) {
     const agent = pathname.slice(ROUTES.agent.length);
     if (!isAddress(agent, { strict: false })) return missing(`${agent} is not an address`);
-    return page({ title: SITE.agent.title(agent) }, await agentPage(store, agent, agents));
+    return page({ title: SITE.agent.title(agent) }, await agentPage(store, agent, agents, records));
   }
 
   return missing(`Nothing at ${pathname}`);

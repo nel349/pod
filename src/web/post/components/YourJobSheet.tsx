@@ -33,17 +33,19 @@ export interface YourJobActions {
 }
 
 /** An approved job, as the chain says it stands since, and where to watch it. */
-function Approved({ job, wallPage }: { readonly job: JobV2; readonly wallPage: string | undefined }): ReactElement {
+function Approved({ job, wallPage, hasLastWord }: { readonly job: JobV2; readonly wallPage: string | undefined; readonly hasLastWord: boolean }): ReactElement {
   const says = job.state === "settled" ? COPY.prepared.approved.settled
+    : job.state === "delivered" ? COPY.prepared.approved.delivered
     : job.state === "working" ? COPY.prepared.approved.working
-    : COPY.prepared.approved.open(whenHere(new Date(Number(job.endsAt) * MS_IN_A_SECOND).toISOString()));
+    : COPY.prepared.approved.open(whenHere(new Date(Number(job.endsAt) * MS_IN_A_SECOND).toISOString()), hasLastWord);
   return (
-    <p id="standing" className="said-status done">
-      {says}{" "}
-      {wallPage
-        ? <a href={wallPage}>{job.state === "settled" ? COPY.prepared.openFinished : COPY.prepared.openJob}</a>
-        : COPY.prepared.notOnTheWallYet}
-    </p>
+    <>
+      <p id="standing" className="said-status done">{says}{wallPage ? "" : ` ${COPY.prepared.notOnTheWallYet}`}</p>
+      {/* the one place to go next, as the thing to press, once the job's own page exists */}
+      {wallPage && (
+        <p><a id="to-the-job" className="primary" href={wallPage}>{job.state === "settled" ? COPY.prepared.openFinished : job.state === "delivered" ? COPY.prepared.openDelivered : COPY.prepared.openJob}</a></p>
+      )}
+    </>
   );
 }
 
@@ -55,11 +57,14 @@ export function YourJobSheet({ market, job: shown, on }: {
 }): ReactElement {
   const { onChainId, job, standing, viewer, view, action } = shown;
   const mode = view?.mode ?? modeOfWindow(job.window);
+  const idea = view?.asked?.idea ?? view?.writings.at(-1)?.request.idea;
   const isWorking = action.kind === "working";
   return (
     <section className="sheet your-job" id="your-job" aria-labelledby="your-job-title">
       <span className="tape" aria-hidden="true" />
       <h2 id="your-job-title">{COPY.prepared.job(onChainId)}</h2>
+      {/* the job in its poster's own words: a number alone says nothing to the person who wrote it */}
+      {idea && <p id="your-idea" className="lede">{idea}</p>}
       {view && <p className="job-address">/job/{view.name}</p>}
       {mode && <p className="terms-plain">{COPY.prepared.terms(`${formatEther(job.price)} ${market.coin}`, windowInWords(mode))}</p>}
       {/* until it is approved the job is the poster's alone; after, it is public, and nobody is asked for a wallet */}
@@ -76,7 +81,8 @@ export function YourJobSheet({ market, job: shown, on }: {
           <button type="button" id="sign-in" className="primary" disabled={shown.isSigning} onClick={on.sign}>{COPY.prepared.signIn.button}</button>
         </>
       )}
-      {standing === "approved" && <Approved job={job} wallPage={shown.wallPage} />}
+      {standing === "approved" && <Approved job={job} wallPage={shown.wallPage} hasLastWord={market.lastWord !== undefined} />}
+      {standing === "approved" && view?.tells && (job.state === "open" || job.state === "working") && <p id="will-tell" className="note">{COPY.prepared.willTell}</p>}
       {standing === "takenBack" && <p id="standing" className="said-status">{COPY.prepared.takenBack}</p>}
       {standing === "closed" && <p id="standing" className="said-status">{COPY.prepared.closed}</p>}
       {standing === "preparing" && view && <p id="writings-left">{COPY.prepared.left(writingsLeft(view.money))}</p>}

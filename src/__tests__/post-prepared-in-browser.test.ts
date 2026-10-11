@@ -126,7 +126,7 @@ async function pay(page: Browser): Promise<string> {
 
 const SHOWN = `(document.querySelector("#writing")?.textContent ?? "") + " | " + (document.querySelector("#said")?.textContent ?? "") + " | " + (document.querySelector("#your-job")?.textContent ?? "")`;
 
-/** Sign the note that shows the job, and wait for its checks to be written and pass their trials. */
+/** Sign the note that shows the job, and wait for its checks to be written and tried. */
 async function readTheChecks(page: Browser): Promise<void> {
   await page.until(`document.querySelector("#sign-in")`, "the page to ask for the note", 30, SHOWN);
   await page.click("#sign-in");

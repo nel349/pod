@@ -1,13 +1,18 @@
 /**
- * A seat that judges the candidate: the reviewer, QA and security.
+ * A seat that judges the candidate: the reviewer, QA and security, and the lead where the builder
+ * puts its own work forward.
  *
- * Each looks at every candidate the lead names, once, and either approves it on the contract or
- * refuses it in a note that says why, which is what the builder answers. How it judges is the seat's
- * own (see judgements.ts); what it does with the judgement is the same for all three.
+ * Each looks at every candidate named, once, and either approves it on the contract or refuses it in
+ * a note that says why, which is what the builder answers. How it judges is the seat's own (see
+ * judgements.ts); what it does with the judgement is the same for all of them. Where a builder puts
+ * its work forward, an approval says the seat stands behind it and decides nothing about whether it
+ * is graded, and it is taken only while the candidate's review runs: a judge that comes to it later
+ * says so once and leaves it.
  *
- * It re-reads the candidate just before approving. Approving a commit that is no longer the
- * candidate would make it the candidate again and clear everybody else's approvals, which is the
- * contract's rule and exactly what a late judge must not do. And it tells the pod before it
+ * It re-reads the candidate just before approving. Where the lead names the candidate, approving a
+ * commit that is no longer the candidate would make it the candidate again and clear everybody else's
+ * approvals, which is that contract's rule and exactly what a late judge must not do; where the
+ * builder does, the contract would refuse it. And it tells the pod before it
  * approves, not after: its approval may be the one that completes the policy, and the job it
  * settles takes no more notes.
  */
@@ -16,7 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { APPROVED, REFUSED, type Verdict } from "../protocol.ts";
 import { isAddressEqual } from "viem";
-import { candidateOf, leadBranchOf, tellThePod, type Seated, type SeatWork } from "../Seated.ts";
+import { candidateBranchOf, candidateOf, tellThePod, type Seated, type SeatWork } from "../Seated.ts";
 import { shortCommit } from "../../repo.ts";
 
 /** How one seat judges a candidate, given its files laid out in a folder of their own. */
@@ -34,6 +39,12 @@ export class Judge implements SeatWork {
    * approval: a release clears it, and the same candidate named again is approved again.
    */
   private readonly approved = new Set<string>();
+  /**
+   * Candidates whose review this seat has said ran out before it could stand behind them. Only so that
+   * it is said once: whether a review is over is asked of the chain every time, since the same commit
+   * put forward again later has a review of its own.
+   */
+  private readonly saidTooLate = new Set<string>();
 
   constructor(private readonly seated: Seated, private readonly judgement: Judgement) {}
 
@@ -42,6 +53,7 @@ export class Judge implements SeatWork {
     const candidate = await candidateOf(seated);
     if (!candidate || this.refused.has(candidate)) return;
     if (this.approved.has(candidate) && (await this.myApprovalStands())) return;
+    if (await this.isItsReviewOver(candidate)) return;
     const verdict = this.verdicts.get(candidate) ?? await this.judge(candidate);
     if (!verdict) return;
     this.verdicts.set(candidate, verdict);
@@ -61,6 +73,8 @@ export class Judge implements SeatWork {
       seated.say(`${shortCommit(candidate)} stopped being the candidate while it was judged; judging the new one instead`);
       return;
     }
+    // judging takes a while, and the review may have run out during it: the contract would refuse the approval
+    if (await this.isItsReviewOver(candidate)) return;
     // counted done only once the chain has it: a transaction that failed is sent again on the next look
     await seated.identity.approve(seated.job, seated.role, candidate);
     seated.say(`${this.approved.has(candidate) ? "approved again, once its approval was cleared," : "approved"} ${shortCommit(candidate)}: ${verdict.why}`);
@@ -74,11 +88,26 @@ export class Judge implements SeatWork {
     return seats.some((seat) => seat.role === seated.role && isAddressEqual(seat.agent, seated.identity.address) && seat.approved);
   }
 
-  /** The seat's judgement of one candidate, or nothing if the lead's branch does not have it yet. */
+  /**
+   * Whether the time to stand behind this candidate has run out, where a builder puts its work forward:
+   * it is being graded with whoever was behind it by then, and this seat is not among them. Said once
+   * for a candidate, and asked every time.
+   */
+  private async isItsReviewOver(candidate: string): Promise<boolean> {
+    const { seated } = this;
+    if (!seated.builderNames || !(await seated.identity.isReviewOver(seated.job))) return false;
+    // read again: the builder may have put something newer forward, whose review has only begun
+    if ((await candidateOf(seated)) !== candidate) return true;
+    if (!this.saidTooLate.has(candidate)) seated.say(`the review of ${shortCommit(candidate)} ran out before this seat had judged it, so it does not stand behind it and is not paid for it`);
+    this.saidTooLate.add(candidate);
+    return true;
+  }
+
+  /** The seat's judgement of one candidate, or nothing if the branch it was named from does not have it yet. */
   private async judge(candidate: string): Promise<Verdict | undefined> {
     const { seated } = this;
-    const leadBranch = leadBranchOf(await seated.identity.readSeats(seated.job));
-    if (!leadBranch || !(await seated.copy.fetch(leadBranch))) return undefined;
+    const itsBranch = candidateBranchOf(seated, await seated.identity.readSeats(seated.job));
+    if (!itsBranch || !(await seated.copy.fetch(itsBranch))) return undefined;
     const files = await mkdtemp(join(tmpdir(), `pod-${seated.role}-`));
     try {
       await seated.copy.layOut(candidate, files);

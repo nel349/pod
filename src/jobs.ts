@@ -45,6 +45,22 @@ export const podJobsAbi = parseAbi([
   "error TooEarly()",
 ]);
 
+/**
+ * What a seat's two calls are sent with: the first contract's interface, and the refusals the
+ * contracts after it added to those same calls, by name. An agent takes a seat and approves the same
+ * way on every one of them, so it should be told why not in a word on every one of them too: a job
+ * locked for grading, a builder trying to approve, a deposit that is not the seat's.
+ */
+const seatCallsAbi = [
+  ...podJobsAbi,
+  ...parseAbi([
+    "error Locked()",
+    "error BuildersDoNotApprove()",
+    "error WrongAmount()",
+    "error NoSuchJob()",
+  ]),
+] as const;
+
 /** The contract's enum order, named once so nothing else has to know it. */
 const ROLE_NUMBER: Record<Role, number> = { lead: 0, builder: 1, reviewer: 2, qa: 3, security: 4 };
 
@@ -53,11 +69,12 @@ export function roleNumber(role: Role): number {
 }
 
 /**
- * What a job looks like once it is on chain. State is the contract's own enum. Preparing is the newer
- * contract's, added last, so one reader serves both: its seats, approvals and policy are the same.
+ * What a job looks like once it is on chain. State is the contract's own enum. Preparing is the second
+ * contract's and delivered the third's, each added last, so one reader serves all three: their seats,
+ * approvals and policy are the same.
  */
-export type JobState = "open" | "working" | "settled" | "refunded" | "preparing";
-const STATES: readonly JobState[] = ["open", "working", "settled", "refunded", "preparing"];
+export type JobState = "open" | "working" | "settled" | "refunded" | "preparing" | "delivered";
+const STATES: readonly JobState[] = ["open", "working", "settled", "refunded", "preparing", "delivered"];
 
 /**
  * The contract's state number, in words. A number this contract never gives is an error, never
@@ -118,6 +135,14 @@ export async function readSeats(at: Omit<Contract, "wallet">, jobId: bigint): Pr
     }));
   }));
   return rows.flat();
+}
+
+/** How many seats of a job are taken, which costs less to ask than who holds each one. */
+export async function readSeatsTaken(at: Omit<Contract, "wallet">, jobId: bigint): Promise<number> {
+  const counts = await Promise.all(SEATS.map((role) => at.publicClient.readContract({
+    address: at.address, abi: podJobsAbi, functionName: "seatCount", args: [jobId, roleNumber(role)],
+  })));
+  return counts.reduce((taken, count) => taken + Number(count), 0);
 }
 
 /**
@@ -254,7 +279,7 @@ export async function post(at: Contract, input: {
 export async function takeSeat(at: Contract, jobId: bigint, role: Role, owner: Address): Promise<Hex> {
   const deposit = await seatDeposit(at, jobId, role);
   const { request } = await at.publicClient.simulateContract({
-    address: at.address, abi: podJobsAbi, functionName: "takeSeat",
+    address: at.address, abi: seatCallsAbi, functionName: "takeSeat",
     args: [jobId, roleNumber(role), owner],
     value: deposit,
     account: at.wallet.account!,
@@ -264,7 +289,7 @@ export async function takeSeat(at: Contract, jobId: bigint, role: Role, owner: A
 
 export async function approve(at: Contract, jobId: bigint, role: Role, commit: Hex): Promise<Hex> {
   const { request } = await at.publicClient.simulateContract({
-    address: at.address, abi: podJobsAbi, functionName: "approve",
+    address: at.address, abi: seatCallsAbi, functionName: "approve",
     args: [jobId, roleNumber(role), commit],
     account: at.wallet.account!,
   });

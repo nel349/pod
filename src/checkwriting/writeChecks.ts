@@ -6,25 +6,21 @@
  * each sentence into a program that decides it from outside.
  *
  * Nothing the writer says is taken on trust. What it leaves in its box is read through a schema, as
- * anything from outside is. It also hands over a working version and, for each sentence, a near
- * miss (the working version with that one thing wrong) and every check is tried against them before
- * it can be sealed (see prove.ts). The working version and the near misses are thrown away
- * afterwards: they exist to try the checks, and a finished answer is exactly what the pod must not
- * be handed.
+ * anything from outside is, and every check is run against a server with nothing built before it can
+ * be sealed (see prove.ts). The writer builds nothing: the work is the pod's.
  */
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { runInBox } from "../agent.ts";
-import type { CheckToRun } from "../blackbox.ts";
 import { openBroker, type Broker, type Model, type Spent } from "../broker.ts";
 import { checkCommand, PORT, type HowItIsAsked } from "../job.ts";
 import { writableByTheBox } from "../sandbox.ts";
 import { firstLine } from "../errors.ts";
 import { isChargedFor, WritingFailed } from "./WritingFailed.ts";
 import { jsonFromTheBox, plainDashes, textFromTheBox } from "./fromTheBox.ts";
-import { prove, type Tried } from "./prove.ts";
+import { prove, type CheckToTry, type Tried } from "./prove.ts";
 import type { Statement, WriteRequest } from "./request.ts";
 import { HowItIsAskedSchema, type Stage, type Written, type WrittenSet } from "./written.ts";
 
@@ -57,7 +53,7 @@ const SaidSchema = z.object({ decision: z.string(), why: z.string() });
 /** What the writer program leaves in .pod/readback.json: one entry per sentence, and how the checks ask, if they had to. */
 const ReadBackSchema = z.object({
   checks: z.array(z.discriminatedUnion("checkable", [
-    z.object({ checkable: z.literal(true), asks: z.string(), expects: z.string(), nearMiss: z.string() }),
+    z.object({ checkable: z.literal(true), asks: z.string(), expects: z.string(), leavesOut: z.string().nullable().optional() }),
     z.object({ checkable: z.literal(false), why: z.string() }),
   ])),
   howItIsAsked: HowItIsAskedSchema.nullable(),
@@ -70,15 +66,14 @@ interface Planned {
   readonly entry: ReadBack;
   readonly file: string;
   readonly command: string;
-  readonly nearMissDirectory: string;
 }
 
 /**
  * Write the checks, then try every one of them.
  *
  * Throws WritingFailed when the writer could not write anything, with the reason it gave, and whether
- * the writing is charged all the same. A check that was written but did not prove itself is not an
- * error: it comes back with its proof, so the poster can see which trial failed and say it differently.
+ * the writing is charged all the same. A check that was written and did not hold in its trial is not
+ * an error: it comes back with what it printed, so the poster can see why it cannot be used.
  *
  * @param onSpent told what the model's answers cost, once, however the writing ended, when the model said
  */
@@ -106,11 +101,8 @@ export async function writeChecks(
     onStage("trying");
     const checks = join(workspace, "checks");
     const checkable = plan.filter((planned) => planned.entry.checkable);
-    const toRun: CheckToRun[] = checkable.map((planned) => ({ says: planned.statement.says, command: planned.command, hidden: false }));
-    const tried = toRun.length === 0 ? new Map<string, Tried>() : await prove(checks, toRun, {
-      working: join(workspace, "working"),
-      nearMiss: new Map(checkable.map((planned) => [planned.command, planned.nearMissDirectory])),
-    }, writer.image);
+    const toRun: CheckToTry[] = checkable.map((planned) => ({ says: planned.statement.says, command: planned.command, hidden: false, file: planned.file }));
+    const tried = toRun.length === 0 ? new Map<string, Tried>() : await prove(checks, toRun, writer.image);
 
     const written = await Promise.all(plan.map(async ({ statement, entry, file, command }): Promise<Written> => {
       const { says, secret } = statement;
@@ -119,10 +111,11 @@ export async function writeChecks(
       if (!trial) throw new Error(`the check for "${says}" was written and never tried`);
       const source = await textFromTheBox(join(checks, file));
       if (source === undefined) throw new Error(`the check for "${says}" was tried and then could not be read back`);
+      const leavesOut = entry.leavesOut?.trim();
       return {
         checkable: true, says, secret,
-        asks: plainDashes(entry.asks), expects: plainDashes(entry.expects), nearMiss: plainDashes(entry.nearMiss),
-        file, source, proof: trial.proof, saw: trial.saw, nearMissAlsoBroke: trial.nearMissAlsoBroke,
+        asks: plainDashes(entry.asks), expects: plainDashes(entry.expects), ...(leavesOut ? { leavesOut: plainDashes(leavesOut) } : {}),
+        file, source, proof: trial.proof, saw: trial.saw,
       };
     }));
     return howItIsAsked ? { checks: written, howItIsAsked } : { checks: written };
@@ -163,7 +156,7 @@ async function runTheWriter(
       throw new Error("the check writer said it was done and left a different number of checks");
     }
     const file = checkFileFor(i);
-    return { statement, entry, file, command: checkCommand(file), nearMissDirectory: join(workspace, "near-miss", String(i + 1)) };
+    return { statement, entry, file, command: checkCommand(file) };
   });
   const asked = readback.howItIsAsked;
   return asked ? { plan, howItIsAsked: { plainly: plainDashes(asked.plainly), exactly: plainDashes(asked.exactly) } } : { plan };

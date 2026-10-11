@@ -1,34 +1,22 @@
 /**
- * What the checks step says, as rules rather than markup: the line under the button, and the verdict
- * under the checks. Kept out of the component so they can be tested without a browser.
+ * What the checks step says, as rules rather than markup: where each check stands, the line under the
+ * button, and the verdict under the checks. Kept out of the component so they can be tested without a browser.
  */
 import { isProven, type Stage, type TriedCheck, type Written } from "../../../checkwriting/written.ts";
 import { COPY } from "./copy.ts";
 
-/** One of the three ways a check was tried, as the poster reads it. */
-export interface TrialView {
-  readonly name: "working" | "nearMiss" | "nothing";
-  readonly hasHeld: boolean;
-  /** what is said: the trial as passed, or as failed */
-  readonly says: string;
-  /** what the check printed, shown only when the trial failed, because then it is the explanation */
-  readonly saw: string | undefined;
-  /** what else is worth knowing about a trial that held, when there is anything */
-  readonly also: string | undefined;
-}
+/** Where a written check stands, as the poster reads it: ready, or why it cannot be used. */
+export type CheckStanding = { readonly isReady: true } | { readonly isReady: false; readonly why: string };
 
-/** The three trials of a written check, in the order they are run. */
-export function trialsOf(check: TriedCheck): readonly TrialView[] {
-  const words = COPY.checks.trials;
-  const view = (name: TrialView["name"], hasHeld: boolean, held: string, broke: string, also?: string): TrialView =>
-    ({ name, hasHeld, says: hasHeld ? held : broke, saw: hasHeld ? undefined : words.saw(check.saw[name]), also: hasHeld ? also : undefined });
-  const alsoBroke = check.nearMissAlsoBroke ?? [];
-  return [
-    view("working", check.proof.working, words.working.held, words.working.broke),
-    view("nearMiss", check.proof.nearMiss, words.nearMiss.held(check.nearMiss), words.nearMiss.broke(check.nearMiss),
-      alsoBroke.length > 0 ? words.nearMiss.alsoBroke(alsoBroke) : undefined),
-    view("nothing", check.proof.nothing, words.nothing.held, words.nothing.broke),
-  ];
+/**
+ * Whether a written check can be used, and why not when it cannot. A check is tried once, against
+ * nothing built. One written while checks were tried two more ways is read as it was judged then.
+ */
+export function checkStandingOf(check: TriedCheck): CheckStanding {
+  const { loads, nothing: hasFailedOnNothing } = check.proof;
+  if (isProven(check)) return { isReady: true };
+  if (loads === false) return { isReady: false, why: COPY.checks.notUsable.broken };
+  return { isReady: false, why: hasFailedOnNothing ? COPY.checks.notUsable.old : COPY.checks.notUsable.passesNothing };
 }
 
 export type VerdictState = "ready" | "short" | "stale";

@@ -3,6 +3,7 @@
  * through these schemas like anything else from outside the program: a file can be half written, or
  * written by a version before this one, and a request can say anything.
  */
+import { isEmail } from "../mail/Mailer.ts";
 import { isAddress, type Address, type Hex } from "viem";
 import { z } from "zod";
 import type { Spent } from "../broker.ts";
@@ -26,6 +27,9 @@ const AddressSchema = z.string().refine((value): value is Address => isAddress(v
 const HexSchema = z.string().refine((value): value is Hex => /^0x[0-9a-fA-F]*$/.test(value), "not hex");
 const SaltSchema = z.string().regex(SALT, "a salt is 32 hex characters");
 
+/** Where a poster asks to be told their job was delivered: an email address, kept off every page and record anybody can read. */
+export const TellSchema = z.string().trim().refine(isEmail, "that does not look like an email address");
+
 /** What a poster sends after paying, to have the job prepared. */
 export const SetUpRequestSchema = z.object({
   onChainId: OnChainNumberSchema,
@@ -36,6 +40,8 @@ export const SetUpRequestSchema = z.object({
   request: WriteRequestSchema,
   poster: AddressSchema,
   signature: HexSchema,
+  /** where to tell them it was delivered, if they want to be told */
+  tell: TellSchema.optional(),
 });
 
 /** How a paid job was set up, once, by its poster. The name, the mode and the salt never change after. */
@@ -48,6 +54,8 @@ export const SetUpSchema = z.object({
   mode: z.enum(MODE_NAMES),
   salt: SaltSchema,
   setUpAt: z.string(),
+  /** the poster's email address, when they left one: read by the worker to tell them of a delivery, and by nothing that draws a page */
+  tell: z.string().optional(),
 });
 
 /** A writing the poster asked for, waiting its turn or under way. */
@@ -81,7 +89,7 @@ export const OutcomeSchema = z.discriminatedUnion("kind", [
     kind: z.literal("written"),
     checks: z.array(WrittenSchema),
     howItIsAsked: HowItIsAskedSchema.optional(),
-    /** every line became a check that passed all three trials */
+    /** every line became a check that held when it was tried */
     ready: z.boolean(),
     approval: ApprovalSchema.optional(),
     /** why a ready set has nothing to approve: sealing or signing it failed on our side */
@@ -138,6 +146,8 @@ export interface PreparingView {
   /** every writing whose price is settled, first to last */
   readonly writings: readonly Finished[];
   readonly money: WritingMoney & { readonly writingPrice: bigint };
+  /** whether the poster left an address to be told at. Only that: the address itself is never sent back */
+  readonly tells?: boolean;
 }
 
 /** A preparing job as it travels: its money in wei, as strings, since JSON has no bigint. */
@@ -165,6 +175,7 @@ export const PreparingOnTheWireSchema = z.object({
   asked: WriteRequestSchema.optional(),
   writings: z.array(FinishedSchema),
   money: z.object({ balance: WeiSchema, reserved: WeiSchema, kept: z.number().int().nonnegative(), writingPrice: WeiSchema }),
+  tells: z.boolean().optional(),
 });
 
 /** Read back from the wire: the money as amounts again. */
