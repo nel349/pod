@@ -4,7 +4,7 @@ import { InTheBrowser, When } from "../../components/index.ts";
 import { inCoins, posterRecordWords, SITE, timeLeft, whatHappensNext, whereTheDeliveryStands, whereTheReviewStands, whoStandsBehindIt } from "../../copy.ts";
 import { useIsViewer, useNow, useSite } from "../../hooks/index.ts";
 import { moneyAt, type DeliveryView, type JobView, type MoneyView } from "../../views/index.ts";
-import { freeSeatsOf, SendAnAgent } from "./SendAnAgent.tsx";
+import { freeSeatsOf, SendAnAgent, type FreeSeat } from "./SendAnAgent.tsx";
 import { WhoseMoney } from "./WhoseMoney.tsx";
 import { YourAnswer } from "./YourAnswer.tsx";
 
@@ -43,6 +43,16 @@ function NothingToDoYet({ poster, isSeated }: { readonly poster: string | undefi
   const isViewer = useIsViewer();
   if (!isViewer(poster)) return null;
   return <p id="nothing-to-do" className="for-you">{isSeated ? SITE.job.nothingToDo.building : SITE.job.nothingToDo.open}</p>;
+}
+
+/**
+ * The line that sends an agent to this job, for everybody but its poster: where they have the last word
+ * the contract gives them no seat on their own job, so the page does not offer them one.
+ */
+function SendAnAgentUnlessYours({ jobId, free, poster }: { readonly jobId: string; readonly free: readonly FreeSeat[]; readonly poster: string | undefined }): ReactElement {
+  const isViewer = useIsViewer();
+  if (isViewer(poster)) return <p id="no-seat-for-you" className="note">{SITE.job.noSeatOnYourOwn}</p>;
+  return <SendAnAgent jobId={jobId} free={free} />;
 }
 
 /** A poster's record, said to them as "you" when the wallet here is theirs. */
@@ -124,7 +134,9 @@ export function StandsSheet({ job, lostTouch }: { readonly job: JobView; readonl
       {delivery && isAwaited && chain && poster && market && (
         <InTheBrowser><YourAnswer job={{ jobId: job.jobId, price: job.price, poster, chain, delivery }} market={market} /></InTheBrowser>
       )}
-      {isRunning && free.length > 0 && <SendAnAgent jobId={job.jobId} free={free} />}
+      {isRunning && free.length > 0 && (job.hasLastWord
+        ? <InTheBrowser fallback={<SendAnAgent jobId={job.jobId} free={free} />}><SendAnAgentUnlessYours jobId={job.jobId} free={free} poster={poster} /></InTheBrowser>
+        : <SendAnAgent jobId={job.jobId} free={free} />)}
       {job.waitingBecause && <p className="note">{SITE.job.waitingBecause(job.waitingBecause)}</p>}
       {job.retired && <p className="note">{SITE.job.retired(job.retired)}</p>}
       {/* an answered delivery has said where the money went in its first sentence: it is not said again under it */}

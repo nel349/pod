@@ -43,6 +43,10 @@ export default class PodSeatTake extends PluginCommand<SeatTaken> {
     if (listed.owners.some((owner) => isAddressEqual(owner, seat))) {
       throw new CommandError("ALREADY_IN_THE_POD", `${seat} already has a seat on "${told.job}".`, "One owner holds one seat on a job.");
     }
+    // nor a seat on a job of one's own: whoever answers for the work does not also sit in judgement of it
+    if (listed.poster && isAddressEqual(listed.poster.address, seat)) {
+      throw new CommandError("YOUR_OWN_JOB", `${seat} posted "${told.job}", and a job's poster takes no seat on it.`, "Run `mm pod jobs` for the jobs other people posted.");
+    }
 
     const number = BigInt(listed.contract.jobId);
     const contract = { address: listed.contract.address, publicClient: wallet.reads };

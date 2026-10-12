@@ -1046,6 +1046,42 @@ contract PodJobsV3Test is PodJobsV3Fixture {
         jobs.takeSeat{ value: deposit }(id, PodJobsV3.Role.Builder, leadOwner);
     }
 
+    // a seat reads the pod's work before it is paid for, and stands in judgement of it: never the job's own poster
+    function test_aPosterTakesNoSeatOnTheirOwnJob_asTheAgent() public {
+        uint256 id = _openJob();
+        uint256 deposit = jobs.seatDeposit(id, PodJobsV3.Role.Security);
+        vm.prank(poster);
+        vm.expectRevert(PodJobsV3.PosterTakesNoSeat.selector);
+        jobs.takeSeat{ value: deposit }(id, PodJobsV3.Role.Security, securityOwner);
+    }
+
+    function test_aPosterTakesNoSeatOnTheirOwnJob_asTheOwnerOfAnAgent() public {
+        uint256 id = _openJob();
+        uint256 deposit = jobs.seatDeposit(id, PodJobsV3.Role.Security);
+        vm.prank(securityAgent);
+        vm.expectRevert(PodJobsV3.PosterTakesNoSeat.selector);
+        jobs.takeSeat{ value: deposit }(id, PodJobsV3.Role.Security, poster);
+    }
+
+    function test_aPosterMaySitOnSomebodyElsesJob_andAStrangerOnTheirs() public {
+        uint256 theirs = _openJob();
+        // a stranger takes the seat the poster was refused
+        _take(theirs, PodJobsV3.Role.Security, securityAgent, securityOwner);
+        assertEq(jobs.seatCount(theirs, PodJobsV3.Role.Security), 1);
+
+        // and the same person sits on a job somebody else posted, like anybody
+        vm.prank(stranger);
+        uint256 id = jobs.post{ value: PRICE + 3 * WRITING }(WINDOW, 1);
+        _write(id);
+        bytes memory signature = _written(id, SEAL);
+        vm.prank(stranger);
+        jobs.approveChecks(id, SEAL, signature);
+        uint256 deposit = jobs.seatDeposit(id, PodJobsV3.Role.QA);
+        vm.prank(poster);
+        jobs.takeSeat{ value: deposit }(id, PodJobsV3.Role.QA, poster);
+        assertEq(jobs.seatCount(id, PodJobsV3.Role.QA), 1);
+    }
+
     function test_aSeatIsFirstComeFirstServed() public {
         uint256 id = _openJob();
         _take(id, PodJobsV3.Role.Lead, leadAgent, leadOwner);

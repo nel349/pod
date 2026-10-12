@@ -7,7 +7,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { sealSpec, type Role, type Spec } from "../job.ts";
 import { approve, readJob, seatDeposit, seatPay, takeSeat, type Contract } from "../jobs.ts";
 import { checksDigest, podJobsV2Abi } from "../jobsV2.ts";
-import { putForward, readAnswerBy, readHowItEnded, report, REFUSAL_SHARE_PERCENT, REVIEW_SHARE_PERCENT, readRefusalShare, readReviewShare } from "../jobsV3.ts";
+import { putForward, readAnswerBy, readHowItEnded, report, REFUSAL_SHARE_PERCENT, REVIEW_SHARE_PERCENT, readAnswerTime, readRefusalShare, readReviewShare } from "../jobsV3.ts";
 import { openJob } from "../publish.ts";
 import { signReceipt } from "../receipt.ts";
 import { commitToBytes32 } from "../repo.ts";
@@ -19,7 +19,8 @@ import { serve } from "../server.ts";
 import { servicesFor } from "../services.ts";
 import type { Services } from "../server.ts";
 import { JobStore } from "../store.ts";
-import { agentAnsweredWords, agentRecordWords, inCoins, posterRecordWords, SITE } from "../web/site/copy.ts";
+import { agentAnsweredWords, agentRecordWords, inCoins, posterRecordWords, SITE, type LastWord } from "../web/site/copy.ts";
+import { BEAT_MS, exampleMoney } from "../web/site/pages/welcome/story.ts";
 import { keptOnRefusal, paidOnAcceptance } from "../web/site/views/index.ts";
 import { shortAddress } from "../web/shared/copy.ts";
 import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
@@ -211,6 +212,10 @@ const DRAWN = `(document.querySelector("#stands")?.innerText ?? "") + " | " + JS
 const text = (page: Browser, selector: string): Promise<string> => page.evaluate<string>(`document.querySelector(${JSON.stringify(selector)})?.textContent ?? ""`);
 const stateOf = async (onChainId: bigint) => (await readJob(contractAs(VALIDATOR), onChainId)).state;
 const coins = (wei: bigint): string => inCoins(wei.toString(), "ETH");
+/** the rule as the contract itself has it, which is what the welcome has to be telling */
+const ruleOnTheContract = async (): Promise<LastWord> => ({
+  answerSeconds: Number(await readAnswerTime(contractAs(VALIDATOR))), refusalSharePercent: await readRefusalShare(contractAs(VALIDATOR)), reviewSharePercent: await readReviewShare(contractAs(VALIDATOR)),
+});
 
 describe.skipIf(!available)("a poster answers a delivery from a browser", () => {
   test("what a page says a refusal leaves the pod is what the contract leaves it", async () => {
@@ -323,6 +328,60 @@ describe.skipIf(!available)("a poster answers a delivery from a browser", () => 
     await photograph(page, "somebody-elses");
   }, 180_000);
 
+  test("the front door is the welcome: its film plays by itself, goes to a step when asked, stops when told, and never scrolls a phone sideways", async () => {
+    browser = await Browser.start();
+    await browser.resize(1280, 900);
+    await browser.open(base + ROUTES.welcome);
+    const beat = (): Promise<string> => browser!.evaluate<string>(`document.querySelector(".stage")?.dataset.beat ?? ""`);
+    await browser.until(`document.querySelector("#film-toggle") && document.querySelector(".stage")`, "the film");
+    // drawn at its first scene, with the example's price in this chain's own coin
+    expect(await beat()).toBe("say");
+    expect(await text(browser, ".ticket-price")).toBe(coins(10n ** 18n));
+    expect(await text(browser, "#steps")).toContain(SITE.welcome.steps(await ruleOnTheContract()).lastWord.says);
+
+    // asked for a step, it shows that step; left alone, it moves on to the next by itself
+    await browser.click('.film-steps button[data-step="forward"]');
+    expect(await beat()).toBe("forward");
+    expect(await browser.evaluate<string>(`document.querySelector('.film-steps button[aria-current="step"]')?.dataset.step ?? ""`)).toBe("forward");
+    await browser.until(`document.querySelector(".stage").dataset.beat === "delivered"`, "the film to move on by itself", 15);
+    expect(await text(browser, ".film-rail-says")).toBe(SITE.welcome.money.held(coins(10n ** 18n)));
+
+    // stopped, it stays where it is for longer than any scene lasts, and says it can be started again
+    await browser.click("#film-toggle");
+    expect(await text(browser, "#film-toggle")).toBe(SITE.welcome.controls.play);
+    expect(await browser.evaluate<boolean>(`document.querySelector(".stage").hasAttribute("data-held")`)).toBe(true);
+    await Bun.sleep(Math.max(...Object.values(BEAT_MS)) + 500);
+    expect(await beat()).toBe("delivered");
+
+    // the last step's refusal, by the contract's own share: what comes back and what the pod keeps add up to the price
+    await browser.click('.film-steps button[data-step="lastWord"]');
+    await browser.click("#film-toggle");
+    await browser.until(`document.querySelector(".stage").dataset.beat === "refuse"`, "the film to reach the refusal", 15);
+    const rule = await ruleOnTheContract();
+    const money = exampleMoney(10n ** 18n, rule.refusalSharePercent);
+    expect(await text(browser, ".film-rail-says")).toBe(SITE.welcome.money.shared(coins(money.comesBack), coins(money.podKeeps)));
+
+    // on a phone, through a whole scene with everything landing, the page is never wider than the phone
+    await browser.resize(390, 800);
+    await browser.click('.film-steps button[data-step="delivered"]');
+    let widest = 0;
+    for (let looks = 0; looks < 25; looks++) {
+      widest = Math.max(widest, await browser.evaluate<number>("document.documentElement.scrollWidth"));
+      await Bun.sleep(200);
+    }
+    expect(widest).toBe(390);
+
+    // every job is one press away, at its own address, and the mark leads back here: both in place, with the film playing again
+    await browser.resize(1280, 900);
+    await browser.evaluate(`window.__sameDocument = true`);
+    await browser.click(`.site-header nav a[href="${ROUTES.wall}"]`);
+    await browser.until(`location.pathname === "${ROUTES.wall}" && document.querySelector(".so-far") && !document.querySelector(".stage")`, "the list of jobs");
+    expect(await text(browser, ".bill")).toContain(SITE.wall.jobs.strap);
+    await browser.click(".site-header .mark");
+    await browser.until(`location.pathname === "${ROUTES.welcome}" && document.querySelector(".stage")?.dataset.beat === "say"`, "the welcome again, from its first scene");
+    expect(await browser.evaluate<boolean>(`window.__sameDocument === true`)).toBe(true);
+  }, 180_000);
+
   // the delivery above still waits: its poster finds it among their jobs, with the one thing to do on it
   test("the poster's own page lists a delivery that waits for them, with the way to answer it", async () => {
     const waiting = "a-coat-somebody-elses";
@@ -373,4 +432,25 @@ describe.skipIf(!available)("a poster answers a delivery from a browser", () => 
     const accepted = await (await fetch(base + ROUTES.agent + await leadOf("a-coat-accepted"))).text();
     expect(accepted).toContain(agentAnsweredWords({ ...nothing, accepted: 1 }));
   }, 60_000);
+
+  // last, because it posts one more job as the same poster, whose record the tests above count
+  test("an open job offers the line that sends an agent to anybody but its own poster, who is told they take no seat on it", async () => {
+    const jobId = "a-coat-still-open";
+    const { onChainId, seal, spec } = await paidAndApproved(jobId);
+    const onChain = await readJob(contractAs(POSTER), onChainId);
+    const opened = await openJob(store, { jobId, seal, spec, endsAt: new Date(Number(onChain.endsAt) * 1000), seats: [] });
+    await store.save({ ...opened, poster: POSTED_BY, chain: { network: "monad-testnet", jobId: String(onChainId), jobs, lastWord: true } });
+
+    // somebody else's wallet: the line, with every seat still free to pick
+    const theirs = await openTheJob(jobId, privateKeyToAccount(STRANGER).address);
+    await theirs.until(`document.querySelector(".send-an-agent")`, "the line that sends an agent");
+    expect(await theirs.evaluate<boolean>(`document.querySelector("#no-seat-for-you") === null`)).toBe(true);
+    await theirs.stop();
+
+    // its poster's: no line to copy, and the reason in a sentence
+    const page = await openTheJob(jobId, POSTED_BY);
+    await page.until(`document.querySelector("#no-seat-for-you")`, "the poster to be told the seats are not theirs");
+    expect(await text(page, "#no-seat-for-you")).toBe(SITE.job.noSeatOnYourOwn);
+    expect(await page.evaluate<boolean>(`document.querySelector(".send-an-agent") === null`)).toBe(true);
+  }, 180_000);
 });

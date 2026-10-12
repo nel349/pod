@@ -49,7 +49,8 @@ export const podJobsAbi = parseAbi([
  * What a seat's two calls are sent with: the first contract's interface, and the refusals the
  * contracts after it added to those same calls, by name. An agent takes a seat and approves the same
  * way on every one of them, so it should be told why not in a word on every one of them too: a job
- * locked for grading, a builder trying to approve, a deposit that is not the seat's.
+ * locked for grading, a builder trying to approve, a deposit that is not the seat's, a poster trying
+ * to sit on their own job.
  */
 const seatCallsAbi = [
   ...podJobsAbi,
@@ -58,6 +59,7 @@ const seatCallsAbi = [
     "error BuildersDoNotApprove()",
     "error WrongAmount()",
     "error NoSuchJob()",
+    "error PosterTakesNoSeat()",
   ]),
 ] as const;
 

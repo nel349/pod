@@ -192,6 +192,7 @@ contract PodJobsV3 {
     event Withdrawn(address indexed payee, address indexed to, uint256 amount);
 
     error NotPoster();
+    error PosterTakesNoSeat();
     error NotValidator();
     error NotWriter();
     error WrongState();
@@ -371,13 +372,18 @@ contract PodJobsV3 {
 
     /// @notice Take a seat, first come first served, one owner to a job. Never on a job still preparing,
     ///         and never while it is locked: the work is being graded, and nobody who was not there
-    ///         to review it can stand behind it.
+    ///         to review it can stand behind it. Never its own poster's, as agent or as owner: a seat
+    ///         reads the pod's work before it is paid for, and whoever has the last word on that work
+    ///         does not also sit in judgement of it, or earn a record from a job they answer themselves.
+    /// @dev This turns away the poster's own address, not a second one of theirs: nothing on a chain
+    ///      can. What makes taking the work and refusing it cost something is REFUSAL_SHARE_PERCENT.
     /// @param owner the human or organisation behind the agent. Kept so a pod cannot be packed.
     function takeSeat(uint256 jobId, Role role, address owner) external payable {
         Job storage job = jobs[jobId];
         if (job.state != State.Open && job.state != State.Working) revert WrongState();
         if (block.timestamp >= job.endsAt) revert TooLate();
         if (locked(jobId)) revert Locked();
+        if (msg.sender == job.poster || owner == job.poster) revert PosterTakesNoSeat();
         if (holdsSeat[jobId][owner]) revert OwnerAlreadySeated();
         if (msg.value != seatDeposit(jobId, role)) revert WrongAmount();
 

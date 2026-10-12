@@ -4,7 +4,7 @@ import { chmod, mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { handoverToken, netlify, NETLIFY_CLAIM, NETLIFY_SETTINGS, netlifyFromTheEnvironment, NotAWebsite, SITE_LIMITS, siteFilesIn, siteNameFor } from "../hosting/index.ts";
-import { netlifySaying as standIn, type Asked } from "./support/netlify.ts";
+import { NAMED_BY_NETLIFY, netlifySaying as standIn, type Asked } from "./support/netlify.ts";
 
 /**
  * A delivered website put live on Netlify, asked for real over HTTP.
@@ -35,10 +35,12 @@ const SITE = new Map([["/index.html", bytes("<h1>front</h1>")], ["/cards/mewtwo.
 
 describe("a website put live on Netlify", () => {
   test("the site is made under its own word, its files offered by fingerprint and sent once each, and its address comes back when it is ready", async () => {
-    const { endpoint, asked } = netlifySaying();
+    const { endpoint, asked, addressOf, visited } = netlifySaying();
     const live = await netlify({ token: "the-token", endpoint }).publish({ name: "pod-a-coat", files: SITE, madeFor: "a-coat:0xseal" });
 
-    expect(live).toEqual({ siteId: "site-1", url: "https://pod-a-coat.netlify.app" });
+    expect(live).toEqual({ siteId: "site-1", url: addressOf("pod-a-coat") });
+    // opened once as a stranger would, before it is called live
+    expect(visited).toEqual(["/at/pod-a-coat"]);
     const [made, offered, ...rest] = asked;
     expect(made?.method).toBe("POST");
     expect(made?.path).toBe("/api/v1/sites");
@@ -66,13 +68,21 @@ describe("a website put live on Netlify", () => {
   test("it waits for Netlify to say the site is ready, and gives up in words when it never does", async () => {
     const slow = netlifySaying({ readyAfter: 2 });
     const live = await netlify({ token: "t", endpoint: slow.endpoint }).publish({ name: "n", files: SITE, madeFor: "w" });
-    expect(live.url).toBe("https://pod-a-coat.netlify.app");
+    expect(live.url).toBe(slow.addressOf("n"));
     expect(slow.asked.filter((one) => one.method === "GET")).toHaveLength(2);
 
     const never = netlifySaying({ readyAfter: Number.POSITIVE_INFINITY });
     await expect(netlify({ token: "t", endpoint: never.endpoint, readyWithinMs: 1 }).publish({ name: "n", files: SITE, madeFor: "w" }))
       .rejects.toThrow("Netlify had not got the site ready");
   }, 20_000);
+
+  test("a site its team keeps private is not called live: it is taken down again, and the reason names the setting", async () => {
+    const { endpoint, removed, visited } = netlifySaying({ keepsSitesPrivate: true });
+    await expect(netlify({ token: "t", endpoint }).publish({ name: "pod-a-coat", files: SITE, madeFor: "w" }))
+      .rejects.toThrow("Netlify made the site and keeps it private, so only its team could open it (it answered 401): the team's default project visibility has to be public for new projects");
+    expect(visited).toEqual(["/at/pod-a-coat"]);
+    expect(removed).toEqual(["site-1"]);
+  });
 
   test("a refusal is said with Netlify's own words, names what was being asked, and is not asked again", async () => {
     const { endpoint, asked } = netlifySaying({ refuses: { path: /\/sites$/, status: 401, body: `{"code":401,"message":"Access Denied"}` } });
@@ -82,9 +92,9 @@ describe("a website put live on Netlify", () => {
   });
 
   test("a name held by a site of this account's, left by a try that was cut short, is filled rather than refused for ever", async () => {
-    const { endpoint, asked, files } = netlifySaying({ sites: [{ id: "left-behind", name: "pod-a-coat-abcd1234", ours: true }, { id: "another", name: "pod-a-coat-abcd1234-old", ours: true }] });
+    const { endpoint, asked, files, addressOf } = netlifySaying({ sites: [{ id: "left-behind", name: "pod-a-coat-abcd1234", ours: true }, { id: "another", name: "pod-a-coat-abcd1234-old", ours: true }] });
     const live = await netlify({ token: "t", endpoint }).publish({ name: "pod-a-coat-abcd1234", files: SITE, madeFor: "w" });
-    expect(live).toEqual({ siteId: "left-behind", url: "https://pod-a-coat-abcd1234.netlify.app" });
+    expect(live).toEqual({ siteId: "left-behind", url: addressOf("pod-a-coat-abcd1234") });
     expect(files.get("/index.html")).toBe("<h1>front</h1>");
     // made once, refused, looked for, and filled: no second site
     expect(asked.filter((one) => one.method === "POST" && one.path.endsWith("/sites"))).toHaveLength(1);
@@ -92,9 +102,9 @@ describe("a website put live on Netlify", () => {
   });
 
   test("a name somebody else took keeps no job from going live: Netlify names the site, under the same word", async () => {
-    const { endpoint, asked } = netlifySaying({ sites: [{ id: "theirs", name: "pod-a-coat-abcd1234", ours: false }] });
+    const { endpoint, asked, addressOf } = netlifySaying({ sites: [{ id: "theirs", name: "pod-a-coat-abcd1234", ours: false }] });
     const live = await netlify({ token: "the-token", endpoint }).publish({ name: "pod-a-coat-abcd1234", files: SITE, madeFor: "a-coat:0xseal" });
-    expect(live).toEqual({ siteId: "site-2", url: "https://curious-otter-1a2b3c.netlify.app" });
+    expect(live).toEqual({ siteId: "site-2", url: addressOf(NAMED_BY_NETLIFY) });
     const makings = asked.filter((one) => one.method === "POST" && one.path.endsWith("/sites")).map((one) => JSON.parse(textOf(one)) as Record<string, unknown>);
     expect(makings).toEqual([
       { name: "pod-a-coat-abcd1234", created_via: "pod", session_id: wordFor("a-coat:0xseal", "the-token") },

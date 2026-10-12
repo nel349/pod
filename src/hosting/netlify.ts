@@ -34,6 +34,9 @@ const LONGEST_REFUSAL = 300;
  */
 const MAY_BE_THE_NAME: ReadonlySet<number> = new Set([400, 409, 422]);
 
+/** what a site answers a visitor it wants signed in to Netlify first: its team keeps it private */
+const KEPT_PRIVATE: ReadonlySet<number> = new Set([401, 403]);
+
 /** Netlify's refusal, with the status it gave, for the one kind something can be done about. */
 class Refused extends Error {
   constructor(message: string, readonly status: number) {
@@ -187,6 +190,18 @@ export function netlify(options: NetlifyOptions): SiteHost {
     }
   }
 
+  /**
+   * Whether the site answers somebody who is nobody to Netlify, which is what its poster is. A team
+   * that keeps its new sites private puts its own sign-in page in front of them, and a site like that
+   * is not live, whatever the deploy says.
+   */
+  async function opensToAStranger(url: string): Promise<void> {
+    const response = await fetch(url, { redirect: "manual", headers: { "user-agent": USER_AGENT } });
+    if (KEPT_PRIVATE.has(response.status)) {
+      throw new Error(`Netlify made the site and keeps it private, so only its team could open it (it answered ${response.status}): the team's default project visibility has to be public for new projects`);
+    }
+  }
+
   return {
     name: "Netlify",
 
@@ -196,6 +211,7 @@ export function netlify(options: NetlifyOptions): SiteHost {
         const url = site.ssl_url ?? site.url;
         if (!url) throw new Error("Netlify made the site and did not say where it is");
         await fill(site.id, files);
+        await opensToAStranger(url);
         return { siteId: site.id, url };
       } catch (error) {
         // a site made and never filled is taken down again: left standing, it would hold the name the next try needs

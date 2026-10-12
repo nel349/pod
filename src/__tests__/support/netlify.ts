@@ -7,6 +7,12 @@
  */
 import { createHash } from "node:crypto";
 
+/** where the stand-in serves the sites it holds, apart from the calls Netlify's own interface takes */
+const SITES_AT = "/at/";
+const FRONT_PAGE = "/index.html";
+/** the name it gives a site asked for with none, as Netlify does */
+export const NAMED_BY_NETLIFY = "curious-otter-1a2b3c";
+
 export interface Asked { readonly method: string; readonly path: string; readonly headers: Headers; readonly body: Uint8Array }
 
 export interface NetlifySaying {
@@ -17,6 +23,10 @@ export interface NetlifySaying {
   readonly files: Map<string, string>;
   /** the sites it was asked to take down */
   readonly removed: string[];
+  /** where a site of some name answers visitors: on this stand-in's own port, with the files it was sent */
+  addressOf(name: string): string;
+  /** every address a visitor opened, in order: not asked of Netlify, so not among `asked` */
+  readonly visited: string[];
   /** from now on it refuses nothing it was set to refuse: a bad moment that has passed */
   recover(): void;
   stop(): void;
@@ -32,32 +42,43 @@ export function netlifySaying(options: {
   readonly holds?: readonly string[];
   readonly readyAfter?: number;
   readonly refuses?: { readonly path: RegExp; readonly status: number; readonly body: string };
+  /** it keeps every site private, as a team does whose new sites are: a visitor is sent to sign in */
+  readonly keepsSitesPrivate?: boolean;
 } = {}): NetlifySaying {
   const asked: Asked[] = [];
   const files = new Map<string, string>();
   const removed: string[] = [];
+  const visited: string[] = [];
   const wanted = new Set<string>();
   let askedAfter = 0;
   let refuses = options.refuses;
+  const addressOf = (name: string): string => `http://localhost:${server.port}${SITES_AT}${name}`;
   const server = Bun.serve({
     port: 0,
     async fetch(request) {
       const { pathname: path, searchParams } = new URL(request.url);
+      if (path.startsWith(SITES_AT)) {
+        // a visitor, not a caller of Netlify's: the site itself, or its team's sign-in page in front of it
+        visited.push(path);
+        if (options.keepsSitesPrivate) return new Response("<title>Login Redirect</title>", { status: 401, headers: { "content-type": "text/html" } });
+        const front = files.get(FRONT_PAGE);
+        return front === undefined ? new Response("Not Found", { status: 404 }) : new Response(front, { headers: { "content-type": "text/html" } });
+      }
       const body = new Uint8Array(await request.arrayBuffer());
       asked.push({ method: request.method, path, headers: request.headers, body });
       if (refuses?.path.test(path)) return new Response(refuses.body, { status: refuses.status });
       if (request.method === "GET" && /\/sites\/?$/.test(path)) {
         // as Netlify lists them: this account's alone, any whose name has the asked one in it
         return Response.json((options.sites ?? []).filter((site) => site.ours && site.name.includes(searchParams.get("name") ?? ""))
-          .map((site) => ({ id: site.id, name: site.name, ssl_url: `https://${site.name}.netlify.app` })));
+          .map((site) => ({ id: site.id, name: site.name, ssl_url: addressOf(site.name) })));
       }
       if (request.method === "POST" && /\/sites\/?$/.test(path)) {
         const { name } = JSON.parse(new TextDecoder().decode(body)) as { name?: string };
         if (name !== undefined && (options.sites ?? []).some((site) => site.name === name)) return new Response(`{"errors":{"subdomain":["must be unique"]}}`, { status: 422 });
         // a site asked for with no name is given one of Netlify's own
         return name === undefined
-          ? Response.json({ id: "site-2", name: "curious-otter-1a2b3c", ssl_url: "https://curious-otter-1a2b3c.netlify.app" })
-          : Response.json({ id: "site-1", name, ssl_url: "https://pod-a-coat.netlify.app", url: "http://pod-a-coat.netlify.app" });
+          ? Response.json({ id: "site-2", name: NAMED_BY_NETLIFY, ssl_url: addressOf(NAMED_BY_NETLIFY) })
+          : Response.json({ id: "site-1", name, ssl_url: addressOf(name), url: addressOf(name) });
       }
       if (request.method === "POST" && path.endsWith("/deploys")) {
         const offered = JSON.parse(new TextDecoder().decode(body)) as { files: Record<string, string> };
@@ -80,5 +101,5 @@ export function netlifySaying(options: {
       return new Response("no such thing", { status: 404 });
     },
   });
-  return { endpoint: `http://localhost:${server.port}/api/v1`, asked, files, removed, recover: () => { refuses = undefined; }, stop: () => { void server.stop(true); } };
+  return { endpoint: `http://localhost:${server.port}/api/v1`, asked, files, removed, addressOf, visited, recover: () => { refuses = undefined; }, stop: () => { void server.stop(true); } };
 }

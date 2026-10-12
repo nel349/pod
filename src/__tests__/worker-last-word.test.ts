@@ -7,7 +7,7 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { agentEmail, branchFor } from "../door/index.ts";
 import { netlify } from "../hosting/index.ts";
 import { sealSpec, SERVE_THE_SITE, type Role, type Spec } from "../job.ts";
-import { approve, readJob, seatDeposit, seatPay, takeSeat, type Contract } from "../jobs.ts";
+import { approve, readJob, readSeats, seatDeposit, seatPay, takeSeat, type Contract } from "../jobs.ts";
 import { checksDigest, podJobsV2Abi, readReport, releaseLock } from "../jobsV2.ts";
 import { accept, putForward, readAgentRecord, readAnswerBy, readHowItEnded, readPosterRecord, readReviewBy, refuse } from "../jobsV3.ts";
 import { brevo, whenInAMail } from "../mail/index.ts";
@@ -112,6 +112,22 @@ async function onTheBranchOf(role: Role, agent: Agent, repository: string, commi
  * as the worker leaves it on approval, a pod seated, the work on the builder's branch and put forward
  * by its builder, and the seats named standing behind it: all of them, unless told otherwise.
  */
+/** A job paid for and opened on the contract by its poster, with its checks approved and every seat free. */
+async function paidForAndOpened(posterKey: Hex, seal: Hex): Promise<bigint> {
+  const poster = contractAs(posterKey);
+  const { request, result: onChainId } = await anvil.publicClient.simulateContract({
+    address: jobs, abi: podJobsV2Abi, functionName: "post", args: [HOUR, 1], value: PRICE + 3n * WRITING, account: privateKeyToAccount(posterKey),
+  });
+  await anvil.publicClient.waitForTransactionReceipt({ hash: await poster.wallet.writeContract(request) });
+  const writer = anvil.wallet(WRITER);
+  const signature = await writer.signMessage({ account: writer.account, message: { raw: checksDigest({ jobs, chainId: 31337, jobId: onChainId, seal }) } });
+  const opening = await anvil.publicClient.simulateContract({
+    address: jobs, abi: podJobsV2Abi, functionName: "approveChecks", args: [onChainId, seal, signature], account: privateKeyToAccount(posterKey),
+  });
+  await anvil.publicClient.waitForTransactionReceipt({ hash: await poster.wallet.writeContract(opening.request) });
+  return onChainId;
+}
+
 async function aJob(
   jobId: string, work: string | Readonly<Record<string, string>>, posterKey: Hex, behindIt: readonly Role[] = APPROVERS, pushedBy: Role = "builder",
 ): Promise<MadeJob> {
@@ -125,17 +141,8 @@ async function aJob(
     allowed: [], salt: jobId,
   };
   const poster = contractAs(posterKey);
-  const { request, result: onChainId } = await anvil.publicClient.simulateContract({
-    address: jobs, abi: podJobsV2Abi, functionName: "post", args: [HOUR, 1], value: PRICE + 3n * WRITING, account: privateKeyToAccount(posterKey),
-  });
-  await anvil.publicClient.waitForTransactionReceipt({ hash: await poster.wallet.writeContract(request) });
   const seal = await sealSpec(spec);
-  const writer = anvil.wallet(WRITER);
-  const signature = await writer.signMessage({ account: writer.account, message: { raw: checksDigest({ jobs, chainId: 31337, jobId: onChainId, seal }) } });
-  const opening = await anvil.publicClient.simulateContract({
-    address: jobs, abi: podJobsV2Abi, functionName: "approveChecks", args: [onChainId, seal, signature], account: privateKeyToAccount(posterKey),
-  });
-  await anvil.publicClient.waitForTransactionReceipt({ hash: await poster.wallet.writeContract(opening.request) });
+  const onChainId = await paidForAndOpened(posterKey, seal);
 
   const onChain = await readJob(poster, onChainId);
   const opened = await openJob(store, { jobId, seal, spec, endsAt: new Date(Number(onChain.endsAt) * 1000), seats: [] });
@@ -221,6 +228,24 @@ async function gasOf(hash: Hex): Promise<bigint> {
 }
 
 describe.skipIf(!available)("the worker, where the poster has the last word", () => {
+  test("a job's own poster is refused a seat on it, as the agent or as an agent's owner, and sits on somebody else's like anybody", async () => {
+    const posterKey = await aPoster();
+    const poster = addressOf(posterKey);
+    const onChainId = await paidForAndOpened(posterKey, `0x${"5e".repeat(32)}`);
+    // with their own key, in the cheapest seat
+    await expect(takeSeat(contractAs(posterKey), onChainId, "security", poster)).rejects.toThrow("PosterTakesNoSeat");
+    // and behind somebody else's key, named as its owner
+    const agent = await aPoster();
+    await expect(takeSeat(contractAs(agent), onChainId, "security", poster)).rejects.toThrow("PosterTakesNoSeat");
+    expect(await readSeats(reader(), onChainId)).toEqual([]);
+    // the same agent, owned by itself, is seated; and the poster takes a seat on that agent's own job
+    await takeSeat(contractAs(agent), onChainId, "security", addressOf(agent));
+    expect((await readSeats(reader(), onChainId)).map((seat) => seat.role)).toEqual(["security"]);
+    const theirs = await paidForAndOpened(agent, `0x${"5f".repeat(32)}`);
+    await takeSeat(contractAs(posterKey), theirs, "qa", poster);
+    expect((await readSeats(reader(), theirs)).map((seat) => seat.agent)).toEqual([poster]);
+  }, 120_000);
+
   test("work that passes is reported and nobody is paid: the job waits for its poster, with its evidence public", async () => {
     const said: string[] = [];
     const job = await aJob("last-word-delivered", WORKING, await aPoster());
@@ -356,7 +381,7 @@ describe.skipIf(!available)("the worker, where the poster has the last word", ()
       expect(record.signed?.receipt.verdict).toBe("passed");
       // no program of the pod's ran: its files were served by ours, and the receipt says how, for anybody repeating it
       expect(record.signed?.receipt.start).toBe(SERVE_THE_SITE);
-      expect(record.live).toMatchObject({ host: "Netlify", siteId: "site-1", url: "https://pod-a-coat.netlify.app" });
+      expect(record.live).toMatchObject({ host: "Netlify", siteId: "site-1", url: expect.stringContaining(host.addressOf("pod-last-word-website")) });
       expect(Object.fromEntries(host.files)).toEqual({
         "/index.html": `${A_WEBSITE["site/index.html"]}\n`, "/cards/mewtwo.html": `${A_WEBSITE["site/cards/mewtwo.html"]}\n`,
       });
@@ -432,7 +457,7 @@ describe.skipIf(!available)("the worker, where the poster has the last word", ()
       await Bun.sleep(1_500);
       await look();
       expect(deploysAsked()).toBe(3);
-      expect((await recordOf(job.jobId)).live).toMatchObject({ host: "Netlify", url: "https://pod-a-coat.netlify.app" });
+      expect((await recordOf(job.jobId)).live).toMatchObject({ host: "Netlify", url: expect.stringContaining(host.addressOf("pod-last-word-website-on-a-bad-day")) });
       expect(host.files.get("/index.html")).toBe(`${A_WEBSITE["site/index.html"]}\n`);
     } finally {
       host.stop();
