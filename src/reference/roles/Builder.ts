@@ -12,6 +12,7 @@ import { PORT, SITE_FOLDER, SITE_FRONT_PAGE, workFileFor, type Kind } from "../.
 import { JUDGES, MOST_REBUILDS, REFUSED } from "../protocol.ts";
 import { secondsNow } from "../../clock.ts";
 import { hasTriage, isWaiting } from "../../triage.ts";
+import { leadHasSpoken } from "./Asking.ts";
 import { ASKING_GRACE_SECONDS, briefFor, candidateBranchOf, candidateOf, passwordFor, settledFor, type Seated, type SeatWork } from "../Seated.ts";
 import { shortCommit } from "../../repo.ts";
 
@@ -58,9 +59,10 @@ export class Builder implements SeatWork {
   }
 
   /**
-   * Whether the first build should wait: on a job long enough for questions, while the pod still has
-   * its first minutes to ask, and then while any question waits on the poster. Each question's day
-   * ends by itself, so a poster who never answers holds the build a day and no longer.
+   * Whether the first build should wait: on a job long enough for questions, until the lead has put
+   * the pod's questions to the poster or said it has none, and then while any question waits on the
+   * poster. A lead that never comes holds the build its first half hour and no longer, and each
+   * question's day ends by itself, so a poster who never answers holds it a day and no longer.
    */
   private async isWaitingOnThePoster(): Promise<boolean> {
     const { seated } = this;
@@ -69,10 +71,10 @@ export class Builder implements SeatWork {
     this.firstLooked ??= now;
     const waiting = (await seated.server.questions(seated.job)).filter((question) => isWaiting(question, now));
     const isStillTimeToAsk = now - this.firstLooked < (seated.askingGraceSeconds ?? ASKING_GRACE_SECONDS);
-    if (waiting.length === 0 && !isStillTimeToAsk) return false;
+    if (waiting.length === 0 && (!isStillTimeToAsk || (await leadHasSpoken(seated)))) return false;
     const on = waiting.length > 0
       ? `${waiting.length === 1 ? "a question" : `${waiting.length} questions`} the pod asked the poster, until answered or ${new Date(Math.max(...waiting.map((question) => question.answerBy)) * 1000).toISOString()}`
-      : "the rest of the pod, which has a few minutes to ask the poster anything before the first build";
+      : "the lead, which gathers the pod's questions and puts them to the poster before the first build";
     if (this.saidWaitingOn !== on) seated.say(`not building yet: waiting on ${on}`);
     this.saidWaitingOn = on;
     return true;

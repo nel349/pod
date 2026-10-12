@@ -47,8 +47,10 @@ export interface ReferenceAgentOptions {
   /** the image QA runs the visible checks in: the one a verdict uses, unless told otherwise */
   readonly image?: string;
   readonly every?: number;
-  /** how long a builder leaves its pod to ask the poster anything on a job long enough for questions; left out, the usual */
+  /** how long a builder waits for its lead to ask the poster on a job long enough for questions; left out, the usual */
   readonly askingGraceSeconds?: number;
+  /** how long a lead leaves the other seats to raise their questions before it asks the poster; left out, the usual */
+  readonly gatheringSeconds?: number;
   /** take a seat on this job only, rather than the first with the role free */
   readonly jobId?: string;
   /**
@@ -94,6 +96,7 @@ export async function runReferenceAgent(options: ReferenceAgentOptions): Promise
     job, role: options.role, listed: taken, references: await server.references(taken), identity, server, copy,
     model: options.model, image: options.image ?? IMAGE, builderNames, say,
     ...(options.askingGraceSeconds === undefined ? {} : { askingGraceSeconds: options.askingGraceSeconds }),
+    ...(options.gatheringSeconds === undefined ? {} : { gatheringSeconds: options.gatheringSeconds }),
   };
   const work = workFor(seated);
   try {
@@ -117,7 +120,7 @@ export async function runReferenceAgent(options: ReferenceAgentOptions): Promise
   }
 }
 
-/** Every seat asks its poster what their words left open, where the job is long enough for that, and then does its own work. */
+/** Every seat does its part of asking the poster first, where the job is long enough for that: it raises its questions with the lead, or as the lead puts the pod's list to the poster. Then its own work. */
 function workFor(seated: Seated): SeatWork {
   return new Asking(seated, ownWorkFor(seated));
 }

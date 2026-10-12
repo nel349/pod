@@ -139,7 +139,7 @@ export const COPY = {
     modeSays: {
       flash: "One shot: the builders work from what you write here and what you point them at. They cannot ask you anything, so say all of it.",
       sprint: "One shot: the builders work from what you write here and what you point them at. They cannot ask you anything, so say all of it.",
-      project: "With questions: in the first two days each seat may ask you up to three questions a day, on the job's page. You have a day to answer each with your wallet. A question you leave is settled by what its seat said it would assume, and the work goes on.",
+      project: "With questions: in the first two days the team's lead may ask you up to five questions a day for the whole team, on the job's page. You have a day to answer each with your wallet. A question you leave is settled by what the team said it would assume, and the work goes on.",
     } satisfies Record<Mode, string>,
     name: "Its address on the wall",
     nameSays: "Made from your sentence. Change it if you like.",

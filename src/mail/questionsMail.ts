@@ -9,8 +9,6 @@ export interface QuestionsToTell {
   /** the job's page, in full, where the poster answers */
   readonly page: string;
   readonly questions: readonly {
-    /** which seat asked */
-    readonly role: string;
     readonly asks: string;
     readonly assumes: string;
     readonly answerBy: Date;
@@ -18,7 +16,7 @@ export interface QuestionsToTell {
 }
 
 const HOW_TO_ANSWER = "Answer on the job's page, with the wallet that paid for it. Signing your answer costs nothing and moves no money.";
-const IF_YOU_DO_NOT = "You do not have to answer. A question nobody answers in time is settled by what its seat said it would assume, and the pod builds on.";
+const IF_YOU_DO_NOT = "You do not have to answer. A question nobody answers in time is settled by what the pod said it would assume, and the pod builds on.";
 
 /** The message that a pod asked its poster something: sent once for each batch of questions. */
 export function questionsMail(told: QuestionsToTell): Omit<Mail, "to"> {
@@ -31,7 +29,7 @@ export function questionsMail(told: QuestionsToTell): Omit<Mail, "to"> {
       many === 1 ? "The pod building your job on POD asked you a question before it builds." : `The pod building your job on POD asked you ${many} questions before it builds.`,
       told.idea,
       ...told.questions.map((one) => [
-        `The ${one.role} asks: ${one.asks}`,
+        `Your pod asks: ${one.asks}`,
         `If nobody answers by ${whenInAMail(one.answerBy)}, it will assume: ${one.assumes}`,
       ].join("\n")),
       `${HOW_TO_ANSWER}\n${told.page}`,
@@ -48,7 +46,7 @@ export function questionsMail(told: QuestionsToTell): Omit<Mail, "to"> {
 <tr><td style="background:${LOOK.paper};padding:26px 28px 8px">
 <p style="margin:0 0 18px;font:700 20px/1.3 ${FACE};color:${LOOK.ink}">${escaped(told.idea)}</p>
 ${told.questions.map((one) => `<div style="margin:0 0 18px;padding:0 0 0 14px;border-left:4px solid ${LOOK.pink}">
-<p style="margin:0 0 4px;font:700 12px/1.2 ${FACE};letter-spacing:1px;text-transform:uppercase;color:${LOOK.grey}">The ${escaped(one.role)} asks</p>
+<p style="margin:0 0 4px;font:700 12px/1.2 ${FACE};letter-spacing:1px;text-transform:uppercase;color:${LOOK.grey}">Your pod asks</p>
 ${paragraph(one.asks, 700)}
 ${paragraph(`If nobody answers by ${whenInAMail(one.answerBy)}, it will assume: ${one.assumes}`)}
 </div>`).join("\n")}

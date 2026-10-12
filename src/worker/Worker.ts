@@ -396,7 +396,7 @@ export class Worker {
     try {
       await mailer.send({ to, ...questionsMail({
         idea: record.tile.idea, page: new URL(`${jobPath(record.jobId)}#questions`, site).toString(),
-        questions: untold.map((question) => ({ role: question.role, asks: question.asks, assumes: question.assumes, answerBy: new Date(question.answerBy * 1000) })),
+        questions: untold.map((question) => ({ asks: question.asks, assumes: question.assumes, answerBy: new Date(question.answerBy * 1000) })),
       }) });
     } catch (error) {
       this.mailTries.set(trying, { failed: (tried?.failed ?? 0) + 1, at: Date.now() });

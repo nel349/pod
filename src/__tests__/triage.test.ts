@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Note } from "../note.ts";
 import {
-  ANSWER_WITHIN_SECONDS, hasTriage, OPENING_SLACK_SECONDS, isWaiting, MOST_QUESTIONS_A_ROUND, openedAt, questionIn, questionNote, questionsOf, ROUND_SECONDS, roundAt, settledAs,
+  ANSWER_WITHIN_SECONDS, ASKS_THE_POSTER, hasTriage, OPENING_SLACK_SECONDS, isWaiting, MOST_QUESTIONS_A_ROUND, openedAt, questionIn, questionNote, questionsOf, raisedIn, raisedNote, ROUND_SECONDS, roundAt, settledAs,
   type TriageAnswer,
 } from "../triage.ts";
 
@@ -56,10 +56,21 @@ describe("triage: what a pod asks whoever posted a long job", () => {
     expect(found.map((one) => [one.asks, one.round])).toEqual([["Round one?", 1], ["Round two?", 2]]);
   });
 
-  test("a seat asks a few questions a round and no more, and another seat's are counted apart", () => {
+  test("the lead puts a few questions a round to the poster and no more; a question from any other seat is a note to its pod", () => {
     const many = Array.from({ length: MOST_QUESTIONS_A_ROUND + 2 }, (_, at) => asking(`Question ${at + 1}?`, OPENED + 100 + at));
-    const found = questionsOf(A_WEEK, [...many, asking("From another seat?", OPENED + 200, OTHER), asking("Next round?", OPENED + ROUND_SECONDS + 5)]);
-    expect(found.map((one) => one.asks)).toEqual(["Question 1?", "Question 2?", "Question 3?", "From another seat?", "Next round?"]);
+    const fromTheBuilder: Note = { ...asking("Straight from the builder?", OPENED + 200, OTHER), role: "builder" };
+    const found = questionsOf(A_WEEK, [...many, fromTheBuilder, asking("Next round?", OPENED + ROUND_SECONDS + 5)]);
+    expect(found.map((one) => one.asks)).toEqual([...Array.from({ length: MOST_QUESTIONS_A_ROUND }, (_, at) => `Question ${at + 1}?`), "Next round?"]);
+    expect(found.every((one) => one.role === ASKS_THE_POSTER)).toBe(true);
+  });
+
+  test("a seat raises a question with its lead in a form of its own, which is never read as a question to the poster", () => {
+    const says = raisedNote(" Is there a price list? ", " No list: example prices, marked as examples. ");
+    expect(raisedIn(says)).toEqual({ asks: "Is there a price list?", assumes: "No list: example prices, marked as examples." });
+    expect(questionIn(says)).toBeUndefined();
+    expect(raisedIn(questionNote("A real mint?", "A mock-up."))).toBeUndefined();
+    expect(raisedIn("Builder, keep the pages small.")).toBeUndefined();
+    expect(questionsOf(A_WEEK, [note(says, OPENED + 100)])).toEqual([]);
   });
 
   test("the poster has a day from when it was asked; an answer is kept with its question, and silence leaves the assumption standing", () => {

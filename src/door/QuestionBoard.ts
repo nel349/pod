@@ -68,7 +68,7 @@ export class QuestionBoard {
     const now = secondsNow();
     if (Math.abs(answer.at - now) > NOTE_CLOCK_SLACK_SECONDS) return Response.json({ why: "that answer's time is not now" }, { status: 400 });
     if (now >= question.answerBy) {
-      return Response.json({ why: `the day to answer that question ended at ${new Date(question.answerBy * 1000).toISOString()}: its seat has gone on with what it said it would assume` }, { status: 403 });
+      return Response.json({ why: `the day to answer that question ended at ${new Date(question.answerBy * 1000).toISOString()}: its pod has gone on with what it said it would assume` }, { status: 403 });
     }
 
     let signer: Address;

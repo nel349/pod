@@ -278,7 +278,7 @@ describe.skipIf(!available)("the worker, where the poster has the last word", ()
       const [message] = mail.sent;
       expect(message?.to).toBe("the-poster@example.com");
       expect(message?.subject).toBe("Your pod has 2 questions: A shop for a bakery");
-      expect(message?.text).toContain("The lead asks: Should the shop take payment, or only show the bread?");
+      expect(message?.text).toContain("Your pod asks: Should the shop take payment, or only show the bread?");
       expect(message?.text).toContain("it will assume: Every day but Monday.");
       expect(message?.text).toContain("https://pod.example/job/last-word-questions-by-mail#questions");
       expect(message?.html).toContain("Which days is the bakery open?");

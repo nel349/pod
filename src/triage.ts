@@ -2,10 +2,13 @@
  * Triage: what a pod asks whoever posted a long job before it builds, and what they answer.
  *
  * A job of two hours or a day is one shot: the pod builds from what it was given. A job of a week has
- * room to ask. A seat asks by writing a note in a fixed form, signed like any note, so who asked is
- * checkable by anybody. Its poster answers on the job's page with their own wallet, so every seat reads
- * the same answer and it stays on the record. Each question says what the seat will assume if nobody
- * answers, and after a day it goes on assuming it: a poster who is away holds nothing up.
+ * room to ask, and it asks the way a team does. Every seat raises what it needs to know with the lead,
+ * in a note to the pod. The lead is the pod's one voice to the poster: it gathers what was raised,
+ * drops what is asked twice or what the pod can decide for itself, and puts one short list to the
+ * poster, each question in a fixed form, signed like any note, so who asked is checkable by anybody.
+ * The poster answers on the job's page with their own wallet, so every seat reads the same answer and
+ * it stays on the record. Each question says what the pod will assume if nobody answers, and after a
+ * day it goes on assuming it: a poster who is away holds nothing up.
  *
  * Nothing here reads a clock, a disk or a chain: it says what a note is and what the rules are.
  */
@@ -22,13 +25,32 @@ export const TRIAGE_ROUNDS = 2;
 export const ROUND_SECONDS = 24 * 60 * 60;
 /** How long a poster has to answer a question, from when it was asked. After it, the seat goes on with what it said it would assume. */
 export const ANSWER_WITHIN_SECONDS = 24 * 60 * 60;
-/** How many questions one seat may ask in one round: enough to settle what matters, too few to bury a poster. */
-export const MOST_QUESTIONS_A_ROUND = 3;
+/** The seat whose questions go to the poster: the one that answers for the whole job. Every other seat raises its own with it. */
+export const ASKS_THE_POSTER: Role = "lead";
+/** How many questions the lead may put to the poster in one round: one short list, enough to settle what matters, too few to bury them. */
+export const MOST_QUESTIONS_A_ROUND = 5;
+/** How many questions one seat raises with its lead in a round. Not enforced by a door: it is what a seat is asked to keep to. */
+export const MOST_RAISED_A_ROUND = 3;
 export const LONGEST_ANSWER = 2000;
 
 /** The two lines a question's note is written with, so a question is told from any other note by its form alone. */
 export const ASKS = "Question for whoever posted this job:";
 export const ASSUMES = "If nobody answers within a day, I will assume:";
+
+/** The line a seat's note to its lead starts with when it raises a question for the poster. The second line is shared with a question's. */
+export const RAISES = "For the lead to put to whoever posted this job:";
+/** What a lead writes to its pod when it has read the brief and what was raised, and puts nothing to the poster. */
+export const NOTHING_TO_ASK = "Nothing to ask whoever posted this job:";
+
+/** A note's words for a question raised with the lead, and the assumption it falls back on. */
+export function raisedNote(asks: string, assumes: string): string {
+  return `${RAISES}\n${asks.trim()}\n${ASSUMES}\n${assumes.trim()}`;
+}
+
+/** The question and the assumption in a note raised with the lead, or nothing when it is not written as one. */
+export function raisedIn(says: string): { readonly asks: string; readonly assumes: string } | undefined {
+  return says.startsWith(`${RAISES}\n`) ? questionIn(`${ASKS}${says.slice(RAISES.length)}`) : undefined;
+}
 
 /** A note's words for a question and the assumption it falls back on. */
 export function questionNote(asks: string, assumes: string): string {
@@ -106,8 +128,9 @@ export function roundAt(job: { readonly mode: Mode; readonly endsAt: Date }, at:
 
 /**
  * The questions among a job's notes, in the order they were asked, each with its answer if it has one.
- * A note counts as a question only on a job long enough to have them, written as one, inside a round,
- * and among its seat's first few in that round: anything else is an ordinary note, and no answer is owed.
+ * A note counts as a question only on a job long enough to have them, from the lead's seat, written
+ * as one, inside a round, and among the lead's first few in that round: anything else is an ordinary
+ * note, and no answer is owed. Which seat a note is from is what the notes door checked when it took it.
  */
 export function questionsOf(
   job: { readonly mode: Mode; readonly endsAt: Date },
@@ -120,7 +143,7 @@ export function questionsOf(
   for (const note of notes) {
     const said = questionIn(note.says);
     const round = roundAt(job, note.at);
-    if (!said || round === undefined) continue;
+    if (!said || round === undefined || note.role !== ASKS_THE_POSTER) continue;
     const seat = `${note.agent.toLowerCase()}:${round}`;
     const already = asked.get(seat) ?? 0;
     if (already >= MOST_QUESTIONS_A_ROUND) continue;

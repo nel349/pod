@@ -14,10 +14,12 @@ import { ANVIL_KEYS, anvilAvailable } from "./support/anvil.ts";
 import { aPod, aPodServer, type RunningPodServer } from "./support/podServer.ts";
 
 /**
- * A week's job, where a pod may ask before it builds: every seat with a model reads the brief and may
- * ask its poster, each shown what the others asked; the builder holds its first build while a question
- * waits, the poster answers with the wallet that paid, and the builder then builds from the answers. The two models are scripted; the contract on a
- * local chain, the doors, the signatures and git are real.
+ * A week's job, where a pod asks before it builds, the way a team does: the builder raises what it
+ * needs with the lead, the lead gathers what was raised and puts one list to the poster, the builder
+ * holds its first build while a question waits, the poster answers with the wallet that paid, and the
+ * builder then builds from the answers. And where the lead finds nothing to ask, it says so and
+ * nobody waits. The models are scripted; the contract on a local chain, the doors, the signatures
+ * and git are real.
  */
 
 const available = await anvilAvailable();
@@ -39,14 +41,25 @@ const BUILDER_ASSUMES = "No list: six common breads with example prices, marked 
 const BUILDER_ANSWER = "Use sourdough at 6, rye at 5 and baguette at 3.";
 
 const pod = aPod();
+const quietPod = aPod();
 let running: RunningPodServer | undefined;
+/** a second job, on a server of its own, whose lead finds nothing to ask */
+let quiet: RunningPodServer | undefined;
 
 beforeAll(async () => {
   if (!available) return;
-  running = await aPodServer({ jobId: JOB, spec: SPEC, files: { "check-1.mjs": "process.exit(0)" }, fund: Object.values(pod), hours: HOURS_IN_A_WEEK, lastWordWithin: 3600n });
-}, 120_000);
+  const files = { "check-1.mjs": "process.exit(0)" };
+  running = await aPodServer({ jobId: JOB, spec: SPEC, files, fund: Object.values(pod), hours: HOURS_IN_A_WEEK, lastWordWithin: 3600n });
+  quiet = await aPodServer({ jobId: JOB, spec: SPEC, files, fund: Object.values(quietPod), hours: HOURS_IN_A_WEEK, lastWordWithin: 3600n });
+}, 240_000);
 
-afterAll(() => running?.stop());
+afterAll(() => {
+  running?.stop();
+  quiet?.stop();
+});
+
+/** which of its two jobs a seat's model is being asked to do */
+const isAsking = (prompt: string): boolean => prompt.includes("Reply with a JSON list");
 
 async function until(what: string, said: readonly string[], done: () => Promise<boolean>, seconds = 120): Promise<void> {
   const deadline = Date.now() + seconds * 1000;
@@ -70,20 +83,20 @@ describe("the questions in a model's answer", () => {
 });
 
 describe.skipIf(!available)("a week's job, where the pod asks before it builds", () => {
-  test("every seat asks the poster from where it sits, the builder waits for the answers, and builds from them once they are given", async () => {
+  test("the builder raises its question with the lead, the lead puts the pod's one list to the poster, and the builder builds from the answers once they are given", async () => {
     const pod$ = running!;
     const said: string[] = [];
     const builderRead: string[] = [];
-    const builderAsked: string[] = [];
+    const leadGathered: string[] = [];
     const models: Partial<Record<Role, Model>> = {
-      // the lead's model is asked twice over a job: what to ask, and later whether the work answers the brief
-      lead: async (prompt) => (prompt.includes("Reply with a JSON list") ? JSON.stringify([{ asks: ASKS, assumes: ASSUMES }]) : "APPROVE it lists the bread"),
-      // the builder asks too, from its own seat, and is shown what the lead already asked
+      // the lead is asked what to put to the poster, shown what its team raised, and later whether the work answers the brief
+      lead: async (prompt) => {
+        if (!isAsking(prompt)) return "APPROVE it lists the bread";
+        leadGathered.push(prompt);
+        return JSON.stringify([{ asks: ASKS, assumes: ASSUMES }, { asks: BUILDER_ASKS, assumes: BUILDER_ASSUMES }]);
+      },
       builder: async (prompt) => {
-        if (prompt.includes("Reply with a JSON list")) {
-          builderAsked.push(prompt);
-          return JSON.stringify([{ asks: BUILDER_ASKS, assumes: BUILDER_ASSUMES }]);
-        }
+        if (isAsking(prompt)) return JSON.stringify([{ asks: BUILDER_ASKS, assumes: BUILDER_ASSUMES }]);
         builderRead.push(prompt);
         return `\`\`\`html\n${THE_PAGE}\n\`\`\``;
       },
@@ -91,27 +104,28 @@ describe.skipIf(!available)("a week's job, where the pod asks before it builds",
     const stop = new AbortController();
     const outOfTime = AbortSignal.any([stop.signal, AbortSignal.timeout(240_000)]);
     const seated = (role: Role): Promise<Finished> => runReferenceAgent({
-      server: pod$.base, key: pod[role].key, role, model: models[role], image: IMAGE, every: 250, signal: outOfTime, askingGraceSeconds: 0,
+      server: pod$.base, key: pod[role].key, role, model: models[role], image: IMAGE, every: 250, signal: outOfTime, gatheringSeconds: 4,
       say: (what) => said.push(what),
     });
     const questions = async (): Promise<readonly Question[]> =>
       ((await (await fetch(`${pod$.base}${questionsPath(JOB)}`)).json()) as { questions: Question[] }).questions;
 
-    const lead = seated("lead");
-    await until("the lead asking its question", said, async () => (await questions()).length > 0);
-    const [question] = await questions();
-    expect(question).toMatchObject({ role: "lead", asks: ASKS, assumes: ASSUMES, round: 1 });
-    expect(said).toContain("[lead] asked the poster a question before the work starts");
-
-    // the builder sits down with a question waiting: it asks its own, from its own seat, and writes nothing
+    // the builder raises its question inside the pod: nothing reaches the poster from its seat
     const builder = seated("builder");
-    await until("the builder saying it waits", said, async () => said.some((line) => line.startsWith("[builder] not building yet: waiting on 2 questions the pod asked the poster")));
-    await Bun.sleep(1500);
+    await until("the builder raising its question", said, async () => said.includes("[builder] raised a question with the lead, for its poster"));
+    expect(await questions(), "a question raised with the lead is not yet a question to the poster").toEqual([]);
+    await until("the builder saying it waits for its lead", said, async () => said.some((line) => line.startsWith("[builder] not building yet: waiting on the lead")));
+
+    // the lead gathers what was raised, and puts one list to the poster in its own name
+    const lead = seated("lead");
+    await until("the lead putting the list to the poster", said, async () => (await questions()).length === 2);
+    expect(leadGathered[0]).toContain(`- builder: ${BUILDER_ASKS} (it would assume: ${BUILDER_ASSUMES})`);
+    expect(said).toContain("[lead] put 2 questions to the poster for the pod, before the work starts");
+    const asked = await questions();
+    expect(asked.map((one) => [one.role, one.asks])).toEqual([["lead", ASKS], ["lead", BUILDER_ASKS]]);
+
+    await until("the builder saying it waits for the answers", said, async () => said.some((line) => line.startsWith("[builder] not building yet: waiting on 2 questions the pod asked the poster")));
     expect(builderRead, "its model is not asked to build anything while questions wait").toHaveLength(0);
-    expect(builderAsked[0], "it is shown what was already asked, so the poster is not asked twice").toContain(`- lead: ${ASKS}`);
-    expect(builderAsked[0]).toContain("which contract, service, account or data to use");
-    const builders = (await questions()).find((one) => one.role === "builder");
-    expect(builders).toMatchObject({ asks: BUILDER_ASKS, assumes: BUILDER_ASSUMES });
 
     // the poster answers each, with the wallet that paid for the job
     const poster = privateKeyToAccount(POSTER);
@@ -122,20 +136,49 @@ describe.skipIf(!available)("a week's job, where the pod asks before it builds",
         method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ question: to, says, at, poster: poster.address, signature }),
       })).status;
     };
-    expect(await answer(question!.id, ANSWER)).toBe(201);
+    expect(await answer(asked[0]!.id, ANSWER)).toBe(201);
     await Bun.sleep(1500);
     expect(builderRead, "one answer of two is not enough to start on").toHaveLength(0);
-    expect(await answer(builders!.id, BUILDER_ANSWER)).toBe(201);
+    expect(await answer(asked[1]!.id, BUILDER_ANSWER)).toBe(201);
 
     await until("the builder putting its work forward", said, async () => said.some((line) => /^\[builder\] put [0-9a-f]+ forward/.test(line)));
     expect(builderRead[0]).toContain(`Asked: ${ASKS}\nThe poster answered: ${ANSWER}`);
     expect(builderRead[0]).toContain(`Asked: ${BUILDER_ASKS}\nThe poster answered: ${BUILDER_ANSWER}`);
     expect(builderRead[0]).toContain("Hold the work to their answers as to their first words");
     expect((await readJob(pod$.reading, pod$.onChainId)).state).toBe("working");
-    // each seat asked once: looking again, and again, asks nothing more
+    // the lead asked once: looking again, and again, asks nothing more
     expect(await questions()).toHaveLength(2);
 
     stop.abort();
     await Promise.all([lead, builder]);
+  }, 300_000);
+
+  test("a lead that finds nothing to ask says so to its pod, and the builder builds at once", async () => {
+    const pod$ = quiet!;
+    const said: string[] = [];
+    const built: string[] = [];
+    const models: Partial<Record<Role, Model>> = {
+      lead: async (prompt) => (isAsking(prompt) ? "[]" : "APPROVE it lists the bread"),
+      builder: async (prompt) => {
+        if (isAsking(prompt)) return "[]";
+        built.push(prompt);
+        return `\`\`\`html\n${THE_PAGE}\n\`\`\``;
+      },
+    };
+    const stop = new AbortController();
+    const outOfTime = AbortSignal.any([stop.signal, AbortSignal.timeout(240_000)]);
+    const seated = (role: Role): Promise<Finished> => runReferenceAgent({
+      server: pod$.base, key: quietPod[role].key, role, model: models[role], image: IMAGE, every: 250, signal: outOfTime, gatheringSeconds: 2,
+      say: (what) => said.push(what),
+    });
+    const agents = [seated("builder"), seated("lead")];
+    await until("the builder putting its work forward", said, async () => said.some((line) => /^\[builder\] put [0-9a-f]+ forward/.test(line)));
+    expect(said).toContain("[builder] read the brief and raised nothing for its poster");
+    expect(said).toContain("[lead] read the brief and what the pod raised, and put nothing to its poster");
+    expect(((await (await fetch(`${pod$.base}${questionsPath(JOB)}`)).json()) as { questions: Question[] }).questions).toEqual([]);
+    expect(built[0]).not.toContain("The pod asked the person");
+
+    stop.abort();
+    await Promise.all(agents);
   }, 300_000);
 });

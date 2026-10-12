@@ -10,7 +10,7 @@ import type { Role } from "../job.ts";
 import type { HeldSeat } from "../jobs.ts";
 import { bytes32ToCommit } from "../repo.ts";
 import { secondsNow } from "../clock.ts";
-import { hasTriage, isWaiting, questionNote, settledAs } from "../triage.ts";
+import { hasTriage, isWaiting, questionNote, raisedNote, settledAs } from "../triage.ts";
 import type { Identity, JobRef } from "./Identity.ts";
 import type { PodServer } from "./PodServer.ts";
 import type { WorkingCopy } from "./WorkingCopy.ts";
@@ -34,15 +34,28 @@ export interface Seated {
    * lead by bringing it into its branch: the contract's rule, read from it when the seat was taken
    */
   readonly builderNames: boolean;
-  /** how long a builder on a job long enough for questions leaves its pod to ask before it builds; left out, the usual */
+  /** how long a builder on a job long enough for questions leaves its lead to ask the poster before it builds; left out, the usual */
   readonly askingGraceSeconds?: number;
+  /** how long a lead leaves the other seats to raise their questions before it puts the pod's list to the poster; left out, the usual */
+  readonly gatheringSeconds?: number;
   readonly say: (what: string) => void;
 }
 
-/** How long a builder leaves the rest of its pod to ask the poster anything, on a job long enough for questions, before it builds from what it has. */
-export const ASKING_GRACE_SECONDS = 15 * 60;
+/** How long a lead leaves the other seats to raise their questions, on a job long enough for them, before it puts the pod's list to the poster. */
+export const GATHERING_SECONDS = 10 * 60;
+/**
+ * How long a builder waits for its lead to put the pod's questions to the poster, or to say it has
+ * none, before it builds from what it has: the lead's gathering and its thinking, and no longer, so a
+ * lead that never comes holds nothing up.
+ */
+export const ASKING_GRACE_SECONDS = 30 * 60;
 
-/** A seat's question to whoever posted the job, signed and sent as a note in the form every door reads as one. */
+/** A seat's question for the poster, raised with its lead: a note to the pod in the form a lead gathers them by. */
+export async function raiseWithTheLead(seated: Seated, asks: string, assumes: string): Promise<void> {
+  await seated.server.writeNote(seated.job, await seated.identity.note(seated.job, seated.role, raisedNote(plainDashes(asks), plainDashes(assumes))));
+}
+
+/** The lead's question to whoever posted the job, signed and sent as a note in the form every door reads as one. */
 export async function askThePoster(seated: Seated, asks: string, assumes: string): Promise<void> {
   await seated.server.writeNote(seated.job, await seated.identity.note(seated.job, seated.role, questionNote(plainDashes(asks), plainDashes(assumes))));
 }
