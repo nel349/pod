@@ -52,6 +52,17 @@ export const COPY = {
     } satisfies Record<(typeof OFFERED_KINDS)[number], { readonly name: string; readonly says: string }>,
   },
 
+  /** what a poster points the pod at: a picture of what they want, a document, a file of data */
+  references: {
+    title: "Anything to point them at?",
+    optional: "(optional)",
+    placeholder: "https://example.com/the-sketch.png",
+    says: "Links to a picture, a PDF or a text file, one to a line, at most five. POD fetches each one now and gives every agent the same file. It cannot open Figma, or anything that needs signing in: export a picture and link that.",
+    reading: "Reading your links…",
+    notAsked: (why: string) => `Your links could not be read just now: ${why}`,
+    kept: (type: string, bytes: number) => `can be read: ${type}, ${bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`}`,
+    refused: (why: string) => `cannot be used: ${why}`,
+  },
   brief: {
     title: "The brief",
     guide: "What the builders are told it must do. One thing to a line, the way you would check it yourself. They build what these lines say and nothing more, so add as much detail as you want: a real wallet, a real payment, signing in, anything saved between visits. If it matters to you and no line says it, it may be left out or only look real.",
@@ -124,6 +135,12 @@ export const COPY = {
     price: "What you pay",
     modeLegend: "How long the builders have",
     modes: { flash: "Two hours", sprint: "A day", project: "A week" } satisfies Record<Mode, string>,
+    /** what each length means for the poster: whether the pod builds from what it is given, or may ask first */
+    modeSays: {
+      flash: "One shot: the builders work from what you write here and what you point them at. They cannot ask you anything, so say all of it.",
+      sprint: "One shot: the builders work from what you write here and what you point them at. They cannot ask you anything, so say all of it.",
+      project: "With questions: in the first two days each seat may ask you up to three questions a day, on the job's page. You have a day to answer each with your wallet. A question you leave is settled by what its seat said it would assume, and the work goes on.",
+    } satisfies Record<Mode, string>,
     name: "Its address on the wall",
     nameSays: "Made from your sentence. Change it if you like.",
     namePlaceholder: "a-coat-or-not",
@@ -264,6 +281,7 @@ export const COPY = {
     price: "the price is more than nothing",
     name: "its address on the wall is lower-case letters, numbers and dashes",
     tell: "that does not look like an email address: leave it empty if you would rather not be told",
+    references: "each reference is a link, one to a line",
     noLines: "say at least one thing that would prove it works",
     tooManyLines: `at most ${MOST_STATEMENTS} things, so each one is checked properly`,
     notWritten: `write the checks first, in step ${stepNumber("checks")}`,

@@ -4,10 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTestClient, http, parseEther, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { sealSpec, type Role, type Spec } from "../job.ts";
+import { MODES, sealSpec, type Mode, type Role, type Spec } from "../job.ts";
 import { approve, readJob, seatDeposit, seatPay, takeSeat, type Contract } from "../jobs.ts";
 import { checksDigest, podJobsV2Abi } from "../jobsV2.ts";
 import { putForward, readAnswerBy, readHowItEnded, report, REFUSAL_SHARE_PERCENT, REVIEW_SHARE_PERCENT, readAnswerTime, readRefusalShare, readReviewShare } from "../jobsV3.ts";
+import { noteMessage } from "../messages.ts";
 import { openJob } from "../publish.ts";
 import { signReceipt } from "../receipt.ts";
 import { commitToBytes32 } from "../repo.ts";
@@ -19,6 +20,7 @@ import { serve } from "../server.ts";
 import { servicesFor } from "../services.ts";
 import type { Services } from "../server.ts";
 import { JobStore } from "../store.ts";
+import { questionNote } from "../triage.ts";
 import { agentAnsweredWords, agentRecordWords, inCoins, posterRecordWords, SITE, type LastWord } from "../web/site/copy.ts";
 import { BEAT_MS, exampleMoney } from "../web/site/pages/welcome/story.ts";
 import { keptOnRefusal, paidOnAcceptance } from "../web/site/views/index.ts";
@@ -112,11 +114,11 @@ async function anOpenJob(jobId: string): Promise<{ readonly jobId: string; reado
 }
 
 /** A job its poster paid for and whose checks they approved, with the writer's signature, as the page does it. */
-async function paidAndApproved(jobId: string): Promise<{ readonly onChainId: bigint; readonly seal: Hex; readonly spec: Spec }> {
-  const spec: Spec = { ...SPEC, salt: jobId };
+async function paidAndApproved(jobId: string, mode: Mode = "flash"): Promise<{ readonly onChainId: bigint; readonly seal: Hex; readonly spec: Spec }> {
+  const spec: Spec = { ...SPEC, mode, salt: jobId };
   const poster = contractAs(POSTER);
   const { request, result: onChainId } = await anvil.publicClient.simulateContract({
-    address: jobs, abi: podJobsV2Abi, functionName: "post", args: [HOUR, 1], value: PRICE + 3n * WRITING, account: privateKeyToAccount(POSTER),
+    address: jobs, abi: podJobsV2Abi, functionName: "post", args: [mode === "flash" ? HOUR : BigInt(MODES[mode].windowMinutes * 60), 1], value: PRICE + 3n * WRITING, account: privateKeyToAccount(POSTER),
   });
   await anvil.publicClient.waitForTransactionReceipt({ hash: await poster.wallet.writeContract(request) });
   const seal = await sealSpec(spec);
@@ -452,5 +454,52 @@ describe.skipIf(!available)("a poster answers a delivery from a browser", () => 
     await page.until(`document.querySelector("#no-seat-for-you")`, "the poster to be told the seats are not theirs");
     expect(await text(page, "#no-seat-for-you")).toBe(SITE.job.noSeatOnYourOwn);
     expect(await page.evaluate<boolean>(`document.querySelector(".send-an-agent") === null`)).toBe(true);
+  }, 180_000);
+
+  // after the test above, which counts on the jobs its poster had posted until then
+  test("on a week's job the poster reads what the pod asked, answers with their own wallet, and the answer is on the page for everybody; anybody else is told whose it is to answer", async () => {
+    const jobId = "a-coat-with-questions";
+    const { onChainId, seal, spec } = await paidAndApproved(jobId, "project");
+    const onChain = await readJob(contractAs(POSTER), onChainId);
+    const opened = await openJob(store, { jobId, seal, spec, endsAt: new Date(Number(onChain.endsAt) * 1000), seats: [] });
+    await store.save({ ...opened, poster: POSTED_BY, chain: { network: "monad-testnet", jobId: String(onChainId), jobs, lastWord: true } });
+    const lead = aPod().lead;
+    await anvil.fund(lead.address);
+    await takeSeat(contractAs(lead.key), onChainId, "lead", lead.address);
+    const ASKS = "Should it say to take a coat for drizzle, or only for real rain?";
+    const ASSUMES = "Only for real rain.";
+    const says = questionNote(ASKS, ASSUMES);
+    // by the chain's clock, which the tests above moved on: the job opened by it, and a round is counted from there
+    const at = Number((await anvil.publicClient.getBlock()).timestamp);
+    const signature = await privateKeyToAccount(lead.key).signMessage({ message: noteMessage({ jobId, onChainId: String(onChainId), jobs, role: "lead", about: undefined, says, at }) });
+    await store.addNote(jobId, { agent: lead.address, role: "lead", says, at, signature });
+
+    // somebody else's wallet: the question, what will be assumed, and whose it is to answer
+    const theirs = await openTheJob(jobId, privateKeyToAccount(STRANGER).address);
+    await theirs.until(`document.querySelector("#questions .question")`, "the question to be shown");
+    expect(await text(theirs, "#questions .question-asks")).toBe(ASKS);
+    expect(await text(theirs, "#questions .question-assumes")).toBe(`${SITE.job.questions.willAssume} ${ASSUMES}`);
+    expect(await text(theirs, "#questions")).toContain(SITE.job.questions.whoAnswers);
+    expect(await theirs.evaluate<boolean>(`document.querySelector("#questions textarea") === null`)).toBe(true);
+    await theirs.stop();
+
+    // its poster's: a box to answer in, and a signature that costs nothing
+    const page = await openTheJob(jobId, POSTED_BY);
+    await page.until(`document.querySelector("#questions textarea")`, "the box the poster answers in");
+    expect(await page.evaluate<boolean>(`document.querySelector("#questions .answer-question").disabled`), "nothing to send until something is written").toBe(true);
+    await photograph(page, "question-asked");
+    const balanceBefore = await balance(POSTED_BY);
+    await page.type("#questions textarea", "For drizzle too.");
+    await page.click("#questions .answer-question");
+    await page.until(`document.querySelector("#questions .question-answered")`, "the answer to be shown on the page", 60, `document.querySelector("#questions")?.innerText ?? ""`);
+    expect(await text(page, "#questions .question-answered")).toBe(`${SITE.job.questions.answered} For drizzle too.`);
+    expect(await page.evaluate<boolean>(`document.querySelector("#questions textarea") === null`), "an answer is given once").toBe(true);
+    expect(await balance(POSTED_BY), "signing an answer moves no money and costs no gas").toBe(balanceBefore);
+    expect((await store.answers(jobId)).map((one) => one.says)).toEqual(["For drizzle too."]);
+    await photograph(page, "question-answered");
+    // the page never scrolls sideways on a phone with a question on it
+    await page.resize(390, 844);
+    expect(await page.evaluate<boolean>(`document.documentElement.scrollWidth <= window.innerWidth`)).toBe(true);
+    await photograph(page, "question-answered-phone");
   }, 180_000);
 });

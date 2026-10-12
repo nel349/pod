@@ -20,7 +20,7 @@ import { firstLine } from "./errors.ts";
 import { chainJobToTheWire } from "./chainJob.ts";
 import { JOBS_FOLDER_SETTING } from "./folders.ts";
 import type { Claims } from "./claims.ts";
-import type { CreditDoor, GitDoor, IdentityDoor, JobList, NoteBoard } from "./door/index.ts";
+import { PerMinute, type CreditDoor, type GitDoor, type IdentityDoor, type JobList, type NoteBoard, type QuestionBoard } from "./door/index.ts";
 import { renderCard } from "./card.ts";
 import { isCodePublic, isPublished, JobStore, publicRecord } from "./store.ts";
 import { cardPath, checkFilePath, isSafeName, isWallName, jobPath, preparingPath, QUERY, RECEIPT_FILE, ROUTES, WRITINGS, writingPath } from "./routes.ts";
@@ -80,6 +80,7 @@ export interface Services {
   readonly door?: GitDoor;
   /** what the seats of a job say to each other */
   readonly notes?: NoteBoard;
+  readonly questions?: QuestionBoard;
   /** where a seat says which ERC-8004 identity is its own */
   readonly identities?: IdentityDoor;
   /** the open jobs, for agents looking for work */
@@ -105,9 +106,12 @@ const postStyle = new URL("./web/post/post.css", import.meta.url);
 const refundStyle = new URL("./web/refund/refund.css", import.meta.url);
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const guide = new URL("../public/llms.txt", import.meta.url);
+/** How many times a minute, for everybody together, links are read for a poster who has not paid yet. Each asking fetches up to a handful of files from elsewhere. */
+export const REFERENCE_READS_A_MINUTE = 30;
+const referenceReads = new PerMinute(REFERENCE_READS_A_MINUTE);
 const MARKDOWN = { "content-type": "text/markdown; charset=utf-8" } as const;
 
-export async function handle(request: Request, store: JobStore, { site, market, door, notes, identities, jobList, credit, claims, owners, agents, preparing, records }: Services = {}): Promise<Response> {
+export async function handle(request: Request, store: JobStore, { site, market, door, notes, questions, identities, jobList, credit, claims, owners, agents, preparing, records }: Services = {}): Promise<Response> {
   const { pathname } = new URL(request.url);
   const page = (head: Head, drawn: SitePage, status = 200): Response => {
     const data: SiteData = {
@@ -128,6 +132,9 @@ export async function handle(request: Request, store: JobStore, { site, market, 
   if (pathname.startsWith(ROUTES.identity)) {
     return identities ? await identities.handle(request) : Response.json({ why: "identities are not recorded on this server" }, { status: 404 });
   }
+  if (pathname.startsWith(ROUTES.questions)) {
+    return questions ? await questions.handle(request) : Response.json({ why: "questions are not open on this server" }, { status: 404 });
+  }
   if (pathname.startsWith(ROUTES.notes)) {
     return notes ? await notes.handle(request) : Response.json({ why: "notes are not open on this server" }, { status: 404 });
   }
@@ -139,6 +146,38 @@ export async function handle(request: Request, store: JobStore, { site, market, 
   }
 
   // a job paid for and being prepared: only its poster sets it up, reads it and asks for its checks
+  if (pathname === ROUTES.references) {
+    if (!preparing) return Response.json({ why: "this server prepares no jobs, so it reads no references" }, { status: 404 });
+    if (request.method !== "POST") return Response.json({ why: "the links are sent, as a list" }, { status: 405 });
+    // anybody may ask before paying, so the asking is rationed for everybody together: this door fetches from other people's servers
+    if (!referenceReads.allow("everybody")) return Response.json({ why: "too many links are being read just now: try again in a minute" }, { status: 429 });
+    const body = await bodyWithin(request, MOST_A_REQUEST_TO_WRITE_MAY_WEIGH);
+    if (body === undefined) return tooLarge("that is longer than a few links should be");
+    let links: unknown;
+    try {
+      links = JSON.parse(body);
+    } catch {
+      return Response.json({ why: "that is not JSON" }, { status: 400 });
+    }
+    const read = await preparing.readReferences(links);
+    return read.ok ? Response.json(read.value, { headers: NO_STORE }) : Response.json({ why: read.why }, { status: read.status });
+  }
+
+  if (pathname.startsWith(ROUTES.reference)) {
+    const [jobId = "", name = "", ...more] = pathname.slice(ROUTES.reference.length).split("/");
+    const record = more.length === 0 && isSafeName(jobId) ? await store.read(jobId) : undefined;
+    const kept = record?.chain && preparing ? await preparing.reference({ onChainId: record.chain.jobId, jobId }, name) : undefined;
+    if (!kept) return missing(`no reference called ${name} on a job called ${jobId}`);
+    // a stranger's file, served from the address the wallet lives at: named as exactly what it was kept as,
+    // never guessed at by the browser, never run, never laid out as a page, and never able to ask for anything
+    return new Response(kept.bytes, { headers: {
+      "content-type": kept.type.startsWith("text/") || kept.type === "application/json" ? "text/plain; charset=utf-8" : kept.type,
+      "x-content-type-options": "nosniff",
+      "content-security-policy": "default-src 'none'; sandbox",
+      "cache-control": "public, max-age=31536000, immutable",
+    } });
+  }
+
   if (pathname === ROUTES.preparing || pathname.startsWith(`${ROUTES.preparing}/`)) {
     return preparing ? await answerPreparing(request, pathname, preparing) : Response.json({ why: "no job is prepared on this server: it answers to no contract that prepares them" }, { status: 404 });
   }

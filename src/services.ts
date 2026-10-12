@@ -17,7 +17,7 @@ import { agentFactsFrom } from "./agentFacts.ts";
 import { CheckWriting, ProvenChecks, type CheckWriter } from "./checkwriting/index.ts";
 import { Claims } from "./claims.ts";
 import { BoxSlots } from "./docker/index.ts";
-import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, IdentityDoor, JobList, NoteBoard, type DoorChain } from "./door/index.ts";
+import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, IdentityDoor, JobList, NoteBoard, QuestionBoard, type DoorChain } from "./door/index.ts";
 import { BOX_SLOTS_FOLDER, CREDIT_FOLDER, PREPARING_FOLDER, PROVEN_FOLDER, REPOSITORIES_FOLDER } from "./folders.ts";
 import { holderOf } from "./handover.ts";
 import { readJob, readJobCount, readSeats, readTerms, readValidator } from "./jobs.ts";
@@ -173,6 +173,7 @@ export async function servicesFor(input: ServicesInput): Promise<Services> {
     market,
     door: new GitDoor({ repositories: join(directory, REPOSITORIES_FOLDER), keeper, credit: book }),
     notes: new NoteBoard({ keeper, store }),
+    questions: new QuestionBoard({ keeper, store }),
     identities: new IdentityDoor({ keeper, store, client: publicClient, registries: input.registries }),
     jobList: new JobList({ keeper, store, ...(records ? { records } : {}) }),
     credit: new CreditDoor({ book }),

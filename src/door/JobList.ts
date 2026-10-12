@@ -12,7 +12,7 @@
 import { isAddress, isAddressEqual, type Address } from "viem";
 import { z } from "zod";
 import { KINDS, MODE_NAMES, publicSpec } from "../job.ts";
-import { checkFilePath, gitPath, isSafeName, jobPath, notesPath, ROUTES } from "../routes.ts";
+import { checkFilePath, gitPath, isSafeName, jobPath, notesPath, referencePath, ROUTES } from "../routes.ts";
 import { SEATS } from "../seal.ts";
 import type { JobStore } from "../store.ts";
 import { NO_STORE } from "../headers.ts";
@@ -80,6 +80,8 @@ export const ListedJobSchema = z.object({
    * It holds for the sealed checks too, so a pod builds to it
    */
   howItIsAsked: z.object({ plainly: z.string(), exactly: z.string() }).optional(),
+  /** what the poster pointed the pod at: each a file to fetch from `url`, with the fingerprint to hold it against */
+  references: z.array(z.object({ name: z.string(), type: z.string(), bytes: z.number(), digest: z.string(), url: z.string() })).optional(),
   /** how many checks are sealed until the verdict. Counted, never shown */
   sealedChecks: z.number().int().nonnegative(),
   seats: z.array(ListedSeatSchema),
@@ -173,6 +175,9 @@ export class JobList {
           ...(check.file ? { file: check.file, url: checkFilePath(jobId, check.file) } : {}),
         })),
         ...(shown.howItIsAsked ? { howItIsAsked: shown.howItIsAsked } : {}),
+        ...(record.brief?.references?.length
+          ? { references: record.brief.references.map(({ name, type, bytes, digest }) => ({ name, type, bytes, digest, url: referencePath(jobId, name) })) }
+          : {}),
         sealedChecks: spec.checks.length - shown.checks.length,
         seats,
         owners: [...new Set(held.map((seat) => seat.owner))],

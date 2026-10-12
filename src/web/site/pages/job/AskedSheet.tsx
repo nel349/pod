@@ -9,6 +9,20 @@ export function AskedSheet({ job }: { readonly job: JobView }): ReactElement {
     <Sheet number={1} id="asked" title={job.verdict === "running" ? SITE.job.asked.running : SITE.job.asked.done} stamp={false}>
       <p className="lede">{job.idea}</p>
       {job.howItIsAsked && <p className="how-asked"><b>{SITE.job.howItIsAsked}:</b> {job.howItIsAsked}</p>}
+      {job.references && (
+        <div id="references" className="references">
+          <p className="references-title">{SITE.job.references.title}</p>
+          <ul>
+            {job.references.map((one) => (
+              <li key={one.name}>
+                {one.type.startsWith("image/") && <a href={one.url}><img src={one.url} alt={SITE.job.references.picture(one.name)} loading="lazy" /></a>}
+                <a href={one.url}>{one.name}</a> <span className="reference-facts">{SITE.job.references.facts(one.type, one.bytes)}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="note">{SITE.job.references.says}</p>
+        </div>
+      )}
       <details className="behind">
         <summary>{SITE.job.sealedBefore}</summary>
         <p>{SITE.job.sealedMeans}</p>

@@ -9,6 +9,7 @@
  *   <number>/setup.json            how the job was set up: its name, poster, mode and salt
  *   <number>/asked.json            the writing waiting its turn or under way, if there is one
  *   <number>/writings/<n>.json     every writing of its checks, finished one way or the other
+ *   <number>/references/<name>     what its poster pointed the pod at, as fetched when it was set up
  *   names/<name>                   which job number holds a name
  *   names/.released/<name>.<id>    a name given up by a job taken back before approval, kept, not deleted
  *
@@ -26,6 +27,9 @@ const WRITINGS_FOLDER = "writings";
 const NAMES_FOLDER = "names";
 const RELEASED_FOLDER = ".released";
 const WRITING_FILE = /^([0-9]+)\.json$/;
+const REFERENCES_FOLDER = "references";
+/** the only names a reference is kept under, so nothing asked for by another name is ever read from disk */
+const REFERENCE_NAME = /^reference-[1-9]\.[a-z]{2,4}$/;
 
 export class PreparingStore {
   constructor(private readonly folder: string) {}
@@ -80,6 +84,19 @@ export class PreparingStore {
 
   readSetUp(onChainId: string): Promise<SetUp | undefined> {
     return this.readThrough(join(this.folder, onChainId, SETUP_FILE), SetUpSchema);
+  }
+
+  /** One reference's file, kept beside the job's set-up under the name POD gave it. */
+  async saveReference(onChainId: string, name: string, bytes: Uint8Array): Promise<void> {
+    const folder = join(this.folder, onChainId, REFERENCES_FOLDER);
+    await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, name), bytes);
+  }
+
+  async readReference(onChainId: string, name: string): Promise<Uint8Array<ArrayBuffer> | undefined> {
+    if (!ON_CHAIN_NUMBER.test(onChainId) || !REFERENCE_NAME.test(name)) return undefined;
+    const found = await ifThere(readFile(join(this.folder, onChainId, REFERENCES_FOLDER, name)), undefined);
+    return found ? new Uint8Array(found) : undefined;
   }
 
   async ask(onChainId: string, asked: Asked): Promise<void> {

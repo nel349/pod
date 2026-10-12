@@ -41,6 +41,8 @@ export const ROUTES = {
   git: "/git/",
   /** what the seats of a job say to each other, each note signed with its seat key */
   notes: "/api/notes/",
+  /** what a pod asked whoever posted a long job, and where they answer, signed with their own wallet */
+  questions: "/api/questions/",
   /** where a seat says which ERC-8004 identity is its own, so its verdict is written there */
   identity: "/api/identity/",
   /** everything an outside agent does on its side, where agents look for it */
@@ -71,6 +73,10 @@ export const ROUTES = {
   chainJob: "/api/chain/job/",
   /** where an agent's owner links a GitHub account to the agent, and where anybody reads the link */
   credit: "/api/credit",
+  /** where the posting page asks whether the links a poster gave can be read, before they pay */
+  references: "/api/references",
+  /** a job's references, as kept when it was set up: public with the job */
+  reference: "/reference/",
   /** where a poster who has paid sets their job up to be prepared, and where they read and write its checks */
   preparing: "/api/preparing",
 } as const;
@@ -121,6 +127,8 @@ export const cardPath = (jobId: string): string => `${ROUTES.card}${jobId}.svg`;
 export const bundlePath = (jobId: string): string => `${ROUTES.bundle}${jobId}`;
 /** how one set of checks is getting on while it is written and tried */
 export const writingPath = (id: string): string => `${ROUTES.writeChecks}/${id}`;
+/** where a job's questions are read, and answered by its poster */
+export const questionsPath = (jobId: string): string => `${ROUTES.questions}${jobId}`;
 /** where a job's notes are read and written */
 export const notesPath = (jobId: string): string => `${ROUTES.notes}${jobId}`;
 /** the page where a job's title holder claims its repository, and what it talks to */
@@ -143,6 +151,8 @@ export const jobApiPath = (jobId: string): string => `${ROUTES.jobApi}${jobId}`;
 export const creditPath = (agent: string): string => `${ROUTES.credit}/${agent.toLowerCase()}`;
 /** what an agent gives `git clone` for its job */
 export const gitPath = (jobId: string): string => `${ROUTES.git}${jobId}.git`;
+/** one of a job's references, by the name POD kept it under */
+export const referencePath = (jobId: string, name: string): string => `${ROUTES.reference}${jobId}/${name}`;
 /** a job being prepared, as its poster reads it, by its number on the contract */
 export const preparingPath = (onChainId: string): string => `${ROUTES.preparing}/${onChainId}`;
 

@@ -6,11 +6,12 @@ import { createTestClient, http, parseEther, type Address, type Hex } from "viem
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { agentEmail, branchFor } from "../door/index.ts";
 import { netlify } from "../hosting/index.ts";
-import { sealSpec, SERVE_THE_SITE, type Role, type Spec } from "../job.ts";
+import { MODES, sealSpec, SERVE_THE_SITE, type Role, type Spec } from "../job.ts";
 import { approve, readJob, readSeats, seatDeposit, seatPay, takeSeat, type Contract } from "../jobs.ts";
 import { checksDigest, podJobsV2Abi, readReport, releaseLock } from "../jobsV2.ts";
 import { accept, putForward, readAgentRecord, readAnswerBy, readHowItEnded, readPosterRecord, readReviewBy, refuse } from "../jobsV3.ts";
 import { brevo, whenInAMail } from "../mail/index.ts";
+import { noteMessage } from "../messages.ts";
 import { PreparingStore } from "../preparing/index.ts";
 import { openJob } from "../publish.ts";
 import { feedbackFrom, registerAgent, type Registries } from "../registry.ts";
@@ -19,6 +20,7 @@ import { IMAGE } from "../sandbox.ts";
 import { SEATS } from "../seal.ts";
 import { isCodePublic, isPublished, JobStore, type JobRecord } from "../store.ts";
 import { tokenOfJob } from "../token.ts";
+import { questionNote } from "../triage.ts";
 import { Worker, type WorkerOptions } from "../worker/index.ts";
 import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
 import { brevoSaying } from "./support/brevo.ts";
@@ -113,10 +115,10 @@ async function onTheBranchOf(role: Role, agent: Agent, repository: string, commi
  * by its builder, and the seats named standing behind it: all of them, unless told otherwise.
  */
 /** A job paid for and opened on the contract by its poster, with its checks approved and every seat free. */
-async function paidForAndOpened(posterKey: Hex, seal: Hex): Promise<bigint> {
+async function paidForAndOpened(posterKey: Hex, seal: Hex, window: bigint = HOUR): Promise<bigint> {
   const poster = contractAs(posterKey);
   const { request, result: onChainId } = await anvil.publicClient.simulateContract({
-    address: jobs, abi: podJobsV2Abi, functionName: "post", args: [HOUR, 1], value: PRICE + 3n * WRITING, account: privateKeyToAccount(posterKey),
+    address: jobs, abi: podJobsV2Abi, functionName: "post", args: [window, 1], value: PRICE + 3n * WRITING, account: privateKeyToAccount(posterKey),
   });
   await anvil.publicClient.waitForTransactionReceipt({ hash: await poster.wallet.writeContract(request) });
   const writer = anvil.wallet(WRITER);
@@ -228,6 +230,74 @@ async function gasOf(hash: Hex): Promise<bigint> {
 }
 
 describe.skipIf(!available)("the worker, where the poster has the last word", () => {
+  // first, before any test moves the chain's clock: a question is asked by the clock on the wall
+  test("a poster who left an address is told by mail what their pod asked on a week's job: the questions asked together in one message, once, and nothing once they have answered", async () => {
+    const said: string[] = [];
+    const mail = brevoSaying();
+    const preparing = new PreparingStore(await mkdtemp(join(tmpdir(), "pod-last-word-preparing-")));
+    try {
+      const posterKey = await aPoster();
+      const jobId = "last-word-questions-by-mail";
+      const spec: Spec = { idea: "A shop for a bakery", kind: "site", mode: "project", price: PRICE, checks: [{ says: WET, run: "node check-1.mjs", hidden: false, file: "check-1.mjs" }], allowed: [], salt: jobId };
+      const seal = await sealSpec(spec);
+      const onChainId = await paidForAndOpened(posterKey, seal, BigInt(MODES.project.windowMinutes * 60));
+      const onChain = await readJob(reader(), onChainId);
+      const opened = await openJob(store, { jobId, seal, spec, endsAt: new Date(Number(onChain.endsAt) * 1000), seats: [] });
+      await store.save({ ...opened, chain: { network: "monad-testnet", jobId: String(onChainId), jobs, lastWord: true }, poster: addressOf(posterKey) }, { "check-1.mjs": good(0).check });
+      await preparing.saveSetUp({
+        onChainId: String(onChainId), jobs, name: jobId, poster: addressOf(posterKey), mode: "project", salt: "0".repeat(32),
+        setUpAt: new Date().toISOString(), tell: "the-poster@example.com",
+      });
+      const lead = aPod().lead;
+      await anvil.fund(lead.address);
+      await takeSeat(contractAs(lead.key), onChainId, "lead", lead.address);
+      /** a question as the notes door keeps it: a note in the form of one, signed by its seat */
+      const asked = async (asks: string, assumes: string): Promise<Hex> => {
+        const says = questionNote(asks, assumes);
+        const at = Math.floor(Date.now() / 1000);
+        const signature = await privateKeyToAccount(lead.key).signMessage({ message: noteMessage({ jobId, onChainId: String(onChainId), jobs, role: "lead", about: undefined, says, at }) });
+        await store.addNote(jobId, { agent: lead.address, role: "lead", says, at, signature });
+        return signature;
+      };
+      const first = await asked("Should the shop take payment, or only show the bread?", "It only shows the bread, with prices.");
+      const second = await asked("Which days is the bakery open?", "Every day but Monday.");
+
+      // questions just asked are left a moment, so that a seat's few go out together
+      const patient = aWorker(said, undefined, { preparing, site: "https://pod.example", mailer: brevo({ key: "a-key", from: "pod@example.org", endpoint: mail.endpoint }), mailAgainAfterMs: 0 });
+      await patient.tick();
+      await patient.whenIdle();
+      expect(mail.sent).toHaveLength(0);
+
+      const told = (): Worker => aWorker(said, undefined, {
+        preparing, site: "https://pod.example", mailer: brevo({ key: "a-key", from: "pod@example.org", endpoint: mail.endpoint }), mailAgainAfterMs: 0, questionsSettleSeconds: 0,
+      });
+      const worker = told();
+      await until(worker, said, async () => mail.sent.length > 0);
+      for (let look = 0; look < 3; look += 1) { await worker.tick(); await worker.whenIdle(); }
+      expect(mail.sent, "one message for both questions, however many times the worker looks").toHaveLength(1);
+      const [message] = mail.sent;
+      expect(message?.to).toBe("the-poster@example.com");
+      expect(message?.subject).toBe("Your pod has 2 questions: A shop for a bakery");
+      expect(message?.text).toContain("The lead asks: Should the shop take payment, or only show the bread?");
+      expect(message?.text).toContain("it will assume: Every day but Monday.");
+      expect(message?.text).toContain("https://pod.example/job/last-word-questions-by-mail#questions");
+      expect(message?.html).toContain("Which days is the bakery open?");
+      expect((await recordOf(jobId)).told?.questions, "written down with the job, so a worker that starts again does not send it twice").toEqual([first, second]);
+      await until(told(), said, async () => true);
+      expect(mail.sent).toHaveLength(1);
+
+      // a question they have already answered on the page needs nothing from them, so nothing is sent for it
+      const third = await asked("Is there a logo to use?", "No logo: the name is set in type.");
+      await store.addAnswer(jobId, { question: third, says: "No logo.", at: Math.floor(Date.now() / 1000), poster: addressOf(posterKey), signature: "0x00" });
+      const after = told();
+      for (let look = 0; look < 3; look += 1) { await after.tick(); await after.whenIdle(); }
+      expect(mail.sent).toHaveLength(1);
+      expect(JSON.stringify(await recordOf(jobId), (_key, value: unknown) => (typeof value === "bigint" ? value.toString() : value))).not.toContain("the-poster@example.com");
+    } finally {
+      mail.stop();
+    }
+  }, 300_000);
+
   test("a job's own poster is refused a seat on it, as the agent or as an agent's owner, and sits on somebody else's like anybody", async () => {
     const posterKey = await aPoster();
     const poster = addressOf(posterKey);

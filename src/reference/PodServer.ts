@@ -6,15 +6,19 @@
  * does not run no further than it can check.
  */
 import { z } from "zod";
-import { JobListingSchema, NoteSchema, type JobListing } from "../door/index.ts";
+import { createHash } from "node:crypto";
+import { JobListingSchema, NoteSchema, type JobListing, type ListedJob } from "../door/index.ts";
+import { MOST_REFERENCE_TEXT, type ReadReference } from "./Seated.ts";
 import { MarketConfigSchema, type MarketConfig } from "../market.ts";
 import { CreditLinkSchema } from "../credit.ts";
-import { creditPath, gitPath, notesPath, receiptPath, ROUTES } from "../routes.ts";
+import { creditPath, gitPath, notesPath, questionsPath, receiptPath, ROUTES } from "../routes.ts";
+import { QuestionSchema, type Question } from "../triage.ts";
 import type { Note } from "../store.ts";
 import type { JobRef } from "./Identity.ts";
 import type { DoorAccess } from "./WorkingCopy.ts";
 
 const NotesSchema = z.object({ notes: z.array(NoteSchema) });
+const QuestionsSchema = z.object({ questions: z.array(QuestionSchema) });
 const CreditSchema = z.object({ link: CreditLinkSchema, email: z.string() });
 const WhySchema = z.object({ why: z.string() });
 
@@ -41,6 +45,15 @@ export class PodServer {
     const answer = await fetch(this.url(notesPath(job.jobId)), { headers: { authorization: signedInAs(agent, password) } });
     if (!answer.ok) throw new Error(`the notes for ${job.jobId} could not be read: ${await this.why(answer)}`);
     return NotesSchema.parse(await answer.json()).notes;
+  }
+
+  /** What the pod has asked the job's poster, with each answer given so far. Asked in the open, so read by anybody. */
+  async questions(job: JobRef): Promise<readonly Question[]> {
+    const answer = await fetch(this.url(questionsPath(job.jobId)));
+    // a server with no such door has no questions: every job on it is built from what was given
+    if (answer.status === 404) return [];
+    if (!answer.ok) throw new Error(`the questions on ${job.jobId} could not be read: ${await this.why(answer)}`);
+    return QuestionsSchema.parse(await answer.json()).questions;
   }
 
   async writeNote(job: JobRef, note: object): Promise<void> {
@@ -76,6 +89,22 @@ export class PodServer {
 
   private url(path: string): string {
     return new URL(path, this.base).toString();
+  }
+
+  /**
+   * A job's references as an agent that reads text can use them. Each file is held against the
+   * fingerprint the list gave before a word of it is believed; a picture or a PDF is named and not read.
+   */
+  async references(listed: ListedJob): Promise<readonly ReadReference[]> {
+    return Promise.all((listed.references ?? []).map(async (one): Promise<ReadReference> => {
+      const isText = one.type.startsWith("text/") || one.type === "application/json";
+      if (!isText) return { name: one.name, type: one.type };
+      const answer = await fetch(this.url(one.url));
+      if (!answer.ok) throw new Error(`the server would not hand over ${one.name}: ${answer.status}`);
+      const bytes = new Uint8Array(await answer.arrayBuffer());
+      if (`0x${createHash("sha256").update(bytes).digest("hex")}` !== one.digest) throw new Error(`${one.name} is not the file its fingerprint names`);
+      return { name: one.name, type: one.type, text: new TextDecoder().decode(bytes).slice(0, MOST_REFERENCE_TEXT) };
+    }));
   }
 
   private async json(path: string): Promise<unknown> {

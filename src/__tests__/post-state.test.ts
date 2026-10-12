@@ -20,7 +20,7 @@ import { COAT_IDEA, DRY, WET } from "./support/coat.ts";
 const FORM: PostForm = {
   idea: COAT_IDEA, kind: "service",
   brief: [{ says: WET }, { says: "  " }], exam: [{ says: DRY }],
-  price: "0.1", mode: "flash", name: "a-coat-or-not", tell: "",
+  price: "0.1", mode: "flash", name: "a-coat-or-not", tell: "", references: "",
 };
 
 const triedCheck = (says: string, secret: boolean, file: string, hasFailedOnNothing = true): TriedCheck => ({
@@ -274,7 +274,7 @@ describe("a payment kept in the browser until its job is published", () => {
     const kept = await paidFor();
     expect(formOfPaidJob(kept)).toEqual({
       idea: COAT_IDEA, kind: "service", brief: [{ says: WET }], exam: [{ says: DRY }],
-      price: "1.25", mode: "flash", name: "a-coat-kept", tell: "",
+      price: "1.25", mode: "flash", name: "a-coat-kept", tell: "", references: "",
     });
   });
 

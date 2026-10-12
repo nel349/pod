@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import type { FetchOptions } from "../references/index.ts";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -13,8 +15,8 @@ import { Preparing, PreparingStore, preparingToTheWire, type PreparingChain, typ
 import { openJob } from "../publish.ts";
 import { specFromTheWire, SpecOnTheWireSchema } from "../specWire.ts";
 import { JobStore } from "../store.ts";
-import { handle } from "../server.ts";
-import { jobNamePath, preparingPath, preparingWritingsPath, ROUTES } from "../routes.ts";
+import { handle, REFERENCE_READS_A_MINUTE } from "../server.ts";
+import { jobNamePath, preparingPath, preparingWritingsPath, ROUTES, referencePath } from "../routes.ts";
 import { ANVIL_KEYS, anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
 import { COAT_REQUEST, GOOD_REPLY, good, replying, writerWith } from "./support/coat.ts";
 import { dockerAvailable } from "./support/tools.ts";
@@ -68,12 +70,13 @@ describe.skipIf(!available)("a paid job, prepared", () => {
     writingPrice: () => readWritingPrice(at()),
   });
 
-  async function serviceWith(options: { model?: Model; folder?: string; atOnce?: number; chain?: PreparingChain; writer?: Writer } = {}) {
+  async function serviceWith(options: { model?: Model; folder?: string; atOnce?: number; chain?: PreparingChain; writer?: Writer; fetching?: FetchOptions } = {}) {
     const kept = options.folder ?? await mkdtemp(join(tmpdir(), "pod-preparing-"));
     const preparing = new Preparing({
       store: new PreparingStore(kept), wall, chain: options.chain ?? realChain(),
       writer: options.writer ?? writer, checkWriter: writerWith(options.model ?? replying(GOOD_REPLY).model),
       atOnce: options.atOnce ?? 2, tryAgainAfterMs: 200, say: (what) => said.push(what),
+      ...(options.fetching ? { fetching: options.fetching } : {}),
     });
     return { preparing, folder: kept };
   }
@@ -192,6 +195,94 @@ describe.skipIf(!available)("a paid job, prepared", () => {
     const quiet = await aPaidJob();
     expect(await preparing.setUp(await asPoster(quiet, uniqueName()))).toMatchObject({ ok: true });
     expect((await new PreparingStore(folder).readSetUp(`${quiet}`))?.tell).toBeUndefined();
+  }, 120_000);
+
+  test("what a poster points the pod at is fetched once when the job is set up, kept with its fingerprint, and a link that cannot be kept sets nothing up", async () => {
+    const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9, 9]);
+    let sketch: Uint8Array<ArrayBuffer> = PNG;
+    const files = Bun.serve({ port: 0, fetch: (request) => {
+      const { pathname } = new URL(request.url);
+      if (pathname === "/sketch.png") return new Response(sketch, { headers: { "content-type": "image/png" } });
+      if (pathname === "/spec.md") return new Response("Two cards to a row on a phone.", { headers: { "content-type": "text/markdown" } });
+      return new Response("<title>a page</title>", { headers: { "content-type": "text/html" } });
+    } });
+    const at = (path: string): string => `http://127.0.0.1:${files.port}${path}`;
+    try {
+      const { preparing, folder } = await serviceWith({ model: UNREACHABLE, fetching: { mayAsk: (address) => address === "127.0.0.1" } });
+      const kept = new PreparingStore(folder);
+
+      // asked before paying: what each link comes to, with nothing kept
+      const read = await preparing.readReferences([at("/sketch.png"), at("/a-page")]);
+      expect(read).toMatchObject({ ok: true, value: [{ ok: true, type: "image/png", bytes: PNG.byteLength }, { ok: false }] });
+      expect(await preparing.readReferences(["not a link"])).toMatchObject({ ok: false, status: 400 });
+
+      // one link that is a page: the job is not set up, its name is not taken, and the poster is told which link
+      const refused = await aPaidJob();
+      const name = uniqueName();
+      expect(await preparing.setUp({ ...(await asPoster(refused, name)), references: [at("/sketch.png"), at("/a-page")] }))
+        .toMatchObject({ ok: false, status: 422, why: expect.stringContaining("reference 2 could not be kept: that link opens a web page") });
+      expect(await kept.readSetUp(`${refused}`)).toBeUndefined();
+      // corrected and sent again with the same payment, it is set up
+      expect(await preparing.setUp({ ...(await asPoster(refused, name)), references: [at("/sketch.png"), at("/spec.md")] })).toMatchObject({ ok: true });
+      const setUp = await kept.readSetUp(`${refused}`);
+      expect(setUp?.references).toEqual([
+        { name: "reference-1.png", type: "image/png", bytes: PNG.byteLength, digest: `0x${createHash("sha256").update(PNG).digest("hex")}`, from: at("/sketch.png") },
+        { name: "reference-2.md", type: "text/markdown", bytes: 30, digest: expect.stringMatching(/^0x[0-9a-f]{64}$/), from: at("/spec.md") },
+      ]);
+
+      // what was fetched then is what is handed out, whatever the link serves afterwards
+      sketch = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 1, 1, 1, 1, 1, 1, 1]);
+      expect((await preparing.reference({ onChainId: `${refused}`, jobId: name }, "reference-1.png"))?.bytes).toEqual(PNG);
+      expect((await preparing.reference({ onChainId: `${refused}`, jobId: name }, "reference-2.md"))?.type).toBe("text/markdown");
+      // and nothing is read from disk by any other name
+      expect(await preparing.reference({ onChainId: `${refused}`, jobId: name }, "../setup.json")).toBeUndefined();
+      expect(await preparing.reference({ onChainId: `${refused}`, jobId: name }, "reference-3.png")).toBeUndefined();
+      // nor for a job that only shares its number, as one on a contract before this one could
+      expect(await preparing.reference({ onChainId: `${refused}`, jobId: "another-job-with-that-number" }, "reference-1.png")).toBeUndefined();
+
+      // its poster's own page is told what was kept
+      const shown = await preparing.read(`${refused}`, await statement(refused));
+      if (!shown.ok) throw new Error(`its poster could not read the job they set up: ${shown.why}`);
+      expect(preparingToTheWire(shown.value).references?.map((one) => one.name)).toEqual(["reference-1.png", "reference-2.md"]);
+
+      // on the wall, the job hands its references to anybody from its own address, as exactly what was kept and
+      // as nothing a browser would run: a stranger's file is served from the address the wallet lives at
+      await wall.save({
+        jobId: name, seal: `0x${"0".repeat(64)}`,
+        tile: { jobId: name, idea: "a job with references", mode: "flash", verdict: "running", price: 1n, pod: [] },
+        checksSaid: [], approvals: [], chain: { network: "monad-testnet", jobId: `${refused}`, jobs },
+        brief: { asked: "a job with references", endsAt: new Date(Date.now() + 3_600_000).toISOString(), sealedChecks: 0, seats: [], references: setUp!.references! },
+      });
+      const ask = (path: string, init: RequestInit = {}) => handle(new Request(`http://pod.test${path}`, init), wall, { preparing });
+      const served = await ask(referencePath(name, "reference-1.png"));
+      expect(served.status).toBe(200);
+      expect(new Uint8Array(await served.arrayBuffer())).toEqual(PNG);
+      expect(served.headers.get("content-type")).toBe("image/png");
+      expect(served.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(served.headers.get("content-security-policy")).toBe("default-src 'none'; sandbox");
+      // text is handed over as plain text, whatever it was kept as: never as a page
+      expect((await ask(referencePath(name, "reference-2.md"))).headers.get("content-type")).toBe("text/plain; charset=utf-8");
+      expect((await ask(referencePath(name, "reference-9.png"))).status).toBe(404);
+      expect((await ask(referencePath("no-such-job", "reference-1.png"))).status).toBe(404);
+      // and the page asks before paying through the same door
+      const asked = await ask(ROUTES.references, { method: "POST", body: JSON.stringify([at("/spec.md")]) });
+      expect(await asked.json()).toEqual([{ ok: true, link: at("/spec.md"), type: "text/markdown", bytes: 30 }]);
+      expect((await ask(ROUTES.references, { method: "POST", body: JSON.stringify(["nope"]) })).status).toBe(400);
+      // asked by anybody, before paying, so it is rationed for everybody together: past the ration it reads nothing
+      let refusedAt: Response | undefined;
+      for (let asking = 0; asking <= REFERENCE_READS_A_MINUTE && !refusedAt; asking += 1) {
+        const answer = await ask(ROUTES.references, { method: "POST", body: JSON.stringify(["nope"]) });
+        if (answer.status === 429) refusedAt = answer;
+      }
+      expect(((await refusedAt?.json()) as { why: string } | undefined)?.why).toContain("try again in a minute");
+
+      // with nobody named to ask, a link to this machine is refused: only a public address is fetched from
+      const guarded = (await serviceWith({ model: UNREACHABLE })).preparing;
+      expect(await guarded.setUp({ ...(await asPoster(await aPaidJob(), uniqueName())), references: [at("/sketch.png")] }))
+        .toMatchObject({ ok: false, status: 422 });
+    } finally {
+      void files.stop(true);
+    }
   }, 120_000);
 
   test("nobody but the poster can set a job up, and the chain has to agree with what they say", async () => {

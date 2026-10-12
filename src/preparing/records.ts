@@ -3,6 +3,7 @@
  * through these schemas like anything else from outside the program: a file can be half written, or
  * written by a version before this one, and a request can say anything.
  */
+import { ReferenceLinksSchema, ReferenceSchema, type Reference } from "../references/index.ts";
 import { isEmail } from "../mail/Mailer.ts";
 import { isAddress, type Address, type Hex } from "viem";
 import { z } from "zod";
@@ -42,6 +43,8 @@ export const SetUpRequestSchema = z.object({
   signature: HexSchema,
   /** where to tell them it was delivered, if they want to be told */
   tell: TellSchema.optional(),
+  /** links to what they point their pod at, fetched once, here and now, and kept with the job */
+  references: ReferenceLinksSchema.optional(),
 });
 
 /** How a paid job was set up, once, by its poster. The name, the mode and the salt never change after. */
@@ -56,6 +59,8 @@ export const SetUpSchema = z.object({
   setUpAt: z.string(),
   /** the poster's email address, when they left one: read by the worker to tell them of a delivery, and by nothing that draws a page */
   tell: z.string().optional(),
+  /** what the poster pointed their pod at, as fetched when the job was set up */
+  references: z.array(ReferenceSchema).optional(),
 });
 
 /** A writing the poster asked for, waiting its turn or under way. */
@@ -150,6 +155,8 @@ export interface PreparingView {
   readonly money: WritingMoney & { readonly writingPrice: bigint };
   /** whether the poster left an address to be told at. Only that: the address itself is never sent back */
   readonly tells?: boolean;
+  /** what the poster pointed their pod at, as it was kept */
+  readonly references?: readonly Reference[];
 }
 
 /** A preparing job as it travels: its money in wei, as strings, since JSON has no bigint. */
@@ -178,6 +185,7 @@ export const PreparingOnTheWireSchema = z.object({
   writings: z.array(FinishedSchema),
   money: z.object({ balance: WeiSchema, reserved: WeiSchema, kept: z.number().int().nonnegative(), writingPrice: WeiSchema }),
   tells: z.boolean().optional(),
+  references: z.array(ReferenceSchema).optional(),
 });
 
 /** Read back from the wire: the money as amounts again. */

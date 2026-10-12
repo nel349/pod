@@ -16,6 +16,10 @@
  * was: a writing whose price was never settled is settled, and one that was under way is released and
  * waits its turn again.
  */
+import {
+  fetchReference, ReferenceLinksSchema, referenceName, ReferenceRefused,
+  type FetchedReference, type FetchOptions, type Reference, type ReferenceRead,
+} from "../references/index.ts";
 import { isAddressEqual, recoverMessageAddress, type Address, type Hex } from "viem";
 import { readyToSeal, WriteRequestSchema, WritingFailed, writeChecks, type CheckWriter, type Stage, type WriteRequest, type WrittenSet } from "../checkwriting/index.ts";
 import type { Spent } from "../broker.ts";
@@ -71,6 +75,8 @@ export interface PreparingOptions {
   readonly boxes?: BoxSlots;
   /** where what happens is said, for whoever runs the server */
   readonly say?: (what: string) => void;
+  /** who a reference may be fetched from; left out, only public addresses. A test names its own stand-in */
+  readonly fetching?: FetchOptions;
 }
 
 export type Answer<T> =
@@ -134,7 +140,7 @@ export class Preparing {
   async setUp(asked: unknown): Promise<Answer<{ readonly onChainId: string; readonly name: string }>> {
     const parsed = SetUpRequestSchema.safeParse(asked);
     if (!parsed.success) return refused(400, parsed.error.issues[0]?.message ?? "that is not a job to prepare");
-    const { onChainId, name, mode, salt, request, poster, signature, tell } = parsed.data;
+    const { onChainId, name, mode, salt, request, poster, signature, tell, references: links = [] } = parsed.data;
     if (!isWallName(name)) return refused(400, "a job's name is lower-case letters, numbers and dashes, from 3 to 64 of them");
 
     let signer: Address;
@@ -167,10 +173,23 @@ export class Preparing {
     }
 
     if (await this.options.wall.read(name)) return refused(409, `there is already a job called ${name}`);
+    // fetched before the name is taken: a link that cannot be kept leaves nothing behind, and the poster
+    // fixes it and sets the job up again with the payment they already made
+    const fetched = await this.fetchEvery(links);
+    if (!fetched.ok) return fetched;
     const claimed = await this.claimName(name, onChainId);
     if (!claimed) return refused(409, `there is already a job called ${name}`);
 
-    await this.options.store.saveSetUp({ onChainId, jobs: this.jobs, name, poster, mode, salt, setUpAt: new Date().toISOString(), ...(tell ? { tell } : {}) });
+    const references: Reference[] = [];
+    for (const [at, one] of fetched.value.entries()) {
+      const kept = { name: referenceName(at + 1, one.type), type: one.type, bytes: one.bytes.byteLength, digest: one.digest, from: links[at] ?? "" };
+      await this.options.store.saveReference(onChainId, kept.name, one.bytes);
+      references.push(kept);
+    }
+    await this.options.store.saveSetUp({
+      onChainId, jobs: this.jobs, name, poster, mode, salt, setUpAt: new Date().toISOString(),
+      ...(tell ? { tell } : {}), ...(references.length > 0 ? { references } : {}),
+    });
     await this.options.store.ask(onChainId, { request, askedAt: new Date().toISOString() });
     this.enqueue(onChainId);
     this.say(`job ${onChainId} is set up as ${name}; its first writing waits its turn`);
@@ -209,11 +228,61 @@ export class Preparing {
       value: {
         onChainId, name: setUp.name, mode: setUp.mode, salt: setUp.salt, now: this.nowFor(onChainId),
         ...(setUp.tell ? { tells: true } : {}),
+        ...(setUp.references ? { references: setUp.references } : {}),
         ...(asked ? { asked: asked.request } : {}),
         writings: writings.filter((writing) => writing.isSettled),
         money: { ...money, writingPrice },
       },
     };
+  }
+
+  /** Every link fetched, or the first that could not be, said by its place and why. */
+  private async fetchEvery(links: readonly string[]): Promise<Answer<readonly FetchedReference[]>> {
+    const fetched: FetchedReference[] = [];
+    for (const [at, link] of links.entries()) {
+      try {
+        fetched.push(await fetchReference(link, this.options.fetching));
+      } catch (error) {
+        if (!(error instanceof ReferenceRefused)) throw error;
+        return refused(422, `reference ${at + 1} could not be kept: ${error.message}`);
+      }
+    }
+    return { ok: true, value: fetched };
+  }
+
+  /**
+   * What reading each link comes to, said to a poster before they pay: nothing is kept. One answer for
+   * each link, in order, so the page can say which is which.
+   */
+  async readReferences(asked: unknown): Promise<Answer<readonly ReferenceRead[]>> {
+    const parsed = ReferenceLinksSchema.safeParse(asked);
+    if (!parsed.success) return refused(400, parsed.error.issues[0]?.message ?? "those are not links");
+    return {
+      ok: true,
+      value: await Promise.all(parsed.data.map(async (link): Promise<ReferenceRead> => {
+        try {
+          const read = await fetchReference(link, this.options.fetching);
+          return { ok: true, link, type: read.type, bytes: read.bytes.byteLength };
+        } catch (error) {
+          if (!(error instanceof ReferenceRefused)) throw error;
+          return { ok: false, link, why: error.message };
+        }
+      })),
+    };
+  }
+
+  /**
+   * One of a job's references, by the name it was kept under, for whoever asks: it is public with the job.
+   * The job is named as the wall names it as well as by its number, since a number alone is shared with
+   * the contracts before this one: a job from one of those has no references here, whatever its number.
+   */
+  async reference(job: { readonly onChainId: string; readonly jobId: string }, name: string): Promise<{ readonly bytes: Uint8Array<ArrayBuffer>; readonly type: string } | undefined> {
+    const { onChainId } = job;
+    const setUp = await this.options.store.readSetUp(onChainId);
+    const kept = setUp?.name === job.jobId ? setUp.references?.find((one) => one.name === name) : undefined;
+    if (!kept) return undefined;
+    const bytes = await this.options.store.readReference(onChainId, name);
+    return bytes ? { bytes, type: kept.type } : undefined;
   }
 
   /**

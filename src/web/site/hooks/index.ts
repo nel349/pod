@@ -9,3 +9,4 @@ export * from "./usePageData.ts";
 export * from "./useLinksInPlace.ts";
 export * from "./useAgentKey.ts";
 export * from "./useAnswer.ts";
+export * from "./useAnswerQuestion.ts";

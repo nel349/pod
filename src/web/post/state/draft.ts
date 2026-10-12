@@ -44,6 +44,7 @@ const DraftSchema = z.object({
     mode: z.enum(MODE_NAMES).optional(),
     name: z.string().optional(),
     tell: z.string().optional(),
+    references: z.string().optional(),
   }),
   written: z.object({
     key: z.string(),

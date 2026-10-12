@@ -9,6 +9,8 @@ import { branchFor } from "../door/seat.ts";
 import type { Role } from "../job.ts";
 import type { HeldSeat } from "../jobs.ts";
 import { bytes32ToCommit } from "../repo.ts";
+import { secondsNow } from "../clock.ts";
+import { hasTriage, isWaiting, questionNote, settledAs } from "../triage.ts";
 import type { Identity, JobRef } from "./Identity.ts";
 import type { PodServer } from "./PodServer.ts";
 import type { WorkingCopy } from "./WorkingCopy.ts";
@@ -18,6 +20,8 @@ export interface Seated {
   readonly role: Role;
   /** the job as the list described it when the seat was taken: its brief does not change */
   readonly listed: ListedJob;
+  /** what the poster pointed the pod at, as this agent read it when it took the seat */
+  readonly references: readonly ReadReference[];
   readonly identity: Identity;
   readonly server: PodServer;
   readonly copy: WorkingCopy;
@@ -30,8 +34,40 @@ export interface Seated {
    * lead by bringing it into its branch: the contract's rule, read from it when the seat was taken
    */
   readonly builderNames: boolean;
+  /** how long a builder on a job long enough for questions leaves its pod to ask before it builds; left out, the usual */
+  readonly askingGraceSeconds?: number;
   readonly say: (what: string) => void;
 }
+
+/** How long a builder leaves the rest of its pod to ask the poster anything, on a job long enough for questions, before it builds from what it has. */
+export const ASKING_GRACE_SECONDS = 15 * 60;
+
+/** A seat's question to whoever posted the job, signed and sent as a note in the form every door reads as one. */
+export async function askThePoster(seated: Seated, asks: string, assumes: string): Promise<void> {
+  await seated.server.writeNote(seated.job, await seated.identity.note(seated.job, seated.role, questionNote(plainDashes(asks), plainDashes(assumes))));
+}
+
+/**
+ * What the pod's questions came to, for a brief: each answer the poster gave, and for each question
+ * nobody answered in its day, what its seat said it would assume. A question still waiting is left
+ * out: nobody builds on an answer that has not come.
+ */
+export async function settledFor(seated: Seated): Promise<readonly string[]> {
+  if (!hasTriage(seated.listed.mode)) return [];
+  const now = secondsNow();
+  return (await seated.server.questions(seated.job)).filter((question) => !isWaiting(question, now)).map(settledAs);
+}
+
+/** One of a job's references as an agent that reads only text can use it: its words, or that it is not words. */
+export interface ReadReference {
+  readonly name: string;
+  readonly type: string;
+  /** what it says, when it is text and held against its fingerprint; absent for a picture or a PDF, which this agent cannot read */
+  readonly text?: string;
+}
+
+/** How much of one reference's text is put in front of the model */
+export const MOST_REFERENCE_TEXT = 40_000;
 
 /** What one seat does each time it looks: whatever it is its turn to do, and nothing when it is not. */
 export interface SeatWork {
@@ -68,10 +104,20 @@ export async function tellThePod(seated: Seated, says: string, about?: string): 
 }
 
 /** The brief as the model reads it: the idea, what the visible checks ask, and where the work may reach. */
-export function briefFor(listed: ListedJob): string {
+/**
+ * @param settled what the pod asked the poster and what came of each, from `settledFor`: an answer
+ *                counts as much as the person's first words, and an assumption only until they say otherwise
+ */
+export function briefFor(listed: ListedJob, references: readonly ReadReference[] = [], settled: readonly string[] = []): string {
   return [
     listed.idea,
     "",
+    ...references.flatMap((one) => (one.text === undefined
+      ? [`The person also pointed at ${one.name} (${one.type}), which you cannot see. Do not guess what it shows: say on the work, and in your reason, that it was not read.`, ""]
+      : [`The person also pointed at ${one.name}, which says:`, one.text, ""])),
+    ...(settled.length > 0
+      ? ["The pod asked the person before building. Hold the work to their answers as to their first words; where they did not answer, to what was assumed:", ...settled.flatMap((one) => [one, ""])]
+      : []),
     "What will be checked, in the open (there are more checks, sealed until the verdict):",
     ...listed.visibleChecks.map((check) => `- ${check.says}`),
     ...(listed.howItIsAsked ? ["", `How every check asks, the sealed ones too, which the work must accept: ${listed.howItIsAsked.exactly}`] : []),

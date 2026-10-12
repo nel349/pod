@@ -58,4 +58,25 @@ describe("the brief a seat's model reads", () => {
     expect(briefFor({ ...listed, howItIsAsked: { plainly: "The checks ask for a chosen hour", exactly } })).toContain(exactly);
     expect(briefFor(listed)).not.toContain("How every check asks");
   });
+
+  test("what the poster pointed at is read to the model when it is words, and named as unread when it is a picture", () => {
+    const brief = briefFor(listed, [
+      { name: "reference-1.md", type: "text/markdown", text: "Two faces to a row on a phone." },
+      { name: "reference-2.png", type: "image/png" },
+    ]);
+    expect(brief).toContain("The person also pointed at reference-1.md, which says:\nTwo faces to a row on a phone.");
+    expect(brief).toContain("reference-2.png (image/png), which you cannot see. Do not guess what it shows");
+    expect(briefFor(listed)).not.toContain("also pointed at");
+  });
+
+  test("what the pod asked the poster is in it: their answer where they gave one, and what was assumed where they did not", () => {
+    const brief = briefFor(listed, [], [
+      "Asked: By whose clock is it night?\nThe poster answered: The visitor's own.",
+      "Asked: How many faces?\nNot answered, so assumed: Six.",
+    ]);
+    expect(brief).toContain("Hold the work to their answers as to their first words; where they did not answer, to what was assumed:");
+    expect(brief).toContain("The poster answered: The visitor's own.");
+    expect(brief).toContain("Not answered, so assumed: Six.");
+    expect(briefFor(listed)).not.toContain("The pod asked the person");
+  });
 });

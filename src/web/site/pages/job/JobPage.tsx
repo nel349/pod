@@ -10,6 +10,7 @@ import { NotesSheet } from "./NotesSheet.tsx";
 import { OpenSheet } from "./OpenSheet.tsx";
 import { OwnsSheet } from "./OwnsSheet.tsx";
 import { PodSheet } from "./PodSheet.tsx";
+import { QuestionsSheet } from "./QuestionsSheet.tsx";
 import { RepeatSheet } from "./RepeatSheet.tsx";
 import { StandsSheet } from "./StandsSheet.tsx";
 
@@ -40,6 +41,7 @@ export function JobPage({ job: drawn }: { readonly job: JobView }): ReactElement
           <p>{SITE.job.recordSays}</p>
         </div>
         <PodSheet job={job} />
+        <QuestionsSheet job={job} />
         <NotesSheet job={job} />
         {repeat}
         {!isTheirs(job) && <OwnsSheet job={job} />}
@@ -50,6 +52,8 @@ export function JobPage({ job: drawn }: { readonly job: JobView }): ReactElement
   if (job.verdict === "running") {
     return (
       <Poster bill={<JobBill job={job} />}>
+        {/* a question waiting on its poster is the one thing here that needs them, so it comes first */}
+        <QuestionsSheet job={job} />
         <StandsSheet job={job} lostTouch={lostTouch} />
         <PodSheet job={job} />
         <ChecksSheet job={job} />
@@ -65,6 +69,7 @@ export function JobPage({ job: drawn }: { readonly job: JobView }): ReactElement
       <StandsSheet job={job} lostTouch={lostTouch} />
       <PodSheet job={job} />
       <ChecksSheet job={job} />
+      <QuestionsSheet job={job} />
       <NotesSheet job={job} />
       {repeat}
       <OwnsSheet job={job} />

@@ -16,7 +16,7 @@ import { grade, type CheckToRun } from "../../blackbox.ts";
 import { PORT, startFor } from "../../job.ts";
 import { readableToTheBox } from "../../sandbox.ts";
 import { verdictFrom, type Verdict } from "../protocol.ts";
-import { briefFor, type Seated } from "../Seated.ts";
+import { briefFor, settledFor, type Seated } from "../Seated.ts";
 import type { Judgement } from "./Judge.ts";
 
 /**
@@ -40,7 +40,7 @@ export const reviewing: Judgement = async (seated, files) => askTheModel(seated,
   "Reply with one line: APPROVE followed by why, or REFUSE followed by what is wrong.",
   "",
   "## What was asked for",
-  briefFor(seated.listed),
+  briefFor(seated.listed, seated.references, await settledFor(seated)),
   "",
   "## What was shipped",
   await sourcesIn(files),
@@ -66,7 +66,7 @@ export const holdingToTheBrief: Judgement = async (seated, files) => askTheModel
   "Reply with one line: APPROVE followed by why, or REFUSE followed by the line that is not answered or what is pretended.",
   "",
   "## What was asked for",
-  briefFor(seated.listed),
+  briefFor(seated.listed, seated.references, await settledFor(seated)),
   "",
   "## What was shipped",
   await sourcesIn(files),

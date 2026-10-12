@@ -418,6 +418,27 @@ a.primary.small, button.primary.small { font-size: 18px; padding: 10px 16px 8px;
 /* on a wallet's own page: what one of its agents' seats paid, under the job it sat on */
 .yours-list .seat-outcome { margin: 4px 0 0; font: 400 15px/1.45 var(--read); max-width: 60ch; }
 
+/* what the poster pointed the pod at, on the job's own page */
+.questions { list-style: none; margin: 0; padding: 0; display: grid; gap: 22px; }
+.question { padding-left: 14px; border-left: 4px solid var(--ink); display: grid; gap: 6px; }
+.question.waiting { border-left-color: var(--pink); }
+.question p { margin: 0; max-width: 70ch; }
+.question-asks { font: 600 18px/1.4 var(--read); white-space: pre-wrap; }
+.question-answered, .question-assumes { font: 400 15px/1.5 var(--read); white-space: pre-wrap; }
+.question-answer { display: grid; gap: 8px; margin-top: 6px; padding: 14px 16px 8px; background: var(--yellow); box-shadow: 5px 5px 0 var(--ink); max-width: 62ch; }
+.question-answer label { font: 700 16px/1.3 var(--read); }
+.question-answer textarea { width: 100%; padding: 10px 12px; border: 0; border-bottom: 3px solid var(--ink); background: var(--white); color: var(--ink); font: 400 16px/1.4 var(--read); resize: vertical; }
+.question-answer .note { color: var(--ink); }
+button.answer-question { justify-self: start; padding: 11px 16px 8px; border: 3px solid var(--ink); background: var(--ink); color: var(--yellow); font: 900 19px/1.05 var(--shout); text-transform: uppercase; cursor: pointer; box-shadow: 4px 4px 0 var(--pink); }
+button.answer-question:hover:not(:disabled) { color: var(--white); }
+button.answer-question:disabled { opacity: 0.45; cursor: default; }
+.references { margin: 14px 0 0; }
+.references-title { margin: 0 0 8px; font: 900 20px/1 var(--shout); text-transform: uppercase; }
+.references ul { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 10px; }
+.references li { display: grid; gap: 4px; justify-items: start; font: 400 14px/1.4 var(--type); }
+.references img { display: block; max-width: min(100%, 320px); max-height: 240px; border: 3px solid var(--ink); }
+.references .reference-facts { color: var(--grey); }
+
 /* ================= the welcome: one job, from its poster's first word to their last, played on the wall ================= */
 
 /*

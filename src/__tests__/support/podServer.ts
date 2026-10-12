@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { parseEther, type Address, type Hex, type PublicClient } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { CheckWriting, ProvenChecks } from "../../checkwriting/index.ts";
-import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard, type DoorChain } from "../../door/index.ts";
+import { CreditBook, CreditDoor, doorChainFor, Doorkeeper, GitDoor, JobList, NoteBoard, QuestionBoard, type DoorChain } from "../../door/index.ts";
 import type { Grants } from "../../mandate.ts";
 import { sealSpec, type Role, type Spec } from "../../job.ts";
 import { policyMet, post, readJob, readSeats, readTerms } from "../../jobs.ts";
@@ -165,6 +165,7 @@ export async function aPodServer(input: {
     },
     door: new GitDoor({ repositories, keeper, credit }),
     notes: new NoteBoard({ keeper, store }),
+    questions: new QuestionBoard({ keeper, store }),
     jobList: new JobList({ keeper, store }),
     credit: new CreditDoor({ book: credit }),
   });

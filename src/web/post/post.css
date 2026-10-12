@@ -245,6 +245,8 @@ button.add:hover { background: var(--ink); color: var(--yellow); text-decoration
 .modes:disabled label:has(input:checked) { opacity: 1; }
 .sheets .with-unit input[readonly] { border-style: dashed; background: transparent; }
 .paid-fixed { margin: 12px 0 0; }
+/* what the chosen length means for the poster: read before paying, so in ink and with room under it */
+.mode-says { margin: 12px 0 20px; color: var(--ink); }
 .modes label:has(input:checked) { background: var(--ink); color: var(--yellow); }
 .modes label:has(input:focus-visible) { outline: 3px solid var(--pink); outline-offset: 3px; }
 
@@ -314,3 +316,11 @@ button.add:hover { background: var(--ink); color: var(--yellow); text-decoration
 .field.tell { margin-top: 22px; margin-bottom: 8px; }
 .field .optional { margin-left: 6px; padding: 2px 6px 0; font: 400 12px/1.3 var(--type); letter-spacing: 0.06em; text-transform: uppercase; color: var(--grey); border: 1px solid var(--rule); }
 .sheets .field.tell input[type="text"] { font: 400 16px/1.2 var(--type); }
+
+/* what a poster points the pod at: the links, and what reading each came to */
+.references-field { margin-top: 18px; }
+.sheets .references-field textarea { font: 400 14px/1.5 var(--code); }
+.references-read { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; max-width: 62ch; }
+.references-read li { display: grid; gap: 2px; padding: 8px 10px; border-left: 4px solid var(--pink); font: 400 14px/1.4 var(--type); }
+.references-read li[data-ok] { border-left-color: #117a43; }
+.references-read .reference-link { font: 400 13px/1.3 var(--code); overflow-wrap: anywhere; color: var(--grey); }

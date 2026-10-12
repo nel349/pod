@@ -17,6 +17,7 @@ import { NEEDS_A_MODEL, type Role } from "../job.ts";
 import { IMAGE } from "../sandbox.ts";
 import { Identity, type JobRef } from "./Identity.ts";
 import { PodServer } from "./PodServer.ts";
+import { Asking } from "./roles/Asking.ts";
 import { Builder } from "./roles/Builder.ts";
 import { Judge } from "./roles/Judge.ts";
 import { Lead } from "./roles/Lead.ts";
@@ -46,6 +47,8 @@ export interface ReferenceAgentOptions {
   /** the image QA runs the visible checks in: the one a verdict uses, unless told otherwise */
   readonly image?: string;
   readonly every?: number;
+  /** how long a builder leaves its pod to ask the poster anything on a job long enough for questions; left out, the usual */
+  readonly askingGraceSeconds?: number;
   /** take a seat on this job only, rather than the first with the role free */
   readonly jobId?: string;
   /**
@@ -88,8 +91,9 @@ export async function runReferenceAgent(options: ReferenceAgentOptions): Promise
     },
   );
   const seated: Seated = {
-    job, role: options.role, listed: taken, identity, server, copy,
+    job, role: options.role, listed: taken, references: await server.references(taken), identity, server, copy,
     model: options.model, image: options.image ?? IMAGE, builderNames, say,
+    ...(options.askingGraceSeconds === undefined ? {} : { askingGraceSeconds: options.askingGraceSeconds }),
   };
   const work = workFor(seated);
   try {
@@ -113,7 +117,12 @@ export async function runReferenceAgent(options: ReferenceAgentOptions): Promise
   }
 }
 
+/** Every seat asks its poster what their words left open, where the job is long enough for that, and then does its own work. */
 function workFor(seated: Seated): SeatWork {
+  return new Asking(seated, ownWorkFor(seated));
+}
+
+function ownWorkFor(seated: Seated): SeatWork {
   switch (seated.role) {
     case "lead": return seated.builderNames ? new Judge(seated, holdingToTheBrief) : new Lead(seated);
     case "builder": return new Builder(seated);

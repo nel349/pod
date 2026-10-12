@@ -78,7 +78,7 @@ async function seatAs(running: RunningPodServer, agent: Agent, role: Role, optio
   const real = async (): Promise<DoorAccess> => server.gitDoor(job, identity.address, await identity.doorPassword(job, role));
   const copy = await WorkingCopy.open(options.door ? options.door(real) : real, { name: role, email: agentEmail(agent.address) });
   toStop.push(() => void copy.close());
-  return { job, role, listed, identity, server, copy, model: options.model, image: IMAGE, builderNames: await identity.buildersPutTheirWorkForward(), say: () => {} };
+  return { job, role, listed, references: [], identity, server, copy, model: options.model, image: IMAGE, builderNames: await identity.buildersPutTheirWorkForward(), say: () => {} };
 }
 
 /** A model that answers in turn, and keeps what it was asked. An Error among the answers is thrown instead. */

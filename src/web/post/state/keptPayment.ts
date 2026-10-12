@@ -93,5 +93,6 @@ export function formOfPaidJob(kept: Kept): PostForm {
     name: isWallName(kept.name) ? kept.name : "",
     // where to be told is asked before paying, and is not part of what was sealed
     tell: "",
+    references: "",
   };
 }

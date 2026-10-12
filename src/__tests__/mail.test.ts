@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { brevo, brevoFromTheEnvironment, BREVO_SETTINGS, deliveredMail, isEmail, lastDayMail, LONGEST_EMAIL, whenInAMail } from "../mail/index.ts";
+import { brevo, brevoFromTheEnvironment, BREVO_SETTINGS, deliveredMail, isEmail, lastDayMail, LONGEST_EMAIL, questionsMail, whenInAMail } from "../mail/index.ts";
 import { LAST_DAY_SECONDS, LONGEST_MAIL_WAIT_MS, MAIL_AGAIN_AFTER_MS, mailWait, whatToTell } from "../worker/Worker.ts";
 import { brevoSaying } from "./support/brevo.ts";
 
@@ -129,5 +129,34 @@ describe("which message a poster is owed", () => {
     expect(mailWait(2)).toBe(2 * MAIL_AGAIN_AFTER_MS);
     expect(mailWait(3)).toBe(4 * MAIL_AGAIN_AFTER_MS);
     expect(mailWait(40)).toBe(LONGEST_MAIL_WAIT_MS);
+  });
+});
+
+describe("what a poster is written when their pod asks them something", () => {
+  const ASKED = {
+    idea: "A shop for a bakery", page: "https://pod.example/job/a-shop#questions",
+    questions: [
+      { role: "lead", asks: "Should the shop take payment, or only show the bread?", assumes: "It only shows the bread, with prices.", answerBy: new Date("2026-10-14T06:03:04.000Z") },
+      { role: "builder", asks: "Is <b>bold</b> wanted & where?", assumes: "Nowhere.", answerBy: new Date("2026-10-14T07:00:00.000Z") },
+    ],
+  };
+
+  test("each question, what its seat will assume and until when, with where to answer and that not answering holds nothing up", () => {
+    const mail = questionsMail(ASKED);
+    expect(mail.subject).toBe("Your pod has 2 questions: A shop for a bakery");
+    expect(mail.text).toContain("The lead asks: Should the shop take payment, or only show the bread?");
+    expect(mail.text).toContain("If nobody answers by 14 Oct 2026, 06:03 UTC, it will assume: It only shows the bread, with prices.");
+    expect(mail.text).toContain("https://pod.example/job/a-shop#questions");
+    expect(mail.text).toContain("You do not have to answer.");
+    expect(mail.text).toContain("costs nothing and moves no money");
+    expect(mail.subject + mail.text).not.toMatch(/[–—]/);
+  });
+
+  test("one question is said as one, and a seat's words are never read as markup in the page", () => {
+    const one = questionsMail({ ...ASKED, questions: ASKED.questions.slice(1) });
+    expect(one.subject).toBe("Your pod has a question: A shop for a bakery");
+    expect(one.html).toContain("Is &lt;b&gt;bold&lt;/b&gt; wanted &amp; where?");
+    expect(one.html).not.toContain("<b>bold</b>");
+    expect(one.html).toContain('href="https://pod.example/job/a-shop#questions"');
   });
 });

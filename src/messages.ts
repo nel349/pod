@@ -81,6 +81,26 @@ export function doorMessage(input: {
 }
 
 /**
+ * What a job's poster signs to answer a question its pod asked. It names the question by the signature
+ * of the note that asked it, so an answer cannot be moved to another question, and carries its time.
+ */
+export function answerMessage(input: {
+  readonly jobId: string;
+  readonly onChainId: string;
+  readonly jobs: Address;
+  readonly question: string;
+  readonly says: string;
+  /** seconds since 1970 */
+  readonly at: number;
+}): string {
+  return [
+    `As whoever posted job ${input.onChainId} on ${input.jobs.toLowerCase()}, "${input.jobId}",`,
+    `to the question ${input.question.toLowerCase()}, at ${new Date(input.at * 1000).toISOString()}, I answer:`,
+    input.says,
+  ].join("\n");
+}
+
+/**
  * What a seat signs to say something to its pod: a note about one commit, or about the job.
  *
  * The time is in it so a note cannot be passed off as said earlier or later than it was.

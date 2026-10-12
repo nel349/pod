@@ -5,8 +5,9 @@ import { repeatCommand } from "../../../jobpage.ts";
 import type { Tile } from "../../../gallery.ts";
 import { standingOf } from "./tile.ts";
 import type { OnChainJob } from "../../../posting.ts";
-import { checksPath, claimPath, receiptFilePath, receiptPath } from "../../../routes.ts";
+import { checksPath, claimPath, receiptFilePath, receiptPath, referencePath } from "../../../routes.ts";
 import { SEATS } from "../../../seal.ts";
+import { hasTriage, QuestionSchema, questionsOf, type TriageAnswer } from "../../../triage.ts";
 import type { SignedReceipt } from "../../../receipt.ts";
 import { isCodePublic, isPublished, type JobRecord } from "../../../store.ts";
 import { AgentRecordSchema, answerOf, AnswerSchema, deliveryOf, DeliveryViewSchema, PosterRecordSchema, type AgentRecordView, type PosterRecordView } from "./answer.ts";
@@ -54,6 +55,12 @@ export const JobViewSchema = z.object({
   seal: z.string(),
   commit: z.string().optional(),
   howItIsAsked: z.string().optional(),
+  /** what the poster pointed the pod at, each with where to open it */
+  references: z.array(z.object({ name: z.string(), type: z.string(), bytes: z.number(), url: z.string(), from: z.string() })).optional(),
+  /** whether a job of this length lets its pod ask its poster before building: a week does, less does not */
+  asksItsPoster: z.boolean().optional(),
+  /** what its pod asked its poster, in the order asked, each with the answer once there is one */
+  questions: z.array(QuestionSchema).optional(),
   /** how many checks nobody but the grader may read until the verdict */
   sealedChecks: z.number().int(),
   /** the checks anybody may read now: the visible ones while the job runs, all of them after */
@@ -113,7 +120,11 @@ export interface ChainSays {
   readonly agentRecords?: Readonly<Record<string, AgentRecordView>>;
 }
 
-export function jobView(record: JobRecord, notes: readonly Note[], chainSays: ChainSays): JobView {
+/**
+ * @param answers what the job's poster answered its pod. Questions are asked in the open, so they are
+ *                shown while the job runs, though the rest of the pod's notes wait for the verdict
+ */
+export function jobView(record: JobRecord, notes: readonly Note[], chainSays: ChainSays, answers: readonly TriageAnswer[] = []): JobView {
   // money taken back before any verdict closes the job, whether or not the worker has written it down yet
   const isWithdrawn = record.tile.verdict === "running" && chainSays.onChain?.state === "refunded";
   const tile: Tile = isWithdrawn ? { ...record.tile, verdict: "withdrawn" } : record.tile;
@@ -124,6 +135,8 @@ export function jobView(record: JobRecord, notes: readonly Note[], chainSays: Ch
   const tokenId = record.chain?.tokenId;
   const answer = isSealed ? undefined : answerOf(record);
   const delivery = isSealed ? undefined : deliveryOf(record);
+  const asksItsPoster = hasTriage(tile.mode) && record.brief !== undefined;
+  const questions = record.brief ? questionsOf({ mode: tile.mode, endsAt: new Date(record.brief.endsAt) }, notes, answers) : [];
   return {
     jobId: tile.jobId, idea: tile.idea, verdict: tile.verdict,
     ...(answer ? { answer } : {}),
@@ -133,6 +146,11 @@ export function jobView(record: JobRecord, notes: readonly Note[], chainSays: Ch
     price: tile.price.toString(), seal: record.seal,
     ...(tile.commit ? { commit: tile.commit } : {}),
     ...(record.brief?.howItIsAsked ? { howItIsAsked: record.brief.howItIsAsked } : {}),
+    ...(record.brief?.references?.length
+      ? { references: record.brief.references.map(({ name, type, bytes, from }) => ({ name, type, bytes, from, url: referencePath(record.jobId, name) })) }
+      : {}),
+    ...(asksItsPoster ? { asksItsPoster: true } : {}),
+    ...(questions.length > 0 ? { questions: [...questions] } : {}),
     sealedChecks: isSealed ? record.brief?.sealedChecks ?? record.checksSaid.filter((check) => check.hidden).length : 0,
     checks: isSealed ? record.checksSaid.filter((check) => !check.hidden) : [...record.checksSaid],
     checksPath: checksPath(tile.jobId),

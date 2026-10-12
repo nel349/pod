@@ -23,6 +23,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { privateKeyToAccount } from "viem/accounts";
 import { isAddressEqual, zeroHash, type Address, type Hex } from "viem";
+import { secondsNow } from "../clock.ts";
+import { questionsOn } from "../door/QuestionBoard.ts";
 import { branchFor } from "../door/seat.ts";
 import { firstLine } from "../errors.ts";
 import { SITE_FOLDER, SITE_FRONT_PAGE, startFor } from "../job.ts";
@@ -45,7 +47,8 @@ import { readableToTheBox } from "../sandbox.ts";
 import type { SignedReceipt } from "../receipt.ts";
 import { isPublished, wasThePodPaid, type JobRecord, type JobStore, type OnChain, type Told, type Tries, type UnderReview } from "../store.ts";
 import { mintPod, sealOfTitle, tokenOfJob } from "../token.ts";
-import { deliveredMail, lastDayMail, type Mailer } from "../mail/index.ts";
+import { deliveredMail, lastDayMail, questionsMail, type Mailer } from "../mail/index.ts";
+import { isWaiting } from "../triage.ts";
 import { RegistryAnswers } from "./RegistryAnswers.ts";
 import type { PreparingStore } from "../preparing/PreparingStore.ts";
 import type { BoxSlots } from "../docker/index.ts";
@@ -60,6 +63,12 @@ export const LOOK_EVERY_MS = 10_000;
 
 /** How long before a poster's time runs out they are told once more that their answer is waited for. */
 export const LAST_DAY_SECONDS = 24n * 60n * 60n;
+
+/**
+ * How long a question is left before its poster is written to about it: a seat asks its few questions
+ * one after another, and one message with all of them is better than one for each.
+ */
+export const QUESTIONS_SETTLE_SECONDS = 2 * 60;
 
 /** How long a message that could not be sent waits before it is tried again: doubled after each failure, up to the longest wait. */
 export const MAIL_AGAIN_AFTER_MS = 5 * 60_000;
@@ -169,6 +178,8 @@ export interface WorkerOptions {
   readonly mailer?: Mailer;
   /** how long a message that could not be sent waits before it is tried again */
   readonly mailAgainAfterMs?: number;
+  /** how long a question is left before its poster is written to, so questions asked together go in one message; left out, the usual */
+  readonly questionsSettleSeconds?: number;
   /** how long after a host first fails a job it is asked again: HOST_AGAIN_AFTER_MS unless said */
   readonly hostAgainAfterMs?: number;
   readonly say?: (what: string) => void;
@@ -287,6 +298,11 @@ export class Worker {
       this.say(`${jobId}: its money has moved on the chain, so its verdict is public`);
     }
 
+    // a pod's questions to its poster, while it builds: said and never waited on
+    if (onChain.state === "open" || onChain.state === "working") {
+      await this.tellOfQuestions(record).catch((error: unknown) => this.say(`${jobId}: its pod's questions could not be looked at just now: ${firstLine(error)}`));
+    }
+
     // a window that ended with nobody's money moved: anybody may close it, and the worker is always here
     if (isPreparedFirst && (await this.closeIfOver(record, jobs, onChainId, onChain))) return;
 
@@ -353,6 +369,45 @@ export class Worker {
       .catch((error: unknown) => this.say(`${jobId}: a failed grading could not be written down: ${firstLine(error)}`))
       .finally(() => this.grading.delete(jobId));
     this.grading.set(jobId, work);
+  }
+
+  /**
+   * Tell a poster who left an address what their pod has asked them, once for each question, with the
+   * questions asked close together in one message. Only questions still waiting on them are told: one
+   * already answered on the page, or whose day has passed, needs nothing from them. A send that fails
+   * is tried again as a delivery's is, and no job waits on it: a poster who is never reached is the
+   * case the questions' own assumptions are for.
+   */
+  private async tellOfQuestions(record: JobRecord): Promise<void> {
+    const { mailer, preparing, site, store } = this.options;
+    if (!mailer || !preparing || !site || !record.chain) return;
+    const now = secondsNow();
+    const toldAlready = new Set((record.told?.questions ?? []).map((id) => id.toLowerCase()));
+    const untold = (await questionsOn(store, record))
+      .filter((question) => isWaiting(question, now) && !toldAlready.has(question.id.toLowerCase()) && !this.mailed.has(`${record.jobId}:${question.id.toLowerCase()}`));
+    if (untold.length === 0 || untold.some((question) => now - question.askedAt < (this.options.questionsSettleSeconds ?? QUESTIONS_SETTLE_SECONDS))) return;
+    const trying = `${record.jobId}:questions`;
+    const tried = this.mailTries.get(trying);
+    if (tried && Date.now() - tried.at < mailWait(tried.failed, this.options.mailAgainAfterMs ?? MAIL_AGAIN_AFTER_MS)) return;
+    // by its name as well as its number: a number alone is shared with the contracts before this one
+    const setUp = await preparing.readSetUp(record.chain.jobId);
+    const to = setUp?.name === record.jobId ? setUp.tell : undefined;
+    if (!to) return;
+    try {
+      await mailer.send({ to, ...questionsMail({
+        idea: record.tile.idea, page: new URL(`${jobPath(record.jobId)}#questions`, site).toString(),
+        questions: untold.map((question) => ({ role: question.role, asks: question.asks, assumes: question.assumes, answerBy: new Date(question.answerBy * 1000) })),
+      }) });
+    } catch (error) {
+      this.mailTries.set(trying, { failed: (tried?.failed ?? 0) + 1, at: Date.now() });
+      if (!tried) this.say(`${record.jobId}: its poster could not be told by mail of its pod's questions, and is tried again: ${firstLine(error).replaceAll(to, "their address")}`);
+      return;
+    }
+    for (const question of untold) this.mailed.add(`${record.jobId}:${question.id.toLowerCase()}`);
+    this.mailTries.delete(trying);
+    const fresh = (await store.read(record.jobId)) ?? record;
+    await store.save({ ...fresh, told: { ...fresh.told, questions: [...(fresh.told?.questions ?? []), ...untold.map((question) => question.id)] } });
+    this.say(`${record.jobId}: its poster was told by mail of ${untold.length === 1 ? "a question its pod asked" : `${untold.length} questions its pod asked`}`);
   }
 
   /**
@@ -872,6 +927,7 @@ export class Worker {
     });
     await store.save({
       ...opened, poster: setUp.poster,
+      ...(opened.brief && setUp.references ? { brief: { ...opened.brief, references: setUp.references } } : {}),
       chain: { network: "monad-testnet", jobId: onChainId, jobs: prepared.address, ...(this.options.hasTheLastWord ? { lastWord: true } : {}) },
     }, approved.files);
     await store.saveSpec(setUp.name, spec);

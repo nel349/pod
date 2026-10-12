@@ -367,4 +367,34 @@ describe.skipIf(!available)("a stranger posts a job that is prepared before it o
     expect(await anvil.publicClient.readContract({ address: jobs, abi: podJobsV2Abi, functionName: "owed", args: [POSTER_ADDRESS] })).toBe(0n);
     expect((await anvil.publicClient.getBalance({ address: POSTER_ADDRESS })) > before + PRICE - parseEther("0.01")).toBe(true);
   }, 480_000);
+
+  test("before paying, a link POD cannot read is refused on the form with what to give instead, and the form says which lengths are one shot and which let the pod ask", async () => {
+    const page = await aBrowser();
+    await describeTheJob(page, "a-coat-with-a-sketch");
+    await page.type("#references", "https://www.figma.com/file/abc/a-coat\nhttp://example.com/sketch.png");
+    // leaving the box is when the server is asked whether each link can be read
+    await page.evaluate(`document.querySelector("#references").blur()`);
+    await page.until(`document.querySelectorAll("#references-read li").length === 2`, "what reading each link came to", 30, `document.querySelector(".references-field")?.parentElement?.innerText ?? ""`);
+    const found = await page.evaluate<string>(`document.querySelector("#references-read").innerText`);
+    expect(found).toContain("Export the frame as an image");
+    expect(found).toContain("a reference is a link that starts with https://");
+    expect(found).not.toContain("can be read");
+
+    // two hours is what the form starts on: one shot. A week lets the pod ask
+    expect(await page.evaluate<string>(`document.querySelector("#mode-says").textContent`)).toBe(COPY.terms.modeSays.flash);
+    await page.click('input[name="mode"][value="project"]');
+    await page.until(`document.querySelector("#mode-says")?.textContent === ${JSON.stringify(COPY.terms.modeSays.project)}`, "the form to say a week comes with questions");
+    expect(await page.evaluate<string>(`[...document.querySelectorAll('input[name="mode"]')].filter((one) => one.checked).map((one) => one.value).join()`), "and the choice shown as made is the one that was made").toBe("project");
+    const folder = process.env.SCREENSHOTS;
+    // the choice fades from one to the other: photographed once it has
+    if (folder) await Bun.sleep(400);
+    if (folder) await page.screenshot(join(folder, "post-references-and-length.png"));
+    if (folder) {
+      await page.evaluate(`document.querySelector("#references").scrollIntoView({ block: "center" })`);
+      await page.screenshot(join(folder, "post-references-box.png"));
+    }
+    await page.resize(390, 844);
+    expect(await page.evaluate<boolean>(`document.documentElement.scrollWidth <= window.innerWidth`), "the form never scrolls sideways on a phone").toBe(true);
+    if (folder) await page.screenshot(join(folder, "post-references-and-length-phone.png"));
+  }, 120_000);
 });

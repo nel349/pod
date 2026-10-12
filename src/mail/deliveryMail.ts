@@ -20,7 +20,7 @@ export interface DeliveryToTell {
 /** The longest a job's idea runs in a subject line before it is cut. */
 const LONGEST_IDEA_IN_A_SUBJECT = 70;
 
-const inASubject = (idea: string): string =>
+export const inASubject = (idea: string): string =>
   idea.length <= LONGEST_IDEA_IN_A_SUBJECT ? idea : `${idea.slice(0, LONGEST_IDEA_IN_A_SUBJECT - 1).trimEnd()}…`;
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
@@ -36,7 +36,7 @@ const silence = (delivery: DeliveryToTell): string => delivery.checksPassed
   ? "If you say nothing by then, the checks decide: the pod is paid."
   : "If you say nothing by then, the checks decide: your money comes back.";
 
-const WHY_YOU_GET_THIS = "You get this because you left this address when you posted the job. POD keeps it only to tell you about this job.";
+export const WHY_YOU_GET_THIS = "You get this because you left this address when you posted the job. POD keeps it only to tell you about this job.";
 
 /** What the checks found, counted when the count is known. */
 function found(delivery: DeliveryToTell): string {
@@ -46,14 +46,14 @@ function found(delivery: DeliveryToTell): string {
   return `${checks.passed} of its ${checks.of} checks passed. You can still accept it.`;
 }
 
-const escaped = (text: string): string =>
+export const escaped = (text: string): string =>
   text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
 
 /** POD's colours, written out here because mail reads no stylesheet. */
-const LOOK = { yellow: "#ffe500", pink: "#ff2e88", ink: "#0b0b0b", paper: "#f3f3ee", grey: "#5b5b55", passed: "#117a43" } as const;
-const FACE = "Arial, Helvetica, sans-serif";
+export const LOOK = { yellow: "#ffe500", pink: "#ff2e88", ink: "#0b0b0b", paper: "#f3f3ee", grey: "#5b5b55", passed: "#117a43" } as const;
+export const FACE = "Arial, Helvetica, sans-serif";
 // single quotes: these sit inside a style attribute, which double quotes would close
-const SHOUT = `'Arial Narrow', Impact, ${FACE}`;
+export const SHOUT = `'Arial Narrow', Impact, ${FACE}`;
 
 /** A message as a page: a yellow bill with what happened, the job by name, what was found, and one button. */
 function asAPage(parts: {

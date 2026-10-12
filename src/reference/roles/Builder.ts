@@ -10,7 +10,9 @@
 import { branchFor } from "../../door/seat.ts";
 import { PORT, SITE_FOLDER, SITE_FRONT_PAGE, workFileFor, type Kind } from "../../job.ts";
 import { JUDGES, MOST_REBUILDS, REFUSED } from "../protocol.ts";
-import { briefFor, candidateBranchOf, candidateOf, passwordFor, type Seated, type SeatWork } from "../Seated.ts";
+import { secondsNow } from "../../clock.ts";
+import { hasTriage, isWaiting } from "../../triage.ts";
+import { ASKING_GRACE_SECONDS, briefFor, candidateBranchOf, candidateOf, passwordFor, settledFor, type Seated, type SeatWork } from "../Seated.ts";
 import { shortCommit } from "../../repo.ts";
 
 
@@ -22,11 +24,18 @@ export class Builder implements SeatWork {
   private readonly answered = new Set<string>();
   /** the commit it last found locked before it could put it forward, so that is said once */
   private saidLockedFor?: string;
+  /** when it first looked at a job long enough for questions, in seconds: the pod's time to ask is counted from here */
+  private firstLooked?: number;
+  /** what it last said it was waiting on before building, so each wait is said once */
+  private saidWaitingOn?: string;
 
   constructor(private readonly seated: Seated) {}
 
   async step(): Promise<void> {
-    if (!this.latest) await this.build([]);
+    if (!this.latest) {
+      if (await this.isWaitingOnThePoster()) return;
+      await this.build([]);
+    }
     // every look, not only after a build: a transaction that failed, or a lock the grader let go of,
     // leaves the latest work still to be put forward
     await this.putMyLatestForward();
@@ -46,6 +55,27 @@ export class Builder implements SeatWork {
     await this.build(refusals.map((refusal) => refusal.why));
     for (const refusal of refusals) this.answered.add(refusal.signature);
     this.rebuilds++;
+  }
+
+  /**
+   * Whether the first build should wait: on a job long enough for questions, while the pod still has
+   * its first minutes to ask, and then while any question waits on the poster. Each question's day
+   * ends by itself, so a poster who never answers holds the build a day and no longer.
+   */
+  private async isWaitingOnThePoster(): Promise<boolean> {
+    const { seated } = this;
+    if (!hasTriage(seated.listed.mode)) return false;
+    const now = secondsNow();
+    this.firstLooked ??= now;
+    const waiting = (await seated.server.questions(seated.job)).filter((question) => isWaiting(question, now));
+    const isStillTimeToAsk = now - this.firstLooked < (seated.askingGraceSeconds ?? ASKING_GRACE_SECONDS);
+    if (waiting.length === 0 && !isStillTimeToAsk) return false;
+    const on = waiting.length > 0
+      ? `${waiting.length === 1 ? "a question" : `${waiting.length} questions`} the pod asked the poster, until answered or ${new Date(Math.max(...waiting.map((question) => question.answerBy)) * 1000).toISOString()}`
+      : "the rest of the pod, which has a few minutes to ask the poster anything before the first build";
+    if (this.saidWaitingOn !== on) seated.say(`not building yet: waiting on ${on}`);
+    this.saidWaitingOn = on;
+    return true;
   }
 
   /** Why a judge refused a candidate that holds this builder's latest work, and not yet answered. */
@@ -101,7 +131,7 @@ export class Builder implements SeatWork {
       ...whatToWrite(seated.listed.kind),
       "",
       "## What is being asked for",
-      briefFor(seated.listed),
+      briefFor(seated.listed, seated.references, await settledFor(seated)),
       ...(existing.length > 0 ? ["", "## What is there now, which you are replacing", ...existing.flatMap((one) => [`${FILE_MARK} ${one.name}`, "```", one.contents, "```"])] : []),
       ...(refusals.length > 0 ? ["", "## Why the last version was refused, which this one must fix", ...refusals.map((why) => `- ${why}`)] : []),
     ].join("\n"), AbortSignal.timeout(MODEL_MAY_TAKE_MS));

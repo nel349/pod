@@ -4,6 +4,7 @@
  * The sentences are validated by the same schema the server uses, so nothing is refused here that
  * the server would accept, or the other way round.
  */
+import { linksIn, ReferenceLinksSchema } from "../../../references/Reference.ts";
 import { z } from "zod";
 import { parseEther } from "viem";
 import type { DeepPartial, DefaultValues } from "react-hook-form";
@@ -29,6 +30,11 @@ export const PostFormSchema = z.object({
   name: z.string().regex(WALL_NAME, COPY.problems.name),
   /** where to tell them it was delivered: an email address, or left empty */
   tell: z.string().trim().refine((value) => value === "" || isEmail(value), COPY.problems.tell),
+  /** links to what they point the pod at, one to a line, or left empty */
+  references: z.string().superRefine((typed, context) => {
+    const links = ReferenceLinksSchema.safeParse(linksIn(typed));
+    if (!links.success) context.addIssue({ code: "custom", message: links.error.issues[0]?.message ?? COPY.problems.references });
+  }),
 }).superRefine((form, context) => {
   const lines = [...filled(form.brief), ...filled(form.exam)];
   if (lines.length === 0) context.addIssue({ code: "custom", path: ["brief"], message: COPY.problems.noLines });
@@ -61,6 +67,7 @@ export const BLANK_FORM: DefaultValues<PostForm> = {
   mode: DEFAULT_MODE,
   name: "",
   tell: "",
+  references: "",
 };
 
 /** A price as the poster typed it, in wei, or nothing when it is not an amount more than zero. */

@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { useFormContext } from "react-hook-form";
+import { useFormContext, useWatch } from "react-hook-form";
 import { MODE_NAMES } from "../../../job.ts";
 import { COPY, type PostForm } from "../state/index.ts";
 import { holdEnter } from "./holdEnter.ts";
@@ -15,7 +15,8 @@ export function TermsStep({ coin, isPaid = false, canTell = false }: {
   /** this server tells a poster by mail when their job is delivered, so an address is worth asking for */
   readonly canTell?: boolean;
 }): ReactElement {
-  const { register } = useFormContext<PostForm>();
+  const { register, control } = useFormContext<PostForm>();
+  const mode = useWatch({ control, name: "mode" });
   return (
     <Step name="terms" title={COPY.terms.title}>
       <div className="terms">
@@ -32,6 +33,7 @@ export function TermsStep({ coin, isPaid = false, canTell = false }: {
           ))}
         </fieldset>
       </div>
+      <p id="mode-says" className="note mode-says" role="status">{COPY.terms.modeSays[mode]}</p>
       {isPaid && <p className="note paid-fixed">{COPY.terms.paidFixed}</p>}
       <label className="field">
         {COPY.terms.name}

@@ -76,6 +76,8 @@ export interface KeptSetUp {
   readonly request: WriteRequest;
   /** where the poster asked to be told of the delivery, when they did */
   readonly tell?: string;
+  /** the links the poster pointed the pod at, when they gave any */
+  readonly references?: readonly string[];
 }
 
 const KeptSetUpSchema = z.object({
@@ -89,6 +91,7 @@ const KeptSetUpSchema = z.object({
   salt: z.string().regex(SALT),
   request: WriteRequestSchema,
   tell: z.string().optional(),
+  references: z.array(z.string()).optional(),
 });
 
 /** Where a set-up on this chain and contract is kept. */
@@ -117,7 +120,7 @@ export function readKeptSetUp(text: string | null): KeptSetUp | undefined {
 
 /** The form as it was when the job was paid for, so the page a poster comes back to shows it. */
 export function formOfKeptSetUp(kept: KeptSetUp): DraftForm {
-  return { ...formOfRequest(kept.request), price: kept.price, mode: kept.mode, name: kept.name, tell: kept.tell ?? "" };
+  return { ...formOfRequest(kept.request), price: kept.price, mode: kept.mode, name: kept.name, tell: kept.tell ?? "", references: (kept.references ?? []).join("\n") };
 }
 
 /** The idea and the lines of a request, as the form holds them: a list left empty still shows one empty line. */

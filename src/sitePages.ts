@@ -91,7 +91,7 @@ export async function jobData(store: JobStore, owners: Owners | undefined, jobId
   const record = await store.read(jobId);
   if (!record) return undefined;
   const chainSays = await chainSaysOf(record, owners, now);
-  return jobView(publicRecord(record, now), await store.notes(jobId), { ...chainSays, ...(await recordsOf(record, chainSays.poster, records)) });
+  return jobView(publicRecord(record, now), await store.notes(jobId), { ...chainSays, ...(await recordsOf(record, chainSays.poster, records)) }, await store.answers(jobId));
 }
 
 export async function agentPage(store: JobStore, agent: Address, agents: AgentFactsReader | undefined, records?: Records): Promise<SitePage> {

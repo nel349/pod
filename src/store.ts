@@ -9,6 +9,8 @@
  * verdict. Hiding them during the build is what stops a pod writing to the test; hiding them
  * afterwards would stop a stranger repeating the run, which is the whole promise.
  */
+import { AnswerSchema, type TriageAnswer } from "./triage.ts";
+import type { Reference } from "./references/index.ts";
 import { appendFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Address, Hex } from "viem";
@@ -36,6 +38,8 @@ export interface Brief {
   /** how the checks ask for what the poster's words left open, in plain words, when they had to */
   readonly howItIsAsked?: string;
   readonly seats: readonly { readonly role: string; readonly taken: boolean }[];
+  /** what the poster pointed the pod at, fetched once when the job was set up; their files are kept by the job's number */
+  readonly references?: readonly Reference[];
 }
 
 export type { Note } from "./note.ts";
@@ -215,6 +219,8 @@ const RECORD = "job.json";
 const CHECKS = "checks";
 /** one note to a line, in the order they arrived */
 const NOTES = "notes.jsonl";
+/** what a job's poster answered the questions its pod asked, one to a line */
+const ANSWERS = "answers.jsonl";
 /** the spec as it was posted and sealed, hidden checks and salt included, so it is never served whole while the job runs */
 const SPEC = "spec.json";
 const HISTORY = "history.bundle";
@@ -265,6 +271,8 @@ export function publicRecord(record: JobRecord, now: Date = new Date()): JobReco
 export interface Told {
   readonly delivered?: string;
   readonly lastDay?: string;
+  /** the questions their pod asked that they were told of, by each question's name */
+  readonly questions?: readonly string[];
 }
 
 /** Work a builder put forward, as the contract has it while its review runs. */
@@ -474,6 +482,24 @@ export class JobStore {
   /** Whether a note with this signature is already kept: each is said once. */
   async hasNote(jobId: string, signature: string): Promise<boolean> {
     return (await this.notes(jobId)).some((note) => note.signature.toLowerCase() === signature.toLowerCase());
+  }
+
+  /** Keep a poster's answer to a question their pod asked. The door decides whose it is; this only keeps it. */
+  async addAnswer(jobId: string, answer: TriageAnswer): Promise<void> {
+    if (!(await this.read(jobId))) throw new Error(`there is no job called ${jobId} to answer a question on`);
+    await appendFile(join(this.root, jobId, ANSWERS), `${JSON.stringify(answer)}\n`);
+  }
+
+  /** What a job's poster answered its pod, oldest first. */
+  async answers(jobId: string): Promise<readonly TriageAnswer[]> {
+    if (!isSafeName(jobId)) return [];
+    let text: string;
+    try {
+      text = await readFile(join(this.root, jobId, ANSWERS), "utf8");
+    } catch {
+      return [];
+    }
+    return text.split("\n").filter(Boolean).map((line) => AnswerSchema.parse(JSON.parse(line)));
   }
 
   /** A job's notes, oldest first. Who may read them is the doors' to decide, as with adding them. */

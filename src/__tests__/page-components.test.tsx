@@ -141,7 +141,7 @@ describe("after a payment that went through", () => {
   test("if publishing then failed, the button offers to finish the paid job, and says what was paid", async () => {
     const { sealJob } = await import("../web/post/state/index.ts");
     const sealed = await sealJob(
-      { idea: "A service that tells me about coats", kind: "service", brief: [], exam: [], price: "0.1", mode: "flash", name: "a-coat", tell: "" },
+      { idea: "A service that tells me about coats", kind: "service", brief: [], exam: [], price: "0.1", mode: "flash", name: "a-coat", tell: "", references: "" },
       [], "a-salt",
     );
     render(
@@ -173,7 +173,7 @@ describe("sealing what is on the page", () => {
     const form = {
       idea: "A service that tells me whether to take a coat", kind: "service" as const,
       brief: [{ says: "When it is raining, it says take a coat" }], exam: [],
-      price: "0.1", mode: "flash" as const, name: "a-coat", tell: "",
+      price: "0.1", mode: "flash" as const, name: "a-coat", tell: "", references: "",
     };
     const tried = (source: string): TriedCheck => ({ ...SHAKY, secret: false, says: form.brief[0]!.says, source, proof: { working: true, nearMiss: true, nothing: true } });
     const key = requestKey(toWriteRequest(form));
