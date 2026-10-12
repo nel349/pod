@@ -23,8 +23,10 @@ describe.skipIf(!asked)("mail, through Brevo itself", () => {
     await mailer.send({
       to,
       ...deliveredMail({
-        idea: `A message sent by POD's own test at ${new Date().toISOString()}`, checksPassed: true,
-        answerBy: new Date(Date.now() + 3 * 24 * 3600 * 1000), page: "https://vps-39a35c60.vps.ovh.us/",
+        // as a real one reads, about a job that does not exist: said in its name, so nobody takes it for theirs
+        idea: `A sample job, sent by POD's own test at ${new Date().toISOString()}: a page that says whether I need a coat today`, checksPassed: true,
+        checks: { passed: 4, of: 4 }, live: "https://example.org/",
+        answerBy: new Date(Date.now() + 3 * 24 * 3600 * 1000), page: "https://vps-39a35c60.vps.ovh.us/jobs",
       }),
     });
   }, 60_000);

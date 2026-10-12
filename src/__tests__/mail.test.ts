@@ -57,6 +57,29 @@ describe("what POD writes to a poster", () => {
     expect(failed.text).not.toContain("the pod is paid");
   });
 
+  test("it is about their own job, by name, with what was found counted, where it is live, and one button: as text and as a page", () => {
+    const mail = deliveredMail({ ...DELIVERY, checks: { passed: 4, of: 4 }, live: "https://pod-pokemon-cards-f23ffb31.netlify.app" });
+    expect(mail.text).toContain("All 4 of its checks passed.");
+    expect(mail.text).toContain("It is live at:\nhttps://pod-pokemon-cards-f23ffb31.netlify.app");
+    const page = mail.html ?? "";
+    expect(page).toContain(DELIVERY.idea);
+    expect(page).toContain("All 4 of its checks passed.");
+    expect(page).toContain(`<a href="${DELIVERY.page}"`);
+    expect(page).toContain("Open it and answer");
+    expect(page).toContain(`<a href="https://pod-pokemon-cards-f23ffb31.netlify.app"`);
+    expect(page).toContain("You have until 14 Oct 2026, 06:03 UTC to answer.");
+    // some failed: counted, said in the colour of a refusal, and still theirs to accept
+    const failed = deliveredMail({ ...DELIVERY, checksPassed: false, checks: { passed: 3, of: 4 } });
+    expect(failed.text).toContain("3 of its 4 checks passed. You can still accept it.");
+    expect(failed.html).toContain("3 of its 4 checks passed. You can still accept it.");
+    expect(failed.html).not.toContain("It is live at");
+    // what a poster wrote is words on the page, never markup in it
+    const sly = deliveredMail({ ...DELIVERY, idea: `A page <script>alert("x")</script> & more` });
+    expect(sly.html).toContain("A page &lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; more");
+    expect(sly.html).not.toContain("<script>");
+    expect(lastDayMail(DELIVERY).html).toContain("One day left to answer");
+  });
+
   test("a day before their time runs out: that it still waits for them, until when, and where to answer", () => {
     const mail = lastDayMail(DELIVERY);
     expect(mail.subject).toStartWith("One day left to answer: ");

@@ -58,6 +58,7 @@ export function brevo(options: BrevoOptions): Mailer {
           to: [{ email: mail.to }],
           subject: mail.subject,
           textContent: mail.text,
+          ...(mail.html ? { htmlContent: mail.html } : {}),
         }),
         signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
       });

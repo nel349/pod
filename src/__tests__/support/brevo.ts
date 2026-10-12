@@ -12,6 +12,8 @@ export interface Sent {
   readonly to: string;
   readonly subject: string;
   readonly text: string;
+  /** the same message as a page, when it was sent one */
+  readonly html?: string;
 }
 
 export interface BrevoSaying {
@@ -38,8 +40,8 @@ export function brevoSaying(): BrevoSaying {
       if (request.method !== "POST" || pathname !== BREVO_SEND_PATH) return new Response("no such door", { status: 404 });
       asked += 1;
       if (refusal) return Response.json({ code: "invalid_parameter", message: refusal.message }, { status: refusal.status });
-      const body = await request.json() as { sender: Sent["from"]; to: { email: string }[]; subject: string; textContent: string };
-      for (const one of body.to) sent.push({ key: request.headers.get("api-key"), from: body.sender, to: one.email, subject: body.subject, text: body.textContent });
+      const body = await request.json() as { sender: Sent["from"]; to: { email: string }[]; subject: string; textContent: string; htmlContent?: string };
+      for (const one of body.to) sent.push({ key: request.headers.get("api-key"), from: body.sender, to: one.email, subject: body.subject, text: body.textContent, ...(body.htmlContent ? { html: body.htmlContent } : {}) });
       return Response.json({ messageId: `<${sent.length}@stand-in>` }, { status: 201 });
     },
   });

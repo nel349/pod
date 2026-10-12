@@ -606,7 +606,9 @@ describe.skipIf(!available)("the worker, where the poster has the last word", ()
       expect(message?.to).toBe("the-poster@example.com");
       expect(message?.subject).toStartWith("Your job is delivered: ");
       expect(message?.text).toContain("https://pod.example/job/last-word-told-by-mail");
-      expect(message?.text).toContain("Its checks passed.");
+      // counted from the signed receipt: the job has two checks, one of them hidden from its pod
+      expect(message?.text).toContain("Both of its checks passed.");
+      expect(message?.html).toContain("Both of its checks passed.");
       const answerBy = await readAnswerBy(reader(), job.onChainId);
       if (answerBy === undefined) throw new Error("a delivered job has no time to answer by");
       expect(message?.text).toContain(whenInAMail(new Date(Number(answerBy) * 1000)));

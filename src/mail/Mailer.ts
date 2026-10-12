@@ -1,8 +1,10 @@
-/** One message to one person, in plain text. */
+/** One message to one person: in plain text, and laid out as a page for a reader whose mail shows one. */
 export interface Mail {
   readonly to: string;
   readonly subject: string;
   readonly text: string;
+  /** the same message as a page; a reader that shows none falls back to the text */
+  readonly html?: string;
 }
 
 /** Something that sends mail. POD tells a poster their job was delivered through one, and nothing else. */

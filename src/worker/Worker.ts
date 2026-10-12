@@ -375,9 +375,12 @@ export class Worker {
     if (tried && Date.now() - tried.at < mailWait(tried.failed, this.options.mailAgainAfterMs ?? MAIL_AGAIN_AFTER_MS)) return;
     const to = (await preparing.readSetUp(record.chain.jobId))?.tell;
     if (!to) return;
+    const ran = record.signed.receipt.checks;
     const delivery = {
       idea: record.tile.idea, checksPassed: record.signed.receipt.verdict === "passed",
       answerBy: new Date(Number(answerBy) * 1000), page: new URL(jobPath(record.jobId), site).toString(),
+      checks: { passed: ran.filter((check) => check.exitCode === 0).length, of: ran.length },
+      ...(record.live && record.live.removedAt === undefined ? { live: record.live.url } : {}),
     };
     try {
       await mailer.send({ to, ...(which === "delivered" ? deliveredMail(delivery) : lastDayMail(delivery)) });
