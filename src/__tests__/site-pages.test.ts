@@ -685,13 +685,17 @@ describe("a job delivered to a poster who has the last word", () => {
     expect(draw({ page: "wall", tiles: [tileOfRecord(answered("accepted"))] })).not.toContain("open-it");
   });
 
-  test("the welcome, where a builder alone can deliver: three steps, a pod of up to five, and what a poster needs before they start", () => {
+  test("the welcome's six steps: a pod of up to five, the refusal and the silence by the contract's own rule, and what a poster needs before they start", () => {
     const rule = { answerSeconds: 3 * 24 * 3600, refusalSharePercent: 25, reviewSharePercent: 25 };
-    const steps = SITE.wall.lastWord.steps(rule);
-    expect(steps).toHaveLength(3);
-    expect(steps.join(" ")).toContain("up to five AI agents");
-    expect(steps.join(" ")).not.toMatch(/(?<!up to )five AI agents/);
-    expect(SITE.wall.lastWord.needs).toContain("a wallet with test MON");
+    const steps = Object.values(SITE.welcome.steps(rule)).map((step) => `${step.title}. ${step.says}`);
+    expect(steps).toHaveLength(6);
+    expect(steps.join(" ")).toContain("Up to five AI agents");
+    expect(steps.join(" ")).not.toMatch(/(?<!up to )five AI agents/i);
+    expect(steps.join(" ")).toContain("all of it if the checks failed, three quarters if they passed. Say nothing for 3 days, and the checks decide.");
+    // a contract with another rule is told by its own numbers, never these
+    const other = Object.values(SITE.welcome.steps({ ...rule, answerSeconds: 12 * 3600, refusalSharePercent: 50 })).map((step) => step.says).join(" ");
+    expect(other).toContain("half if they passed. Say nothing for 12 hours");
+    expect(SITE.welcome.needs).toContain("a wallet with test MON");
   });
 
   test("a check that failed says why in its own last word, once its result is public and never before", () => {
@@ -774,15 +778,39 @@ describe("a job delivered to a poster who has the last word", () => {
     expect(job(running())).toContain(SITE.job.money.onlyTheVerdict);
   });
 
-  test("the welcome says what the contract jobs are posted to does: the checks decide, or the poster has the last word", () => {
+  test("where the checks alone decide the list of jobs says how it works itself; where the poster has the last word it is the jobs alone, and the welcome is the film", () => {
     const tiles = [tileView(tile(), false)];
     const byChecks = draw({ page: "wall", tiles });
     expect(byChecks).toContain(SITE.wall.strap);
+    expect(byChecks).toContain(`id="how-it-works"`);
     const market = { chainId: 31337, chainName: "a local chain", rpc: "http://127.0.0.1:8545", jobs: ON_CHAIN.jobs, explorer: "http://explorer.invalid", coin: "MON", lastWord: { answerSeconds: 3 * 86_400, refusalSharePercent: 25, reviewSharePercent: 25 } };
-    const byThePoster = renderSite({ title: "a page" }, { page: "wall", tiles, coin: "MON", drawnAt: NOW.toISOString(), site: SITE_ADDRESS, market });
-    expect(byThePoster).toContain(SITE.wall.lastWord.strap);
-    expect(byThePoster).toContain("all of it if the checks failed, three quarters if they passed. Say nothing for 3 days, and the checks decide.");
-    expect(byThePoster).not.toContain(SITE.wall.strap);
+    const drawn = (page: "wall" | "welcome"): string => renderSite({ title: "a page" }, { page, tiles, coin: "MON", drawnAt: NOW.toISOString(), site: SITE_ADDRESS, market });
+
+    const jobs = drawn("wall");
+    expect(jobs).toContain(SITE.wall.jobs.strap);
+    expect(jobs).not.toContain(SITE.wall.strap);
+    expect(jobs).not.toContain(`id="how-it-works"`);
+    expect(jobs).toContain(`<a class="quiet" href="${ROUTES.welcome}">${SITE.wall.jobs.how}</a>`);
+
+    const welcome = drawn("welcome").replaceAll("<!-- -->", "");
+    expect(welcome).toContain(SITE.welcome.strap);
+    // the film is drawn at its first scene, with every prop where that scene ends, and is kept from a screen reader
+    expect(welcome).toContain(`<div class="stage" data-beat="say" aria-hidden="true">`);
+    expect(welcome).toContain(`<p class="stage-title">You say what you want</p>`);
+    expect(welcome).toContain(`<p class="ticket-price">1 MON</p>`);
+    expect(welcome).toContain(`<div class="film-rail" data-money="arriving">`);
+    expect(welcome).toContain("1 MON is held, not paid.");
+    expect(welcome.match(/data-state="empty" data-role=/g)).toHaveLength(5);
+    // the same six steps in words, for whoever reads rather than watches, by the contract's own rule
+    expect(welcome.match(/<ol class="story-steps">(.*?)<\/ol>/s)?.[1]?.match(/<li>/g)).toHaveLength(6);
+    expect(welcome).toContain("all of it if the checks failed, three quarters if they passed. Say nothing for 3 days, and the checks decide.");
+    // and the newest jobs really built here, with the way to all of them
+    expect(welcome).toContain(SITE.welcome.builtTitle);
+    expect(welcome).toContain(`<a href="${ROUTES.wall}">${SITE.welcome.everyJob}</a>`);
+    // with nothing built yet it promises nothing: no heading over an empty space
+    expect(renderSite({ title: "a page" }, { page: "welcome", tiles: [], coin: "MON", drawnAt: NOW.toISOString(), site: SITE_ADDRESS, market })).not.toContain(SITE.welcome.builtTitle);
+    // a welcome asked of a server with no such rule is the list of jobs, saying how it works itself
+    expect(draw({ page: "welcome", tiles })).toContain(`id="how-it-works"`);
   });
 
   test("a job on a contract that settles on the verdict alone has no delivery to speak of", () => {

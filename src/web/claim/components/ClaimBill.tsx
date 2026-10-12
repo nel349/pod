@@ -6,7 +6,7 @@ import { COPY } from "../state/index.ts";
 export function ClaimBill(): ReactElement {
   return (
     <aside className="bill">
-      <p className="eyebrow"><a href={ROUTES.wall}>Proof of Development</a> / {COPY.masthead.eyebrow}</p>
+      <p className="eyebrow"><a href={ROUTES.welcome}>Proof of Development</a> / {COPY.masthead.eyebrow}</p>
       <h1 className="shout">
         {COPY.masthead.shout.map((line) => <span key={line} data-text={line}>{line}</span>)}
         <span className="strap">{COPY.masthead.strap}</span>

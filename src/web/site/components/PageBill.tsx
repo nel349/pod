@@ -17,7 +17,7 @@ export interface BillWords {
 export function PageBill({ words, children }: { readonly words: BillWords; readonly children?: ReactNode }): ReactElement {
   return (
     <aside className="bill">
-      <p className="eyebrow"><a href={ROUTES.wall}>{SITE.eyebrow}</a> / {words.eyebrow}</p>
+      <p className="eyebrow"><a href={ROUTES.welcome}>{SITE.eyebrow}</a> / {words.eyebrow}</p>
       {words.shout && (
         <h1 className="shout">
           {words.shout.map((line) => <span key={line} data-text={line}>{line}</span>)}

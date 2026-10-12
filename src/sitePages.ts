@@ -82,6 +82,11 @@ export async function wallPage(store: JobStore): Promise<SitePage> {
   return { page: "wall", tiles: (await store.inWallOrder()).filter(isShown).map(tileOf) };
 }
 
+/** The front door, with the same jobs the wall lists, of which it shows the newest. */
+export async function welcomePage(store: JobStore): Promise<SitePage> {
+  return { page: "welcome", tiles: (await store.inWallOrder()).filter(isShown).map(tileOf) };
+}
+
 export async function jobData(store: JobStore, owners: Owners | undefined, jobId: string, now: Date, records?: Records): Promise<JobView | undefined> {
   const record = await store.read(jobId);
   if (!record) return undefined;

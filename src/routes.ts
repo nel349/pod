@@ -7,7 +7,10 @@
  */
 
 export const ROUTES = {
-  wall: "/",
+  /** the front door: what POD is, for somebody who has never been here */
+  welcome: "/",
+  /** every job, the failed ones too */
+  wall: "/jobs",
   style: "/wall.css",
   /** one job, with its evidence */
   job: "/job/",
@@ -77,7 +80,7 @@ export const ROUTES = {
  * the page, a passkey wallet's key, stays. Files, data and git are not pages, and load as they always did.
  */
 export function isPagePath(pathname: string): boolean {
-  return pathname === ROUTES.wall || pathname === ROUTES.yours || pathname === ROUTES.agents || pathname === ROUTES.post || pathname.startsWith(`${ROUTES.post}/`)
+  return pathname === ROUTES.welcome || pathname === ROUTES.wall || pathname === ROUTES.yours || pathname === ROUTES.agents || pathname === ROUTES.post || pathname.startsWith(`${ROUTES.post}/`)
     || pathname.startsWith(ROUTES.job) || pathname.startsWith(ROUTES.agent) || pathname.startsWith(ROUTES.refund) || pathname.startsWith(ROUTES.claim)
     || (pathname.startsWith(ROUTES.receipt) && !pathname.endsWith(RECEIPT_FILE));
 }

@@ -5,12 +5,14 @@ import { PostPages } from "../post/index.ts";
 import { RefundPages } from "../refund/index.ts";
 import { ClientOnly, SiteHeader, WalletStatus, type Place } from "../shared/index.ts";
 import { SiteContext } from "./hooks/index.ts";
-import { AgentPage, AgentsPage, JobPage, MissingPage, ReceiptPage, WallPage, YoursPage } from "./pages/index.ts";
+import { AgentPage, AgentsPage, JobPage, MissingPage, ReceiptPage, WallPage, WelcomePage, YoursPage } from "./pages/index.ts";
 import type { SiteData, SitePage } from "./views/index.ts";
 
 function Page({ data, market }: { readonly data: SitePage; readonly market: MarketConfig | undefined }): ReactElement {
   switch (data.page) {
     case "wall": return <WallPage tiles={data.tiles} />;
+    // the story the welcome tells is the last word's: with no such rule to tell it by, the door is the wall
+    case "welcome": return market?.lastWord ? <WelcomePage tiles={data.tiles} rule={market.lastWord} /> : <WallPage tiles={data.tiles} />;
     case "job": return <JobPage job={data.job} />;
     case "agent": return <AgentPage data={data} />;
     case "receipt": return <ReceiptPage receipt={data.receipt} />;

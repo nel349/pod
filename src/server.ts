@@ -28,7 +28,7 @@ import type { Owners } from "./owners.ts";
 import { preparingToTheWire, type Preparing } from "./preparing/index.ts";
 import type { AgentFactsReader } from "./agentFacts.ts";
 import { MONAD_TESTNET } from "./registry.ts";
-import { agentPage, jobData, receiptData, wallPage, yoursData } from "./sitePages.ts";
+import { agentPage, jobData, receiptData, wallPage, welcomePage, yoursData } from "./sitePages.ts";
 import { appPageAt, PAGE_DATA_TYPE, renderSite, siteScript, type Head, type PageData, type SiteData, type SitePage } from "./web/site/index.ts";
 import { SITE } from "./web/site/copy.ts";
 
@@ -205,7 +205,11 @@ export async function handle(request: Request, store: JobStore, { site, market, 
     return Response.json(writing, { headers: NO_STORE });
   }
 
-  if (pathname === ROUTES.wall) return page({ title: market?.page.lastWord ? SITE.wall.lastWord.title : SITE.wall.title }, await wallPage(store));
+  // the front door is the welcome where the poster has the last word, which is the story it tells; anywhere else it is the wall
+  if (pathname === ROUTES.welcome) {
+    return market?.page.lastWord ? page({ title: SITE.welcome.title }, await welcomePage(store)) : page({ title: SITE.wall.title }, await wallPage(store));
+  }
+  if (pathname === ROUTES.wall) return page({ title: market?.page.lastWord ? SITE.wall.jobs.title : SITE.wall.title }, await wallPage(store));
   if (pathname === ROUTES.yours) return page({ title: SITE.yours.title }, { page: "yours" });
 
   if (pathname.startsWith(ROUTES.yoursApi)) {

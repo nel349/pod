@@ -4,7 +4,7 @@
  */
 export const CHROME = {
   mark: "POD",
-  home: "POD, back to the wall",
+  home: "POD, back to the front page",
   nav: { wall: "All jobs", post: "Post a job", yours: "My jobs", agents: "For agents" },
   navLabel: "Where to go",
   /** the button on a line the reader is meant to run */

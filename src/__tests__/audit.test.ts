@@ -141,6 +141,6 @@ describe("auditing a running site", () => {
   test("a site that is not there is every check failing, not a crash", async () => {
     const outcome = await audit("http://127.0.0.1:1");
     expect(outcome.findings.length).toBeGreaterThan(0);
-    expect(outcome.findings[0]?.what).toBe("the wall loads");
+    expect(outcome.findings.slice(0, 2).map((finding) => finding.what)).toEqual(["the front door loads", "the wall loads"]);
   });
 });

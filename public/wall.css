@@ -417,3 +417,178 @@ a.primary.small, button.primary.small { font-size: 18px; padding: 10px 16px 8px;
 
 /* on a wallet's own page: what one of its agents' seats paid, under the job it sat on */
 .yours-list .seat-outcome { margin: 4px 0 0; font: 400 15px/1.45 var(--read); max-width: 60ch; }
+
+/* ================= the welcome: one job, from its poster's first word to their last, played on the wall ================= */
+
+/*
+ * Everything on the stage is drawn from where the story is, and what is written here for a state is how
+ * that state ends. What moves is an entrance, counted back from that end, so with motion turned off, or
+ * no script at all, every scene is its own finished picture.
+ */
+
+.film { display: grid; gap: 14px; }
+.stage { container-type: inline-size; display: grid; gap: 14px; color: var(--paper); --go: var(--slam); }
+/* stopped by whoever is watching: each scene is its finished picture, and starting again plays the scene from its top */
+.stage[data-held] *, .stage[data-held] *::before, .stage[data-held] *::after { animation: none !important; }
+
+/* ---- what the scene is ---- */
+.stage-caption { display: grid; align-content: start; gap: 6px; min-height: 100px; }
+.stage-caption p { margin: 0; }
+/* which of the last step's three endings this is, pasted in front of its sentence */
+.stage-says b { display: inline-block; margin-right: 10px; padding: 4px 8px 0; background: var(--pink); color: var(--ink); font: 900 17px/1.15 var(--shout); letter-spacing: 0.04em; text-transform: uppercase; transform: rotate(-2deg); animation: film-stamp-on 320ms var(--go) 350ms backwards; }
+.stage-title { font: 900 clamp(30px, 6.6cqw, 44px)/0.95 var(--shout); text-transform: uppercase; letter-spacing: 0.005em; animation: film-said 420ms var(--go) backwards; }
+.stage-says { font: 500 clamp(15px, 2.7cqw, 17.5px)/1.4 var(--read); color: #dcdcd4; animation: film-shown 400ms ease-out 180ms backwards; }
+
+@keyframes film-said { from { opacity: 0; transform: translateY(-10px) rotate(-1.2deg); } }
+@keyframes film-shown { from { opacity: 0; } }
+@keyframes film-stamp-on { from { opacity: 0; transform: scale(2.2) rotate(-14deg); } }
+@keyframes film-pop { from { opacity: 0; transform: scale(0.6); } }
+/* what is stamped at a sheet's right edge lands from its own right, so it never reaches past the page on its way in */
+.film-tag, .ticket-stamp, .ticket-price { transform-origin: right center; }
+
+/* ---- the job: a sheet taped to the wall ---- */
+.ticket {
+  position: relative;
+  padding: 16px 20px 14px;
+  background: radial-gradient(rgba(0, 0, 0, 0.05) 0.8px, transparent 1.1px) 0 0 / 5px 5px, var(--paper);
+  color: var(--ink);
+  box-shadow: 8px 10px 0 rgba(0, 0, 0, 0.55);
+  transform: rotate(-0.4deg);
+}
+.ticket p { margin: 0; }
+.ticket-label { font: 400 12.5px/1.2 var(--type); color: var(--grey); letter-spacing: 0.04em; text-transform: uppercase; }
+.ticket .ticket-idea { margin: 4px 96px 10px 0; font: 600 clamp(16px, 3.2cqw, 20px)/1.25 var(--read); }
+.ticket-price { position: absolute; top: 14px; right: 16px; padding: 6px 9px 2px; background: var(--ink); color: var(--yellow); font: 900 clamp(18px, 3.8cqw, 24px)/1 var(--shout); transform: rotate(3deg); box-shadow: 3px 3px 0 var(--pink); }
+.stage[data-beat="say"] .ticket-price { animation: film-stamp-on 360ms var(--go) 1700ms backwards; }
+
+.ticket-lines { list-style: none; margin: 0; padding: 0; }
+.ticket-lines li { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 33px; padding: 4px 0; border-top: 2px solid var(--ink); font: 500 clamp(13px, 2.4cqw, 15px)/1.3 var(--read); }
+.stage[data-beat="say"] .ticket-lines li { animation: film-shown 300ms ease-out calc(500ms + var(--i) * 260ms) backwards; }
+.film-line { display: grid; gap: 1px; justify-items: start; }
+.film-line-text { position: relative; }
+.film-line em { font: 400 11.5px/1.2 var(--type); color: var(--grey); }
+
+/* a dot beside a line somebody wrote; a box once it is a check; ticked once it has passed */
+.film-mark { width: 14px; height: 14px; border: 2px solid var(--ink); display: grid; place-items: center; font: 900 11px/1 var(--shout); color: var(--white); }
+li[data-state="written"] .film-mark { border-radius: 50%; background: var(--ink); transform: scale(0.45); }
+li[data-state="check"] .film-mark, li[data-state="covered"] .film-mark { animation: film-boxed 300ms var(--go) calc(500ms + var(--i) * 320ms) backwards; }
+li[data-state="passed"] .film-mark { background: var(--paid-ink); border-color: var(--paid-ink); }
+li[data-state="passed"] .film-mark::after { content: "✓"; }
+@keyframes film-boxed { from { border-radius: 50%; background: var(--ink); transform: scale(0.45); } }
+
+.film-tag { padding: 3px 6px 1px; font: 900 13px/1.1 var(--shout); letter-spacing: 0.06em; text-transform: uppercase; border: 2px solid var(--ink); }
+li[data-state="check"] .film-tag, li[data-state="covered"] .film-tag { animation: film-pop 260ms var(--go) calc(620ms + var(--i) * 320ms) backwards; }
+li[data-state="passed"] .film-tag { border-color: var(--paid-ink); background: var(--paid-ink); color: var(--white); animation: film-stamp-on 300ms var(--go) calc(900ms + var(--i) * 420ms) backwards; }
+
+/* the line kept from the builders: struck over once it is a check, and shown again when it has run */
+.film-cover { position: absolute; inset: -1px -4px; background: var(--ink); transform: scaleX(0); transform-origin: left center; }
+li[data-state="covered"] .film-cover { transform: scaleX(1); animation: film-covered 420ms ease-in 2000ms backwards; }
+li[data-state="passed"] .film-cover { animation: film-uncovered 420ms ease-out 500ms backwards; }
+@keyframes film-covered { from { transform: scaleX(0); } }
+@keyframes film-uncovered { from { transform: scaleX(1); } }
+
+/* what was stamped on it, across its corner */
+.ticket-stamp { position: absolute; right: 14px; bottom: 14px; padding: 6px 12px 2px; border: 4px solid currentColor; font: 900 clamp(24px, 5.6cqw, 40px)/1 var(--shout); letter-spacing: 0.02em; text-transform: uppercase; color: var(--pink); background: color-mix(in srgb, var(--paper) 82%, transparent); transform: rotate(-7deg); animation: film-stamp-on 380ms var(--go) var(--stamped-at, 2600ms) backwards; pointer-events: none; }
+.ticket-stamp[data-stamp="delivered"], .ticket-stamp[data-stamp="paid"] { color: var(--paid-ink); }
+.stage[data-beat="delivered"] .ticket-stamp { --stamped-at: 3000ms; }
+.stage[data-beat="accept"] .ticket-stamp, .stage[data-beat="refuse"] .ticket-stamp { --stamped-at: 2900ms; }
+.stage[data-beat="silence"] .ticket-stamp { --stamped-at: 4700ms; }
+
+.ticket-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; min-height: 44px; margin-top: 10px; padding-top: 10px; border-top: 2px solid var(--ink); }
+.ticket-open { visibility: hidden; padding: 8px 12px 5px; background: var(--ink); color: var(--yellow); font: 900 15px/1 var(--shout); letter-spacing: 0.04em; text-transform: uppercase; box-shadow: 3px 3px 0 var(--pink); }
+.ticket-open[data-on] { visibility: visible; }
+.stage[data-beat="delivered"] .ticket-open { animation: film-pop 300ms var(--go) 3600ms backwards; }
+
+/* the poster's two answers, the same size, and the time they have to give one */
+.ticket-answers { display: grid; grid-template-columns: auto auto; gap: 6px 8px; align-items: center; }
+.ticket-answers[data-state="none"] { visibility: hidden; }
+.film-answer { padding: 8px 12px 5px; border: 3px solid var(--ink); font: 900 15px/1 var(--shout); letter-spacing: 0.04em; text-transform: uppercase; text-align: center; animation: film-pop 280ms var(--go) 500ms backwards; }
+.film-answer.refuse { animation-delay: 640ms; }
+.ticket-answers[data-state="accepted"] .accept, .ticket-answers[data-state="refused"] .refuse { background: var(--ink); color: var(--yellow); animation: film-pop 280ms var(--go) 500ms backwards, film-pressed 260ms var(--go) 1700ms backwards; }
+.ticket-answers[data-state="accepted"] .refuse, .ticket-answers[data-state="refused"] .accept { opacity: 0.35; animation: film-pop 280ms var(--go) 500ms backwards, film-passed-over 300ms ease-out 1700ms backwards; }
+@keyframes film-pressed { from { background: transparent; color: var(--ink); transform: translate(-3px, -3px); box-shadow: 3px 3px 0 var(--pink); } }
+@keyframes film-passed-over { from { opacity: 1; } }
+.film-clock { grid-column: 1 / -1; display: grid; gap: 3px; font: 400 11.5px/1.2 var(--type); color: var(--grey); }
+.film-clock i { display: block; height: 4px; background: var(--ink); transform-origin: left center; }
+.ticket-answers[data-state="waiting"] .film-clock i { transform: scaleX(0); animation: film-run-out 2600ms linear 1300ms backwards; }
+@keyframes film-run-out { from { transform: scaleX(1); } }
+
+/* ---- the pod: five seats, each empty until an agent takes it ---- */
+.film-seats { list-style: none; margin: 2px 0 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: clamp(6px, 1.6cqw, 12px); }
+.film-seats li { position: relative; min-height: 100px; border: 2px dashed rgba(243, 243, 238, 0.4); display: grid; place-items: center; }
+.film-seat-name { font: 900 clamp(12px, 2.6cqw, 16px)/1 var(--shout); letter-spacing: 0.04em; text-transform: uppercase; color: rgba(243, 243, 238, 0.45); }
+.film-chip { position: absolute; inset: -2px; display: grid; align-content: center; justify-items: center; gap: 4px; padding: 10px 3px 6px; background: var(--paper); color: var(--ink); text-align: center; box-shadow: 4px 5px 0 rgba(0, 0, 0, 0.55); }
+.film-chip b { font: 900 clamp(12px, 2.7cqw, 17px)/1 var(--shout); letter-spacing: 0.03em; text-transform: uppercase; }
+li[data-state="empty"] .film-chip { visibility: hidden; }
+li[data-state="seated"] .film-chip { animation: film-sat 420ms var(--go) calc(500ms + var(--i) * 380ms) backwards; }
+@keyframes film-sat { from { opacity: 0; transform: translateY(-22px) rotate(-7deg); } }
+
+/* an agent: a square head, two eyes */
+.film-agent { position: relative; width: 28px; height: 26px; background: var(--ink); display: flex; justify-content: center; align-items: center; gap: 6px; }
+.film-agent::before { content: ""; position: absolute; top: -6px; left: 50%; width: 2px; height: 6px; margin-left: -1px; background: var(--ink); }
+.film-agent i { width: 5px; height: 6px; background: var(--yellow); animation: film-blink 3400ms steps(1) calc(var(--i) * 410ms) infinite; }
+@keyframes film-blink { 0%, 93%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.12); } }
+li[data-state="forward"] .film-agent { animation: film-at-work 520ms ease-in-out 3; }
+@keyframes film-at-work { 50% { transform: translateY(-3px) rotate(4deg); } }
+
+.film-seat-says { font: 400 clamp(10.5px, 2cqw, 12px)/1.15 var(--type); }
+li[data-state="forward"] .film-chip { box-shadow: 4px 5px 0 var(--pink); }
+li[data-state="forward"] .film-seat-says { animation: film-pop 260ms var(--go) 1500ms backwards; }
+li[data-state="behind"] .film-seat-says { animation: film-pop 260ms var(--go) calc(2500ms + var(--i) * 380ms) backwards; }
+li[data-state="behind"] .film-seat-says::before, li[data-state="paid"]:not([data-role="builder"]) .film-seat-says::before, li[data-state="keptPart"]:not([data-role="builder"]) .film-seat-says::before { content: "✓ "; color: var(--paid-ink); font-weight: 700; }
+.film-seat-pay { font: 900 clamp(12px, 2.5cqw, 15px)/1 var(--shout); letter-spacing: 0.02em; color: var(--paid-ink); animation: film-pop 280ms var(--go) calc(var(--paid-at, 3000ms) + var(--i) * 110ms) backwards; }
+.stage[data-beat="silence"] .film-seat-pay { --paid-at: 4800ms; }
+
+/* ---- the money: with you, held, or with the pod ---- */
+.film-rail { position: relative; height: 100px; --you: 10%; --held: 50%; --pod: 90%; }
+.film-rail::before { content: ""; position: absolute; top: 22px; left: var(--you); right: calc(100% - var(--pod)); height: 4px; background: repeating-linear-gradient(90deg, var(--yellow) 0 10px, transparent 10px 17px); }
+.film-station { position: absolute; top: 54px; padding: 3px 7px 0; background: var(--yellow); color: var(--ink); font: 900 14px/1.2 var(--shout); letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; transform: translateX(-50%); }
+.film-station.you { left: var(--you); }
+.film-station.held { left: var(--held); }
+.film-station.the-pod { left: var(--pod); }
+.film-coin { position: absolute; top: 0; left: var(--held); width: 48px; height: 48px; margin-left: -24px; display: grid; place-items: center; padding: 2px; border: 3px solid var(--ink); border-radius: 50%; background: var(--yellow); color: var(--ink); box-shadow: 3px 3px 0 var(--pink); font: 900 12px/0.95 var(--shout); text-align: center; z-index: 1; }
+.film-coin.keeps { z-index: 0; translate: 7px -4px; }
+.film-rail[data-money="arriving"] .film-coin { animation: film-from-you 900ms var(--go) 2500ms backwards; }
+.film-rail[data-money="paid"] .film-coin { left: var(--pod); animation: film-from-held 900ms var(--go) var(--moved-at, 2100ms) backwards; }
+.film-rail[data-money="shared"] .film-coin.back { left: var(--you); animation: film-from-held 900ms var(--go) 2100ms backwards; }
+.film-rail[data-money="shared"] .film-coin.keeps { left: var(--pod); translate: none; animation: film-from-held 900ms var(--go) 2100ms backwards; }
+.stage[data-beat="silence"] .film-rail { --moved-at: 3900ms; }
+@keyframes film-from-you { from { left: var(--you); } }
+@keyframes film-from-held { from { left: var(--held); } }
+.film-rail-says { position: absolute; top: 80px; left: 0; right: 0; margin: 0; text-align: center; font: 400 14px/1.3 var(--type); color: var(--paper); animation: film-shown 320ms ease-out var(--said-at, 300ms) backwards; }
+.stage[data-beat="say"] .film-rail-says, .stage[data-beat="accept"] .film-rail-says, .stage[data-beat="refuse"] .film-rail-says { --said-at: 3100ms; }
+.stage[data-beat="silence"] .film-rail-says { --said-at: 4900ms; }
+
+/* ---- stop it, start it, go to a step ---- */
+.film-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.film-toggle { min-width: 76px; padding: 9px 12px 6px; border: 0; background: var(--yellow); color: var(--ink); font: 900 16px/1 var(--shout); letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer; box-shadow: 3px 3px 0 var(--pink); }
+.film-steps { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
+.film-steps button { width: 34px; height: 34px; border: 2px solid rgba(243, 243, 238, 0.5); background: none; color: var(--paper); font: 900 16px/1 var(--shout); cursor: pointer; }
+.film-steps button:hover { border-color: var(--yellow); color: var(--yellow); }
+.film-steps button[aria-current] { border-color: var(--yellow); background: var(--yellow); color: var(--ink); }
+
+/* ---- the same, in words, and what was really built ---- */
+.story-steps { margin: 0; padding: 0; list-style: none; counter-reset: step; display: grid; gap: 12px; max-width: 64ch; }
+.story-steps li { counter-increment: step; position: relative; padding-left: 38px; font: 500 16px/1.45 var(--read); }
+.story-steps li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 26px; height: 26px; display: grid; place-items: center; background: var(--ink); color: var(--yellow); font: 900 17px/1 var(--shout); padding-top: 2px; }
+.built-here { display: grid; gap: 18px; }
+.built-here h2 { margin: 0; font: 900 clamp(30px, 3.6vw, 48px)/0.92 var(--shout); text-transform: uppercase; color: var(--yellow); }
+.built-here > p { margin: 0; font: 400 15px/1.3 var(--type); }
+.built-here > p a { color: var(--paper); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.built-here > p a:hover { color: var(--yellow); }
+/* the count, on the wall rather than on the bill: the same numbers in the wall's own light colours */
+.built-here .so-far { color: var(--paper); }
+.built-here .so-far-title { display: none; }
+.built-here .tally .paid b { color: #3ddc84; }
+.built-here .tally .open b, .built-here .tally .delivered b { color: #8fa6ff; }
+.built-here .tally .unsure b { color: #ffc34d; }
+.built-here .tally .withdrawn b { color: #a8a89f; }
+
+@media (max-width: 560px) {
+  .stage-caption { min-height: 126px; }
+  .ticket { padding: 16px 14px 14px; }
+  .film-seats li { min-height: 128px; }
+  .film-rail-says { font-size: 13px; }
+}
+/* the narrowest phones: room for the longest sentence, so the sheet under it never moves from scene to scene */
+@media (max-width: 360px) { .stage-caption { min-height: 150px; } }

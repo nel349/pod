@@ -51,19 +51,21 @@ export async function audit(base: string, get: typeof globalThis.fetch = globalT
     }
   };
 
-  const wall = await look(ROUTES.wall, "the wall loads");
-  const html = (await wall?.text()) ?? "";
-  if (wall?.ok) {
-    const type = wall.headers.get("content-type") ?? "";
-    if (!type.includes("text/html")) {
-      findings.push({ what: "the wall is a page", where: ROUTES.wall, detail: `content-type was ${type}` });
-    }
+  /** A page a visitor lands on: it loads, it is a page, and nothing in it is a hole where a value should be. */
+  const landing = async (path: string, name: string): Promise<string> => {
+    const response = await look(path, `${name} loads`);
+    const html = (await response?.text()) ?? "";
+    if (!response?.ok) return html;
+    const type = response.headers.get("content-type") ?? "";
+    if (!type.includes("text/html")) findings.push({ what: `${name} is a page`, where: path, detail: `content-type was ${type}` });
     for (const hole of HOLES) {
-      if (html.includes(hole)) {
-        findings.push({ what: "the wall has no holes in it", where: ROUTES.wall, detail: `the page contains "${hole}"` });
-      }
+      if (html.includes(hole)) findings.push({ what: `${name} has no holes in it`, where: path, detail: `the page contains "${hole}"` });
     }
-  }
+    return html;
+  };
+
+  await landing(ROUTES.welcome, "the front door");
+  const html = await landing(ROUTES.wall, "the wall");
 
   for (const sheet of [ROUTES.brand, ROUTES.style]) {
     const style = await look(sheet, "the stylesheet the pages ask for exists");

@@ -14,6 +14,8 @@ export const RoleRecordSchema = z.object({
 
 export const SitePageSchema = z.discriminatedUnion("page", [
   z.object({ page: z.literal("wall"), tiles: z.array(TileViewSchema) }),
+  /** the front door, where the poster has the last word: the film of a job, and the newest jobs really built */
+  z.object({ page: z.literal("welcome"), tiles: z.array(TileViewSchema) }),
   z.object({ page: z.literal("job"), job: JobViewSchema }),
   z.object({
     page: z.literal("agent"), agent: z.string(), record: z.array(RoleRecordSchema), facts: AgentFactsViewSchema, tiles: z.array(TileViewSchema),

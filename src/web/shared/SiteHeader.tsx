@@ -19,7 +19,7 @@ const PLACES: readonly { readonly place: Place; readonly href: string; readonly 
 export function SiteHeader({ current, wallet }: { readonly current?: Place; readonly wallet?: ReactNode }): ReactElement {
   return (
     <header className="site-header">
-      <a className="mark" href={ROUTES.wall} aria-label={CHROME.home}>{CHROME.mark}</a>
+      <a className="mark" href={ROUTES.welcome} aria-label={CHROME.home}>{CHROME.mark}</a>
       <nav aria-label={CHROME.navLabel}>
         {PLACES.map(({ place, href, roomy }) => (
           <a key={place} href={href} className={roomy ? "roomy" : undefined} aria-current={current === place ? "page" : undefined}>{CHROME.nav[place]}</a>
