@@ -31,6 +31,7 @@ export function ApproveStep({ view, onWriteAgain, onApprove }: {
   const { line, writing, verdict, action } = view;
   const checks = writing?.outcome.kind === "written" ? writing.outcome.checks : [];
   const howItIsAsked = writing?.outcome.kind === "written" ? writing.outcome.howItIsAsked?.plainly : undefined;
+  const notAskedFor = writing?.outcome.kind === "written" ? writing.outcome.notAskedFor : undefined;
   const isWorking = action.kind === "working";
   return (
     <Step name="approve" title={COPY.prepared.title} guide={COPY.prepared.guide}>
@@ -48,6 +49,12 @@ export function ApproveStep({ view, onWriteAgain, onApprove }: {
         <aside id="how-it-is-asked" className={view.isFresh ? "asked-note" : "asked-note stale"}>
           <p className="asked-title">{COPY.checks.howItIsAsked.title}</p>
           <p>{howItIsAsked} {COPY.checks.howItIsAsked.told}</p>
+        </aside>
+      )}
+      {checks.length > 0 && notAskedFor && (
+        <aside id="not-asked-for" className={view.isFresh ? "asked-note not-asked" : "asked-note not-asked stale"}>
+          <p className="asked-title">{COPY.checks.notAskedFor.title}</p>
+          <p>{notAskedFor} {COPY.checks.notAskedFor.told}</p>
         </aside>
       )}
       {verdict && !view.isBusy && (

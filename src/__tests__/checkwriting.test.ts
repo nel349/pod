@@ -240,6 +240,16 @@ describe.skipIf(!withDocker)("every check is tried before it can be sealed", () 
     expect(readyToSeal(written)).toBe(false);
   }, 240_000);
 
+  test("what the idea wants that no line asks for is said to the poster, and holds nothing up", async () => {
+    const said = "Nothing here asks for a real wallet or a real payment, so the builders may make a button that only looks like minting.";
+    const set = await writeChecks(COAT_REQUEST, writerWith(replying({ ...GOOD_REPLY, notAskedFor: said }).model));
+    expect(set.notAskedFor).toBe(said);
+    expect(readyToSeal(set.checks)).toBe(true);
+    // with nothing to say, nothing is said
+    expect((await writeChecks(COAT_REQUEST, writerWith(replying({ ...GOOD_REPLY, notAskedFor: null }).model))).notAskedFor).toBeUndefined();
+    expect((await writeChecks(COAT_REQUEST, writerWith(replying(GOOD_REPLY).model))).notAskedFor).toBeUndefined();
+  }, 240_000);
+
   test("a kept line that asks for something the builders are never told is refused as that, and the job cannot be sealed with it", async () => {
     const untold = { checkable: false, untold: true, why: "Nothing the builders see says a city may be misspelled. Move it to the lines they see, or test a line they see with another city." };
     const kept = { says: "A misspelled city still gets an answer", secret: true };

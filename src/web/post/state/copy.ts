@@ -54,7 +54,7 @@ export const COPY = {
 
   brief: {
     title: "The brief",
-    guide: "What the builders are told it must do. One thing to a line, the way you would check it yourself.",
+    guide: "What the builders are told it must do. One thing to a line, the way you would check it yourself. They build what these lines say and nothing more, so add as much detail as you want: a real wallet, a real payment, signing in, anything saved between visits. If it matters to you and no line says it, it may be left out or only look real.",
     placeholder: "When it is raining, it tells me to take a coat",
   },
   exam: {
@@ -98,6 +98,11 @@ export const COPY = {
     cannot: (why: string) => `No program can check this line. ${why}`,
     /** a kept line that asks for something the builders are never told */
     untold: (why: string) => `The builders are never told this, so no pod could build for it. ${why}`,
+    /** what the poster seems to want that none of their lines asks for */
+    notAskedFor: {
+      title: "What your lines do not ask for",
+      told: "The builders build what your lines say and nothing more. If you want it, add a line saying so and have the checks written again. If you do not, approve as it is.",
+    },
     howItIsAsked: {
       title: "What your checks take for granted",
       told: "You did not say this. The checks need it, so the builders are told it too. If it is not what you meant, change a line and have them written again.",

@@ -89,6 +89,8 @@ export const OutcomeSchema = z.discriminatedUnion("kind", [
     kind: z.literal("written"),
     checks: z.array(WrittenSchema),
     howItIsAsked: HowItIsAskedSchema.optional(),
+    /** what the poster seems to want that no line asks for, said to them before they approve */
+    notAskedFor: z.string().optional(),
     /** every line became a check that held when it was tried */
     ready: z.boolean(),
     approval: ApprovalSchema.optional(),

@@ -429,7 +429,10 @@ export class Preparing {
 
   private async outcomeOf(onChainId: string, setUp: SetUp, request: WriteRequest, set: WrittenSet, price: bigint): Promise<Outcome> {
     const ready = readyToSeal(set.checks);
-    const written = { kind: "written" as const, checks: [...set.checks], ready, ...(set.howItIsAsked ? { howItIsAsked: set.howItIsAsked } : {}) };
+    const written = {
+      kind: "written" as const, checks: [...set.checks], ready,
+      ...(set.howItIsAsked ? { howItIsAsked: set.howItIsAsked } : {}), ...(set.notAskedFor ? { notAskedFor: set.notAskedFor } : {}),
+    };
     if (!ready) return written;
     try {
       return { ...written, approval: await this.approvalFor(onChainId, setUp, request, set, price) };
@@ -482,7 +485,7 @@ export class Preparing {
       return;
     }
     const outcome: Outcome = writing.outcome.kind === "written"
-      ? { kind: "written", checks: writing.outcome.checks, ready: writing.outcome.ready, ...(writing.outcome.howItIsAsked ? { howItIsAsked: writing.outcome.howItIsAsked } : {}) }
+      ? { kind: "written", checks: writing.outcome.checks, ready: writing.outcome.ready, ...(writing.outcome.howItIsAsked ? { howItIsAsked: writing.outcome.howItIsAsked } : {}), ...(writing.outcome.notAskedFor ? { notAskedFor: writing.outcome.notAskedFor } : {}) }
       : writing.outcome;
     await store.saveWriting(onChainId, {
       ...writing, outcome, isCharged: false, isSettled: true,

@@ -142,6 +142,8 @@ function whatToWrite(kind: Kind | undefined): readonly string[] {
       `Where what is asked names a page at an address of its own, write that page as a file: /cards/pikachu is ${SITE_FOLDER}/cards/pikachu.html. An address inside one page, after a # or a ?, is not a page of its own.`,
       "The files are served as they are, with no program behind them: anything the site does, it does in the visitor's browser.",
       "People will open it and judge it by eye, so make it a site worth opening: laid out with care, readable on a phone.",
+      "Build what is asked for real, not a picture of it. Where it names a wallet, ask the visitor's own browser wallet (window.ethereum) and say on the page what it is asked for; where it names a contract, a chain or a service, call the one that is named, by its address, with no library taken from another host unless what is asked allows one.",
+      "Where it asks for something real and names nothing to do it with (minting with no contract named, paying with nowhere to pay), build everything up to that point and say plainly on the page that this part is a mock-up and what is needed to make it real. Never let a button look as if it did something it does not.",
       `Reply with each file whole in a fenced code block of its own, and on the line before each block the file's name, like this: ${FILE_MARK} ${SITE_FOLDER}/${SITE_FRONT_PAGE}`,
       "No explanation before, between or after the files.",
     ];

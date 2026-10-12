@@ -88,6 +88,11 @@ export type Proof = z.infer<typeof ProofSchema>;
 export interface WrittenSet {
   readonly checks: readonly Written[];
   readonly howItIsAsked?: z.infer<typeof HowItIsAskedSchema>;
+  /**
+   * What the person seems to want that no line of theirs asks for, such as a real wallet, said to them
+   * before they approve: builders build what the lines say. Advice, and nothing is held up for it.
+   */
+  readonly notAskedFor?: string;
 }
 export type Written = z.infer<typeof WrittenSchema>;
 /** A sentence that became a check and was tried, whether or not it held. */

@@ -57,6 +57,7 @@ const ReadBackSchema = z.object({
     z.object({ checkable: z.literal(false), why: z.string(), untold: z.boolean().optional() }),
   ])),
   howItIsAsked: HowItIsAskedSchema.nullable(),
+  notAskedFor: z.string().nullable().optional(),
 });
 type ReadBack = z.infer<typeof ReadBackSchema>["checks"][number];
 
@@ -96,7 +97,7 @@ export async function writeChecks(
     });
 
     onStage("writing");
-    const { plan, howItIsAsked } = await runTheWriter(request, writer, workspace, broker);
+    const { plan, howItIsAsked, notAskedFor } = await runTheWriter(request, writer, workspace, broker);
 
     onStage("trying");
     const checks = join(workspace, "checks");
@@ -119,7 +120,7 @@ export async function writeChecks(
         file, source, proof: trial.proof, saw: trial.saw,
       };
     }));
-    return howItIsAsked ? { checks: written, howItIsAsked } : { checks: written };
+    return { checks: written, ...(howItIsAsked ? { howItIsAsked } : {}), ...(notAskedFor ? { notAskedFor } : {}) };
   } catch (error) {
     throw new WritingFailed(firstLine(error), isChargedFor(error, broker?.answered ?? 0));
   } finally {
@@ -132,7 +133,7 @@ export async function writeChecks(
 /** Run the writer program in its box, and read back what it said it wrote, one entry per sentence. */
 async function runTheWriter(
   request: WriteRequest, writer: CheckWriter, workspace: string, broker: Broker,
-): Promise<{ readonly plan: readonly Planned[]; readonly howItIsAsked?: HowItIsAsked }> {
+): Promise<{ readonly plan: readonly Planned[]; readonly howItIsAsked?: HowItIsAsked; readonly notAskedFor?: string }> {
   await mkdir(join(workspace, ".pod"), { recursive: true });
   await writeFile(join(workspace, ".pod", "ask.json"), JSON.stringify({ ...request, port: PORT }));
   await writeFile(join(workspace, ".pod", "brief.md"), `${request.idea}\n\n${request.statements
@@ -160,5 +161,10 @@ async function runTheWriter(
     return { statement, entry, file, command: checkCommand(file) };
   });
   const asked = readback.howItIsAsked;
-  return asked ? { plan, howItIsAsked: { plainly: plainDashes(asked.plainly), exactly: plainDashes(asked.exactly) } } : { plan };
+  const notAskedFor = readback.notAskedFor?.trim();
+  return {
+    plan,
+    ...(asked ? { howItIsAsked: { plainly: plainDashes(asked.plainly), exactly: plainDashes(asked.exactly) } } : {}),
+    ...(notAskedFor ? { notAskedFor: plainDashes(notAskedFor) } : {}),
+  };
 }

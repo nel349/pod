@@ -77,6 +77,7 @@ function prompt(job) {
     '  "howItIsAsked": null, or when the checks rely on anything the sentences do not say (see below):',
     '    { "plainly": "<one or two sentences for the person, with the values the checks use>",',
     '      "exactly": "<for the builder: every address, name and form of answer the checks rely on>" },',
+    '  "notAskedFor": null, or "<one or two plain sentences, see below>",',
     '  "checks": [ one entry per numbered sentence, in order:',
     '    { "checkable": true,',
     '      "asks": "<what the check does to it, in everyday words, no code, no URLs>",',
@@ -121,6 +122,16 @@ function prompt(job) {
     "version so a builder can build to it and pass. Say the plain version so a person who has never programmed",
     "understands it, with the values the checks use, and no code, addresses or parameter names.",
     "",
+    "Builders build what the sentences say and nothing more. Read what the person wants, and ask yourself what they",
+    "plainly seem to expect that no sentence asks for: a real wallet being connected, a real payment or transaction on",
+    "a blockchain, signing in, things being saved between visits, data taken from a real service, working on a phone.",
+    "When there is something like that, say it in notAskedFor, to the person, in one or two plain sentences: what no",
+    "sentence asks for, and that the builders may leave it out or fake it unless a sentence says so. For example:",
+    "Nothing here asks for a real wallet or a real payment, so the builders may make a button that only looks like",
+    "minting. Only raise what the person's own words name or cannot do without: wanting to mint for a price names a",
+    "real payment, a cafe's menu does not name ordering online. Never suggest a feature they did not mention. Leave",
+    "notAskedFor null when the sentences cover what the person wants. Do not use it for taste or polish.",
+    "",
     "Things that change on their own, such as the time of day, the date or chance, are not a reason to refuse.",
     "A check cannot wait for night or for a six, so it asks for one: choose the obvious way to ask, the same for every",
     "sentence that needs it (for example the work takes an hour in its address, as hour=22, and uses the real clock",
@@ -153,6 +164,9 @@ function parse(answer) {
   const asked = parsed.howItIsAsked;
   if (asked !== undefined && asked !== null && (typeof asked.plainly !== "string" || typeof asked.exactly !== "string" || !asked.plainly || !asked.exactly)) {
     throw new Error("howItIsAsked was given without both a plain and an exact version");
+  }
+  if (parsed.notAskedFor !== undefined && parsed.notAskedFor !== null && typeof parsed.notAskedFor !== "string") {
+    throw new Error("notAskedFor was neither null nor a sentence");
   }
   return parsed;
 }
@@ -194,7 +208,8 @@ function wellFormed(entry) {
     });
     const asked = written.howItIsAsked;
     const howItIsAsked = asked ? { plainly: asked.plainly, exactly: asked.exactly } : null;
-    write("/work/.pod/readback.json", JSON.stringify({ checks, howItIsAsked }, null, 2));
+    const notAskedFor = typeof written.notAskedFor === "string" && written.notAskedFor.trim() ? written.notAskedFor.trim() : null;
+    write("/work/.pod/readback.json", JSON.stringify({ checks, howItIsAsked, notAskedFor }, null, 2));
     say("shipped", `wrote ${checks.filter((entry) => entry.checkable).length} of ${checks.length} checks`);
   } catch (error) {
     say("refuse", `could not write the checks: ${error.message}`);
