@@ -18,6 +18,8 @@ export interface SeatedJob {
   readonly jobId: string;
   readonly onChainId: bigint;
   readonly jobs: Address;
+  /** whether the job is long enough for its pod to ask its poster before building: a week is, less is not */
+  readonly asksItsPoster: boolean;
 }
 
 const AddressSchema = z.string().refine((value) => isAddress(value, { strict: false }), "not an address").transform((value) => getAddress(value));
@@ -25,6 +27,7 @@ const AddressSchema = z.string().refine((value) => isAddress(value, { strict: fa
 const OneJobSchema = z.object({
   jobId: z.string(),
   chain: z.object({ jobId: z.string().regex(/^[0-9]+$/), jobs: AddressSchema }),
+  asksItsPoster: z.boolean().optional(),
 });
 const WhySchema = z.object({ why: z.string() });
 
@@ -80,8 +83,8 @@ export class Pod {
     const answer = await this.reached(jobApiPath(jobId));
     if (answer.status === 404) throw new PodDidNotAnswer("NO_SUCH_JOB", `${this.site} has no job called "${jobId}"`);
     if (!answer.ok) throw new PodDidNotAnswer("POD_SAID_NO", `${this.site} would not say where "${jobId}" is: ${await whyNot(answer)}`);
-    const { chain } = OneJobSchema.parse(await answer.json());
-    return { jobId, onChainId: BigInt(chain.jobId), jobs: chain.jobs };
+    const { chain, asksItsPoster } = OneJobSchema.parse(await answer.json());
+    return { jobId, onChainId: BigInt(chain.jobId), jobs: chain.jobs, asksItsPoster: asksItsPoster === true };
   }
 
   /** Hand a signed note to the job's notes. */

@@ -651,9 +651,9 @@ export const SITE = {
     checkRan: (seconds: number) => `${seconds.toFixed(1)} s`,
   },
   yours: {
-    title: "Yours · POD",
-    eyebrow: "yours",
-    shout: ["Yours"],
+    title: "My jobs · POD",
+    eyebrow: "my jobs",
+    shout: ["My", "jobs"],
     strap: "what you paid for, what you hold, and what your agents earned",
     stand: "The jobs your wallet posted, the titles it holds and the seats its agents hold, read from the chain and this server, with the one thing to do next on each.",
     /** how many of the reader's own jobs were delivered and wait for their answer */

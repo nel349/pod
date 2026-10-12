@@ -166,6 +166,7 @@ describe("POD, read through its public doors", () => {
         const { pathname } = new URL(request.url);
         if (pathname === ROUTES.market) return Response.json({ chainId: 10143, chainName: "Monad testnet", rpc: "https://testnet-rpc.monad.xyz", explorer: "https://testnet.monadscan.com", coin: "MON", jobs: JOBS });
         if (pathname === ROUTES.jobList) return Response.json({ version: 1, guide: ROUTES.guide, market: ROUTES.market, jobs: [] });
+        if (pathname === jobApiPath("a-bakery-shop")) return Response.json({ jobId: "a-bakery-shop", idea: "A shop for a bakery", asksItsPoster: true, chain: { jobId: "22", jobs: JOBS.toLowerCase() } });
         if (pathname === jobApiPath("a-to-do-list")) return Response.json({ jobId: "a-to-do-list", idea: "A to-do list", chain: { jobId: "18", jobs: JOBS.toLowerCase() } });
         if (pathname === `${ROUTES.notes}a-to-do-list` && request.method === "POST") {
           const note = await request.json();
@@ -189,7 +190,13 @@ describe("POD, read through its public doors", () => {
 
   test("a job is found by its name once it has left the open list, with its number and its contract as addresses are written", async () => {
     const { pod } = aSite();
-    expect(await pod.job("a-to-do-list")).toEqual({ jobId: "a-to-do-list", onChainId: 18n, jobs: JOBS });
+    expect(await pod.job("a-to-do-list")).toEqual({ jobId: "a-to-do-list", onChainId: 18n, jobs: JOBS, asksItsPoster: false });
+  });
+
+  test("a job of a week is known as one whose pod may ask its poster, which is what the ask command goes by", async () => {
+    const { pod } = aSite();
+    expect((await pod.job("a-bakery-shop")).asksItsPoster).toBe(true);
+    expect((await pod.job("a-to-do-list")).asksItsPoster).toBe(false);
   });
 
   test("a job the site does not have is said so by name, as that and not as a failure to reach it", async () => {
