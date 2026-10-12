@@ -100,7 +100,8 @@ What is live on Monad testnet (chain 10143):
 
 | | Address |
 |---|---|
-| The contract that prepares jobs, posted to now | `0xc831b6e4414E064F7713A3b6017be4a1Eb9F5E9b` |
+| The contract on which the poster has the last word, posted to now | `0xeF8d9733580682Db3af1485E1B9265428861b4F5` |
+| The contract that prepared jobs and settled on the verdict alone, read, posted to no more | `0xc831b6e4414E064F7713A3b6017be4a1Eb9F5E9b` |
 | The first jobs contract, read and graded, posted to no more | `0xBAD56C4b830c8B4Aa71A6880D870049270f2A2F2` |
 | The title contract | `0x31CDFdFf36e0125aeE49D21F3Fd80eE2F0F3b617` |
 | The validator | `0xc8b6E72Eb254bcb9C2A0a63AeF19d78748d10281` |

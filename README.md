@@ -10,11 +10,9 @@ Built for Monad Metropolis, track 04. Work starts 16 September 2026; every commi
 
 **Live at https://vps-39a35c60.vps.ovh.us**, on Monad testnet.
 
-**Where this stands on 11 October.** The live site runs the second jobs contract, on which the checks alone decide who is paid. The third, on which the poster has the last word, is in this repository with its tests, its worker and its pages, and its deployment has been rehearsed. It replaces the second as soon as the one job still open there is taken back by its poster. Until then this page says, of each claim, which contract it is about.
+**Where this stands.** On 12 October 2026 (UTC) the third jobs contract replaced the second for new jobs: the poster has the last word. Jobs 1 to 19 ran on the first two contracts, where the checks alone decided who was paid, and everything this page says of them is still true of them. No job has run on the third yet, so what it does is proved here by tests and by a rehearsal, not by a job on the chain; each row says which.
 
 ![How a job runs, from the idea to the money](docs/architecture.svg)
-
-The picture is a job on the contract that is live. On the third, the validator reports what the checks found instead of settling, and the money moves on the poster's answer.
 
 ## Where to start
 
@@ -126,22 +124,23 @@ The jobs contracts are the part nobody should be able to argue with later: seats
 the approvals that gate payment, and settlement that only happens when an independent verdict
 arrives. `PodJobs.sol` held the first nine jobs. `PodJobsV2.sol` holds every job since: it is paid
 first, opens only on checks its poster approved, and locks on the commit a pod approved until that
-commit has a verdict. `PodJobsV3.sol` is the third, written and not yet deployed: the builder puts its
-work forward, no seat can hold it back, the validator reports what the checks found, and the poster
-accepts or refuses. `contracts/README.md` has the rules of each.
+commit has a verdict. `PodJobsV3.sol` takes every job from 20 on: the builder puts its work forward,
+no seat can hold it back, the validator reports what the checks found, and the poster accepts or
+refuses. `contracts/README.md` has the rules of each.
 
 ## Live on Monad testnet
 
-Chain 10143. The first two were deployed on 18 September 2026 (UTC), the third on 2 October.
+Chain 10143. The first two were deployed on 18 September 2026 (UTC), the third on 2 October, and the fourth on 12 October.
 
 | | Address | |
 |---|---|---|
 | **PodJobs** | `0xBAD56C4b830c8B4Aa71A6880D870049270f2A2F2` | [explorer](https://testnet.monadscan.com/address/0xBAD56C4b830c8B4Aa71A6880D870049270f2A2F2). Jobs 1 to 9; posted to no more |
-| **PodToken** | `0x31CDFdFf36e0125aeE49D21F3Fd80eE2F0F3b617` | [explorer](https://testnet.monadscan.com/address/0x31CDFdFf36e0125aeE49D21F3Fd80eE2F0F3b617). The title, for jobs on either |
-| **PodJobsV2** | `0xc831b6e4414E064F7713A3b6017be4a1Eb9F5E9b` | [explorer](https://testnet.monadscan.com/address/0xc831b6e4414E064F7713A3b6017be4a1Eb9F5E9b). Every job from 10 on |
+| **PodToken** | `0x31CDFdFf36e0125aeE49D21F3Fd80eE2F0F3b617` | [explorer](https://testnet.monadscan.com/address/0x31CDFdFf36e0125aeE49D21F3Fd80eE2F0F3b617). The title, for jobs on any of them |
+| **PodJobsV2** | `0xc831b6e4414E064F7713A3b6017be4a1Eb9F5E9b` | [explorer](https://testnet.monadscan.com/address/0xc831b6e4414E064F7713A3b6017be4a1Eb9F5E9b). Jobs 10 to 19; posted to no more |
+| **PodJobsV3** | `0xeF8d9733580682Db3af1485E1B9265428861b4F5` | [explorer](https://testnet.monadscan.com/address/0xeF8d9733580682Db3af1485E1B9265428861b4F5). Every job from 20 on. The poster has the last word, with three days to answer |
 | Validator | `0xc8b6E72Eb254bcb9C2A0a63AeF19d78748d10281` | the only address any of them takes a verdict from |
 
-Nineteen jobs have been posted. This is what the chain says of each, read on 9 October, and of job 19 on 11 October:
+Nineteen jobs have been posted, all on the first two contracts. This is what the chain says of each, read on 9 October, and of job 19 on 12 October:
 
 | Job | What became of it |
 |---|---|
@@ -158,7 +157,7 @@ Nineteen jobs have been posted. This is what the chain says of each, read on 9 O
 | [16](https://vps-39a35c60.vps.ovh.us/job/a-link-shortener-2) | **Passed.** Its builder seat was a person's wallet, worked by an agent holding no money. Settled, POD #10 minted |
 | 17 | Taken back by its poster, with no work put forward on it |
 | [18](https://vps-39a35c60.vps.ovh.us/job/a-to-do-list) | **Passed.** Its reviewer seat was a MetaMask wallet, worked through POD's plugin for MetaMask's agent wallet. Settled, POD #11 minted |
-| 19 | Paid for and being prepared, never opened to a pod. Its poster takes it back before the third contract replaces this one, since nothing finishes a job there after the switch |
+| 19 | Taken back by its poster before its checks were approved, so that the second contract held no unfinished job when the third replaced it |
 
 **Job 3 passed.** Five seats taken by five owners, work committed, graded twice in the sealed box at
 `e653d625cace…`, approved by the four seats that carry liability,
@@ -202,6 +201,7 @@ by the grader with nothing asked of its owner.
 
 | What | Transaction |
 |---|---|
+| The third jobs contract deployed, starting at job 20 | [`0x814f4dd6…`](https://testnet.monadscan.com/tx/0x814f4dd65f6c0eb1c3ce44c88ffffe815372cda809c7d34188b501815c539b3f) |
 | Job 3 settled, the crew paid | [`0x8602e9d7…`](https://testnet.monadscan.com/tx/0x8602e9d78645bf96282fa53d9cb5ecbc5ba9287ea58b9c54cffa99b6e133fa72) |
 | POD #2 minted | [`0xb97fe2f5…`](https://testnet.monadscan.com/tx/0xb97fe2f5742cb73d7c2e553dd2b691b9586dc662a11e512b4f6c22ca2c5855d6) |
 | Job 4 refused, the poster refunded | [`0xd523d7b5…`](https://testnet.monadscan.com/tx/0xd523d7b5d6b3d4ef8648e2e2c560336b8fa3f3d0bb365d49ef7a840f4101620a) |
@@ -246,8 +246,8 @@ which takes the same steps as the page.
 ## Who has to be trusted, and for what
 
 Nothing here asks to be believed. This is what each party could do if it were dishonest, and what
-stands in its way today. The first table is the contract that is live, where the checks alone decide.
-The second is what changes on the third, where the poster has the last word.
+stands in its way today. The first table is the first two contracts, where the checks alone decide.
+The second is what changes on the third, which new jobs are posted to, where the poster has the last word.
 
 | Party | What it does | If it were dishonest | What stands in the way |
 |---|---|---|---|
@@ -302,7 +302,7 @@ the honest state of the thing today, not an omission.
 | A graded commit is a commit, in a repository anybody can clone | [`src/repo.ts`](src/repo.ts) | [`repo.test.ts`](src/__tests__/repo.test.ts): the checkout holds one exact commit and no history; a commit the repository lacks cannot be graded; and the published file clones back to the same HEAD. [`no-invented-commits.test.ts`](src/__tests__/no-invented-commits.test.ts) fails if an id is ever written by hand again |
 | The verdict is written to ERC-8004 on Monad testnet | [`src/registry.ts`](src/registry.ts), [`src/worker/RegistryAnswers.ts`](src/worker/RegistryAnswers.ts) | the [transactions above](#live-on-monad-testnet): an agent registered, a validation requested of a named runner, and the verdict written under a role tag. `getSummary` reads it back. For a seat that names its identity, the worker writes the verdict to the reputation registry itself, with nothing asked of the agent's owner: agent 2002's record holds job [10](https://vps-39a35c60.vps.ovh.us/job/a-coat-given-the-rain-on-monad)'s |
 | The wall is readable with no wallet | [`src/server.ts`](src/server.ts) | [`src/__tests__/server.test.ts`](src/__tests__/server.test.ts), and `bun run serve` |
-| The poster has the last word, and their silence leaves it to the checks | [`contracts/src/PodJobsV3.sol`](contracts/src/PodJobsV3.sol), [`src/worker/`](src/worker/) | `forge test`: 128 tests of its rules, 2 that hold its sums under random amounts and 8 under random sequences of calls. [`worker-last-word.test.ts`](src/__tests__/worker-last-word.test.ts), on a real EVM with real boxes: accepted, refused after a pass with the pod keeping a quarter, refused after a failure with everything sent back, and left unanswered. [`answer-in-browser.test.ts`](src/__tests__/answer-in-browser.test.ts), in a real browser: both answers pressed, and what the page says each does to the money is what the contract then does. **Not yet on Monad:** it is deployed when job 19 is taken back |
+| The poster has the last word, and their silence leaves it to the checks | [`contracts/src/PodJobsV3.sol`](contracts/src/PodJobsV3.sol), [`src/worker/`](src/worker/) | `forge test`: 128 tests of its rules, 2 that hold its sums under random amounts and 8 under random sequences of calls. [`worker-last-word.test.ts`](src/__tests__/worker-last-word.test.ts), on a real EVM with real boxes: accepted, refused after a pass with the pod keeping a quarter, refused after a failure with everything sent back, and left unanswered. [`answer-in-browser.test.ts`](src/__tests__/answer-in-browser.test.ts), in a real browser: both answers pressed, and what the page says each does to the money is what the contract then does. The contract is on Monad, deployed by the same script that was rehearsed on a local chain. **No job has run on it there yet** |
 | No seat can stop a delivery | [`contracts/src/PodJobsV3.sol`](contracts/src/PodJobsV3.sol) | `forge test`, and [`worker-last-word.test.ts`](src/__tests__/worker-last-word.test.ts): a seat that says nothing holds nothing back, the work is graded once its review has run out, and only the seats behind it are paid or recorded |
 | A pod's code is its own until the pod is paid | [`src/store.ts`](src/store.ts), [`src/server.ts`](src/server.ts) | [`worker-last-word.test.ts`](src/__tests__/worker-last-word.test.ts): work its poster refuses is never published and its website is taken down; work they accept opens. The limits are in the trust table above |
 | A job's own poster takes no seat on it | [`contracts/src/PodJobsV3.sol`](contracts/src/PodJobsV3.sol) | `forge test`, and [`worker-last-word.test.ts`](src/__tests__/worker-last-word.test.ts) on a real EVM: refused by name with their own key and as the owner behind somebody else's, and seated like anybody on a job they did not post |

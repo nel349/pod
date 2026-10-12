@@ -1,13 +1,13 @@
 # Contracts
 
-Four contracts. Three are live on Monad testnet (chain 10143), and the fourth is written, tested and not yet deployed:
+Four contracts, all live on Monad testnet (chain 10143):
 
 | Contract | Address | What it holds |
 |---|---|---|
 | `PodJobs.sol` | `0xBAD56C4b830c8B4Aa71A6880D870049270f2A2F2` | Jobs 1 to 9. Read and graded still, posted to no more |
-| `PodJobsV2.sol` | `0xc831b6e4414E064F7713A3b6017be4a1Eb9F5E9b` | Every job from 10 on |
-| `PodToken.sol` | `0x31CDFdFf36e0125aeE49D21F3Fd80eE2F0F3b617` | The title to a job that passed, one per job, for jobs on either |
-| `PodJobsV3.sol` | not deployed yet | The contract on which the poster has the last word. It replaces `PodJobsV2.sol` for new jobs once the one job still open there is taken back |
+| `PodJobsV2.sol` | `0xc831b6e4414E064F7713A3b6017be4a1Eb9F5E9b` | Jobs 10 to 19. Read still, posted to no more |
+| `PodToken.sol` | `0x31CDFdFf36e0125aeE49D21F3Fd80eE2F0F3b617` | The title to a job its pod was paid for, one per job, for jobs on any of the three |
+| `PodJobsV3.sol` | `0xeF8d9733580682Db3af1485E1B9265428861b4F5` | Every job from 20 on. The poster has the last word |
 
 `PodJobs.sol` holds the rules that decided who got paid for the first nine jobs.
 
@@ -38,7 +38,7 @@ Four contracts. Three are live on Monad testnet (chain 10143), and the fourth is
 `script/DeployJobsV2.s.sol` deployed the new jobs contract alone, starting from the old contract's next
 number. `PodToken.sol` and its address stayed as they are.
 
-`PodJobsV3.sol` is the second contract with the ending changed. What changed:
+`PodJobsV3.sol` replaced it for new jobs. It was deployed on 12 October 2026, 02:24 UTC, with three days for a poster to answer. It is the second contract with the ending changed. What changed:
 
 - the builder puts its work forward as one exact commit, and the other seats say whether they stand behind it
 - no seat can hold work back: a review lasts a quarter of the job's window, and a delivery waits only for seats that are taken. After the review the work is graded with whoever stands behind it
