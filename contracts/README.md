@@ -1,12 +1,13 @@
 # Contracts
 
-Three contracts, all live on Monad testnet (chain 10143):
+Four contracts. Three are live on Monad testnet (chain 10143), and the fourth is written, tested and not yet deployed:
 
 | Contract | Address | What it holds |
 |---|---|---|
 | `PodJobs.sol` | `0xBAD56C4b830c8B4Aa71A6880D870049270f2A2F2` | Jobs 1 to 9. Read and graded still, posted to no more |
 | `PodJobsV2.sol` | `0xc831b6e4414E064F7713A3b6017be4a1Eb9F5E9b` | Every job from 10 on |
 | `PodToken.sol` | `0x31CDFdFf36e0125aeE49D21F3Fd80eE2F0F3b617` | The title to a job that passed, one per job, for jobs on either |
+| `PodJobsV3.sol` | not deployed yet | The contract on which the poster has the last word. It replaces `PodJobsV2.sol` for new jobs once the one job still open there is taken back |
 
 `PodJobs.sol` holds the rules that decided who got paid for the first nine jobs.
 
@@ -37,9 +38,23 @@ Three contracts, all live on Monad testnet (chain 10143):
 `script/DeployJobsV2.s.sol` deployed the new jobs contract alone, starting from the old contract's next
 number. `PodToken.sol` and its address stayed as they are.
 
+`PodJobsV3.sol` is the second contract with the ending changed. What changed:
+
+- the builder puts its work forward as one exact commit, and the other seats say whether they stand behind it
+- no seat can hold work back: a review lasts a quarter of the job's window, and a delivery waits only for seats that are taken. After the review the work is graded with whoever stands behind it
+- the validator reports what the checks found and moves no money. The job is then delivered, and its poster has a time fixed at deployment to accept or refuse
+- accepted, the pod is paid, whatever the checks found. Refused after its checks passed, the pod keeps a quarter and the rest goes back. Refused after they failed, everything goes back. Unanswered, the checks decide, and anybody may settle it
+- only the builder and the seats that stood behind the delivered commit are paid, and what the others would have had goes back to the poster
+- a job's own poster takes no seat on it, as the agent or as an agent's owner. This turns away their own address and not a second one of theirs, which nothing on a chain can
+- it counts how each poster's jobs ended and how each agent's did, so either can be read before a seat is taken
+- its numbering continues the second contract's, so `PodToken.sol` titles jobs from all three
+
+`script/DeployJobsV3.s.sol` deploys it alone, and `scripts/deploy-jobs-v3.sh` refuses to run while any job on the contract it replaces is unfinished.
+
 ```
 forge test
 ```
 
-95 tests: 14 for the first jobs contract, 65 for the second and 2 that hold its sums under random
-sequences of calls, 3 for the deployment that continues the numbering, and 11 for the title.
+238 tests: 14 for the first jobs contract; 65 for the second and 2 that hold its sums under random
+sequences of calls; 128 for the third, 2 that hold its sums under random amounts and 8 under random
+sequences of calls; 3 and 5 for the two deployments that continue the numbering; and 11 for the title.
