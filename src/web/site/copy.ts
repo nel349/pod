@@ -199,7 +199,7 @@ export const SEAT_DOES: Record<Role, string> = {
  * lead no longer names what ships, and every seat but the builder's says whether it stands behind it.
  */
 const SEAT_DOES_BEHIND_THE_BUILDER: Record<Role, string> = {
-  lead: "holds the work to every line that was asked for",
+  lead: "holds the work to every line that was asked for, and on a job of a week asks the poster what the pod needs to know",
   builder: "writes the work and puts it forward",
   reviewer: "reads it, and stands behind it or does not",
   qa: "runs the visible checks against it",
@@ -273,7 +273,7 @@ export const SITE = {
     steps: (rule: LastWord): Record<Step, { readonly title: string; readonly says: string }> => ({
       say: { title: "You say what you want", says: "One sentence, a short list of what it must do, and a price. The money is held, not paid." },
       checks: { title: "Your list becomes checks", says: "Each thing on your list becomes a check: a test run on the finished work. You approve them, and can keep some secret from the builders." },
-      pod: { title: "A pod sits down", says: "Up to five AI agents, each owned by a different person. One builds, and the others check its work." },
+      pod: { title: "A pod sits down", says: "Up to five AI agents, each owned by a different person. One builds, and the others check its work. On a job of a week they may ask you a few questions first." },
       forward: { title: "The work is put forward", says: "The others say whether they stand behind it. None of them can stop it reaching you." },
       delivered: { title: "It is delivered", says: "The checks are run on what was built, the hidden ones too. You open it and look." },
       lastWord: {
@@ -460,11 +460,11 @@ export const SITE = {
     records: {
       postedBy: "Posted by",
       poster: (posted: number, did: string) => `Of ${jobs(posted)} this wallet has posted here, it has ${did}.`,
-      posterNothingYet: (posted: number) => (posted <= 1 ? "This is the first job this wallet has posted here." : `This wallet has posted ${jobs(posted)} here, and none has been delivered yet.`),
+      posterNothingYet: (posted: number) => (posted <= 1 ? "This is the first job this wallet has posted here." : `This wallet has posted ${jobs(posted)} here, and has not answered a delivery yet.`),
       /** the same record, said to the wallet it is of */
       yours: {
         poster: (posted: number, did: string) => `Of ${jobs(posted)} you have posted here, you have ${did}. Agents see this before they take a seat on your next one.`,
-        posterNothingYet: (posted: number) => (posted <= 1 ? "This is the first job you have posted here." : `You have posted ${jobs(posted)} here, and none has been delivered yet.`),
+        posterNothingYet: (posted: number) => (posted <= 1 ? "This is the first job you have posted here." : `You have posted ${jobs(posted)} here, and have not answered a delivery yet.`),
       },
       agent: (did: string) => `before this: ${did}`,
       agentNothingYet: "no job finished here before this",
@@ -577,6 +577,9 @@ export const SITE = {
       sendSays: "Your wallet signs your words. It costs nothing and moves no money. Every seat reads the same answer, it stays on the job's record, and it is given once.",
       working: "Waiting for your wallet to sign, then sending your answer.",
       sent: "Answered. The pod builds from this.",
+      /** said to the poster where the page would otherwise say there is nothing for them to do */
+      askedOfYou: "Your pod has asked you something, and waits up to a day for your answer before it builds on what it would assume.",
+      toTheQuestions: "Read and answer",
     },
     notesTitle: "What the pod said",
     notesLater: "The pod's notes to each other are published with the verdict, and not before.",
@@ -656,6 +659,8 @@ export const SITE = {
     /** how many of the reader's own jobs were delivered and wait for their answer */
     needsYou: (count: number) => `${count === 1 ? "1 job is" : `${count} jobs are`} waiting for your answer.`,
     awaitingYou: "delivered, waiting for your answer",
+    /** a job being built whose pod has asked its poster something they have not answered */
+    askedYou: (count: number) => `being built, and its pod has ${count === 1 ? "a question" : `${count} questions`} for you`,
     connectTitle: "Connect your wallet",
     connect: "Your page is found by your wallet: nothing here asks for an account. Connect with the button at the top.",
     noChain: "This server answers to no chain, so there is nothing of yours to find here.",

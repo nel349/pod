@@ -3,7 +3,7 @@ import { Sheet } from "../../../shared/index.ts";
 import { InTheBrowser, When } from "../../components/index.ts";
 import { inCoins, posterRecordWords, SITE, timeLeft, whatHappensNext, whereTheDeliveryStands, whereTheReviewStands, whoStandsBehindIt } from "../../copy.ts";
 import { useIsViewer, useNow, useSite } from "../../hooks/index.ts";
-import { moneyAt, type DeliveryView, type JobView, type MoneyView } from "../../views/index.ts";
+import { MS_IN_A_SECOND, moneyAt, type DeliveryView, type JobView, type MoneyView } from "../../views/index.ts";
 import { freeSeatsOf, SendAnAgent, type FreeSeat } from "./SendAnAgent.tsx";
 import { WhoseMoney } from "./WhoseMoney.tsx";
 import { YourAnswer } from "./YourAnswer.tsx";
@@ -43,6 +43,13 @@ function NothingToDoYet({ poster, isSeated }: { readonly poster: string | undefi
   const isViewer = useIsViewer();
   if (!isViewer(poster)) return null;
   return <p id="nothing-to-do" className="for-you">{isSeated ? SITE.job.nothingToDo.building : SITE.job.nothingToDo.open}</p>;
+}
+
+/** While its pod has a question waiting, said to its own poster only: where the one thing asked of them is. */
+function AskedOfYou({ poster }: { readonly poster: string | undefined }): ReactElement | null {
+  const isViewer = useIsViewer();
+  if (!isViewer(poster)) return null;
+  return <p id="asked-of-you" className="for-you">{SITE.job.questions.askedOfYou} <a href="#questions">{SITE.job.questions.toTheQuestions}</a>.</p>;
 }
 
 /**
@@ -122,13 +129,16 @@ export function StandsSheet({ job, lostTouch }: { readonly job: JobView; readonl
   // a review that has run out waits for nobody: the work is graded with whoever stands behind it
   const now = useNow();
   const isReviewOver = job.review !== undefined && new Date(job.review.reviewBy) <= now;
+  // a question its pod asked still waits on its poster: then there is something for them to do, and the page must not say otherwise
+  const isAsked = (job.questions ?? []).some((question) => !question.answer && question.answerBy * MS_IN_A_SECOND > now.getTime());
   return (
     <Sheet number={2} id="stands" title={SITE.job.standsTitle} stamp={false}>
       {delivery
         ? <p className="lede"><InTheBrowser fallback={whereTheDeliveryStands(delivery)}><ToWhoeverReads delivery={delivery} poster={poster} /></InTheBrowser></p>
         : <p className="lede">{job.review ? whereTheReviewStands(job.review, isReviewOver) : whatHappensNext(job.verdict, seatsTaken, job.title !== undefined, job.hasLastWord === true)}</p>}
       {job.review && <UnderReview review={job.review} poster={poster} />}
-      {isRunning && !job.review && <InTheBrowser><NothingToDoYet poster={poster} isSeated={seatsTaken > 0} /></InTheBrowser>}
+      {isRunning && !job.review && !isAsked && <InTheBrowser><NothingToDoYet poster={poster} isSeated={seatsTaken > 0} /></InTheBrowser>}
+      {isRunning && isAsked && <InTheBrowser><AskedOfYou poster={poster} /></InTheBrowser>}
       {delivery && <p id="behind-it">{whoStandsBehindIt(delivery)}</p>}
       {delivery && isAwaited && <InTheBrowser fallback={<Awaited delivery={delivery} />}><AwaitedUnlessYours delivery={delivery} poster={poster} /></InTheBrowser>}
       {delivery && isAwaited && chain && poster && market && (

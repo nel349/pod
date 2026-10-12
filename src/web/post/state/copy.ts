@@ -230,6 +230,8 @@ export const COPY = {
 
   /** a job paid for, while its checks are written, read and approved */
   prepared: {
+    /** the files POD kept from the links the poster gave, each by where it came from */
+    references: { title: "What you pointed the builders at, as POD kept it", kept: (from: string, type: string) => `${from} (${type})` },
     job: (onChainId: string) => `Job ${onChainId}`,
     noSuchJob: (onChainId: string) => `There is no job ${onChainId} on this contract.`,
     terms: (price: string, window: string) => `${price}, and the builders have ${window} once you approve.`,
@@ -277,6 +279,8 @@ export const COPY = {
   },
 
   problems: {
+    /** a link the server cannot keep, said before anything is paid */
+    referenceRefused: (link: string, why: string) => `Nothing was paid. One of your links cannot be used: ${link}: ${why}. Change it or take it out, then pay.`,
     kind: "say whether it is a website or a service",
     price: "the price is more than nothing",
     name: "its address on the wall is lower-case letters, numbers and dashes",

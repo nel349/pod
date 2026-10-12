@@ -14,19 +14,20 @@ export interface ReferencesRead {
   readonly why: string | undefined;
 }
 
+/** What reading each link comes to, asked of the server, which is what fetches them. Nothing is kept by asking. */
+export async function readReferences(links: readonly string[]): Promise<readonly ReferenceRead[]> {
+  const response = await fetch(ROUTES.references, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(links) });
+  const body: unknown = await response.json();
+  if (!response.ok) throw new Error(z.object({ why: z.string() }).safeParse(body).data?.why ?? `the server said ${response.status}`);
+  return z.array(ReferenceReadSchema).parse(body);
+}
+
 /**
  * Whether the links a poster typed can be read, asked of the server before they pay: it is the server
- * that fetches them, so only it can say. Nothing is kept by asking.
+ * that fetches them, so only it can say.
  */
 export function useReferencesRead(): ReferencesRead {
-  const reading = useMutation({
-    mutationFn: async (links: readonly string[]): Promise<readonly ReferenceRead[]> => {
-      const response = await fetch(ROUTES.references, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(links) });
-      const body: unknown = await response.json();
-      if (!response.ok) throw new Error(z.object({ why: z.string() }).safeParse(body).data?.why ?? `the server said ${response.status}`);
-      return z.array(ReferenceReadSchema).parse(body);
-    },
-  });
+  const reading = useMutation({ mutationFn: readReferences });
   return {
     read: (typed) => {
       const links = ReferenceLinksSchema.safeParse(linksIn(typed));

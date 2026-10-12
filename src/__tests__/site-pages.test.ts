@@ -571,7 +571,7 @@ describe("a job delivered to a poster who has the last word", () => {
     expect(posterRecordWords({ posted: 6, accepted: 3, refusedPassed: 2, refusedFailed: 1, unanswered: 0 }))
       .toBe("Of 6 jobs this wallet has posted here, it has refused 2 whose checks passed, accepted 3 and refused 1 whose checks failed.");
     expect(posterRecordWords({ posted: 1, accepted: 0, refusedPassed: 0, refusedFailed: 0, unanswered: 0 })).toBe(SITE.job.records.posterNothingYet(1));
-    expect(posterRecordWords({ posted: 3, accepted: 0, refusedPassed: 0, refusedFailed: 0, unanswered: 0 })).toBe("This wallet has posted 3 jobs here, and none has been delivered yet.");
+    expect(posterRecordWords({ posted: 3, accepted: 0, refusedPassed: 0, refusedFailed: 0, unanswered: 0 })).toBe("This wallet has posted 3 jobs here, and has not answered a delivery yet.");
     expect(agentRecordWords({ accepted: 2, paidUnanswered: 1, refusedPassed: 1, failed: 0, undelivered: 1 })).toBe("before this: 3 paid, 1 refused, 1 not delivered");
     expect(agentRecordWords({ accepted: 0, paidUnanswered: 0, refusedPassed: 0, failed: 0, undelivered: 0 })).toBe(SITE.job.records.agentNothingYet);
 

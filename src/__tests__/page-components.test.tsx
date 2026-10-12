@@ -1,6 +1,7 @@
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import type { TriedCheck } from "../checkwriting/written.ts";
+import type { Reference } from "../references/index.ts";
 import type { AgentKeyActions, AgentKeyView } from "../web/site/pages/agents/AgentKey.tsx";
 
 /**
@@ -28,6 +29,7 @@ afterAll(async () => {
 
 const { cleanup, fireEvent, render, screen } = await import("@testing-library/react");
 const { PayStep, ShardSeal, WrittenCheck } = await import("../web/post/components/index.ts");
+const { YourJobSheet } = await import("../web/post/components/YourJobSheet.tsx");
 const { CHROME, ErrorBoundary } = await import("../web/shared/index.ts");
 const { AgentKey } = await import("../web/site/pages/agents/AgentKey.tsx");
 const { SITE } = await import("../web/site/copy.ts");
@@ -351,5 +353,40 @@ describe("the line that sends an agent to an open job", () => {
     drawn.rerender(sheet([QA]));
     expect(line(drawn)).toBe(SITE.job.sentenceForThisJob(LINK));
     expect(drawn.queryByLabelText(/^reviewer/)).toBeNull();
+  });
+});
+
+describe("a paid job's own sheet", () => {
+  const POSTER = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
+  const sheet = (references?: readonly Reference[]) => render(
+    <YourJobSheet
+      market={MARKET}
+      on={{ connect: () => {}, sign: () => {}, takeBack: () => {} }}
+      job={{
+        onChainId: "21", standing: "preparing", viewer: "poster", action: { kind: "idle" }, isSigning: false, problem: undefined, wallPage: undefined,
+        job: { poster: POSTER, price: 10n ** 18n, seal: `0x${"0".repeat(64)}`, endsAt: 0n, state: "preparing", commit: `0x${"0".repeat(64)}`, reviewers: 1, window: 7200n },
+        view: {
+          onChainId: "21", name: "a-coat", mode: "flash", salt: "0".repeat(32), now: { kind: "idle" }, writings: [],
+          money: { balance: 0n, reserved: 0n, kept: 0, writingPrice: 1n }, ...(references ? { references } : {}),
+        },
+      }}
+    />,
+  );
+
+  test("lists what POD kept from the poster's links, each by where it came from and what it is", () => {
+    sheet([
+      { name: "reference-1.png", type: "image/png", bytes: 2048, digest: `0x${"ab".repeat(32)}`, from: "https://example.com/sketch.png" },
+      { name: "reference-2.md", type: "text/markdown", bytes: 300, digest: `0x${"cd".repeat(32)}`, from: "https://example.com/spec.md" },
+    ]);
+    const kept = document.querySelector("#kept-references");
+    expect(kept?.textContent).toContain(COPY.prepared.references.title);
+    expect([...(kept?.querySelectorAll("li") ?? [])].map((one) => one.textContent)).toEqual([
+      "https://example.com/sketch.png (image/png)", "https://example.com/spec.md (text/markdown)",
+    ]);
+  });
+
+  test("says nothing of references when the poster gave none", () => {
+    sheet();
+    expect(document.querySelector("#kept-references")).toBeNull();
   });
 });

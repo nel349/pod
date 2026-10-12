@@ -67,6 +67,12 @@ export function YourJobSheet({ market, job: shown, on }: {
       {idea && <p id="your-idea" className="lede">{idea}</p>}
       {view && <p className="job-address">/job/{view.name}</p>}
       {mode && <p className="terms-plain">{COPY.prepared.terms(`${formatEther(job.price)} ${market.coin}`, windowInWords(mode))}</p>}
+      {view?.references && view.references.length > 0 && (
+        <div id="kept-references" className="kept-references">
+          <p className="note">{COPY.prepared.references.title}</p>
+          <ul>{view.references.map((one) => <li key={one.name}>{COPY.prepared.references.kept(one.from, one.type)}</li>)}</ul>
+        </div>
+      )}
       {/* until it is approved the job is the poster's alone; after, it is public, and nobody is asked for a wallet */}
       {standing === "preparing" && viewer === "noWallet" && (
         <>

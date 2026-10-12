@@ -6,6 +6,7 @@ import { jobView, TitleViewSchema, type ChainSays } from "./job.ts";
 import { MS_IN_A_SECOND, WEI, WHEN } from "./kinds.ts";
 import { MoneyViewSchema, type MoneyView } from "./money.ts";
 import { SEATS } from "../../../seal.ts";
+import type { Question } from "../../../triage.ts";
 import { tileView, TileViewSchema } from "./tile.ts";
 
 /** A job on your own page, with what its money and its title let you do. */
@@ -13,6 +14,8 @@ export const YoursEntrySchema = z.object({
   tile: TileViewSchema,
   money: MoneyViewSchema.optional(),
   title: TitleViewSchema.optional(),
+  /** until when each question its pod asked and nobody has answered may still be answered, in seconds since 1970 */
+  asked: z.array(z.number()).optional(),
 });
 export type YoursEntry = z.infer<typeof YoursEntrySchema>;
 
@@ -70,9 +73,17 @@ export const YoursViewSchema = z.object({
 });
 export type YoursView = z.infer<typeof YoursViewSchema>;
 
-export function yoursEntry(record: JobRecord, chainSays: ChainSays): YoursEntry {
+/**
+ * @param questions what the job's pod asked its poster, when the entry is for the poster: the ones
+ *                  not yet answered are what they may still be needed for
+ */
+export function yoursEntry(record: JobRecord, chainSays: ChainSays, questions: readonly Question[] = []): YoursEntry {
   const view = jobView(record, [], chainSays);
-  return { tile: tileView(record.tile, record.signed !== undefined, view.answer), ...(view.money ? { money: view.money } : {}), ...(view.title ? { title: view.title } : {}) };
+  const asked = view.verdict === "running" ? questions.filter((question) => !question.answer).map((question) => question.answerBy) : [];
+  return {
+    tile: tileView(record.tile, record.signed !== undefined, view.answer), ...(view.money ? { money: view.money } : {}), ...(view.title ? { title: view.title } : {}),
+    ...(asked.length > 0 ? { asked } : {}),
+  };
 }
 
 /**

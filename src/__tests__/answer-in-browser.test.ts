@@ -486,6 +486,20 @@ describe.skipIf(!available)("a poster answers a delivery from a browser", () => 
     // its poster's: a box to answer in, and a signature that costs nothing
     const page = await openTheJob(jobId, POSTED_BY);
     await page.until(`document.querySelector("#questions textarea")`, "the box the poster answers in");
+    // with a question waiting on them the page does not also say there is nothing for them to do
+    await page.until(`document.querySelector("#asked-of-you")`, "the poster to be told their pod has asked them something");
+    expect(await text(page, "#asked-of-you")).toContain(SITE.job.questions.askedOfYou);
+    expect(await page.evaluate<boolean>(`document.querySelector("#nothing-to-do") === null`)).toBe(true);
+    // and their own page puts the job first, as one that needs them, with the way to the question
+    const mine = await openTheJob(jobId, POSTED_BY);
+    await mine.open(base + ROUTES.yours);
+    const entry = `[...document.querySelectorAll("#posted .yours-list li")].find((one) => one.querySelector(${JSON.stringify(`a[href="${jobPath(jobId)}"]`)}))`;
+    await mine.until(`${entry}?.querySelector("a.asked-you")`, "the job whose pod asked them something, on their own page", 30);
+    expect(await mine.evaluate<string>(`${entry}.querySelector(".standing").textContent`)).toBe(SITE.yours.askedYou(1));
+    expect(await mine.evaluate<string>(`${entry}.querySelector("a.asked-you").getAttribute("href")`)).toBe(`${jobPath(jobId)}#questions`);
+    expect(await mine.evaluate<boolean>(`document.querySelector("#needs-you") !== null`)).toBe(true);
+    await photograph(mine, "my-jobs-asked");
+    await mine.stop();
     expect(await page.evaluate<boolean>(`document.querySelector("#questions .answer-question").disabled`), "nothing to send until something is written").toBe(true);
     await photograph(page, "question-asked");
     const balanceBefore = await balance(POSTED_BY);
@@ -496,10 +510,14 @@ describe.skipIf(!available)("a poster answers a delivery from a browser", () => 
     expect(await page.evaluate<boolean>(`document.querySelector("#questions textarea") === null`), "an answer is given once").toBe(true);
     expect(await balance(POSTED_BY), "signing an answer moves no money and costs no gas").toBe(balanceBefore);
     expect((await store.answers(jobId)).map((one) => one.says)).toEqual(["For drizzle too."]);
+    // answered, nothing waits on them any more, and the page says so again
+    await page.until(`document.querySelector("#asked-of-you") === null && document.querySelector("#nothing-to-do") !== null`, "the page to say nothing more is asked of them");
     await photograph(page, "question-answered");
     // the page never scrolls sideways on a phone with a question on it
     await page.resize(390, 844);
     expect(await page.evaluate<boolean>(`document.documentElement.scrollWidth <= window.innerWidth`)).toBe(true);
     await photograph(page, "question-answered-phone");
+    // this test opened more than one browser, and only the last is closed for it
+    await page.stop();
   }, 180_000);
 });

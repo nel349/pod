@@ -385,6 +385,12 @@ describe.skipIf(!available)("a stranger posts a job that is prepared before it o
     await page.click('input[name="mode"][value="project"]');
     await page.until(`document.querySelector("#mode-says")?.textContent === ${JSON.stringify(COPY.terms.modeSays.project)}`, "the form to say a week comes with questions");
     expect(await page.evaluate<string>(`[...document.querySelectorAll('input[name="mode"]')].filter((one) => one.checked).map((one) => one.value).join()`), "and the choice shown as made is the one that was made").toBe("project");
+    // pressing pay with a link that cannot be kept pays nothing, and says which link and why
+    const before = await anvil.publicClient.getBalance({ address: POSTER_ADDRESS });
+    await page.click("#submit");
+    await page.until(`(document.querySelector("#said")?.textContent ?? "").includes("Nothing was paid")`, "the payment to be stopped", 30, SAID);
+    expect(await page.evaluate<string>(`document.querySelector("#said").textContent`)).toContain("https://www.figma.com/file/abc/a-coat");
+    expect(await anvil.publicClient.getBalance({ address: POSTER_ADDRESS })).toBe(before);
     const folder = process.env.SCREENSHOTS;
     // the choice fades from one to the other: photographed once it has
     if (folder) await Bun.sleep(400);

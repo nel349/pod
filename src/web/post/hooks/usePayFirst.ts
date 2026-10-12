@@ -30,6 +30,7 @@ import {
   type KeptSetUp, type PayFirstStep, type PayStatus, type PostForm, type StepState,
 } from "../state/index.ts";
 import { isNameTaken } from "./isNameTaken.ts";
+import { readReferences } from "./useReferencesRead.ts";
 import { keptSetUpStillWaits } from "./keptSetUpStillWaits.ts";
 import { keptSetUpStore } from "./keptSetUpStore.ts";
 
@@ -177,6 +178,17 @@ export function usePayFirst(market: MarketConfig, form: UseFormReturn<PostForm>,
         if (!kept.current && (await isNameTaken(valid.name))) return stop(COPY.problems.nameTaken(valid.name, stepNumber("terms", PAY_FIRST_STEPS)));
       } catch (error) {
         return stop(COPY.problems.nameUnknown(firstLine(error)));
+      }
+      // a link that cannot be kept would have the job refused after the money is down: asked before it is,
+      // whether or not the poster ever left the box that asks for them
+      const links = linksIn(valid.references);
+      if (!kept.current && links.length > 0) {
+        try {
+          const refused = (await readReferences(links)).find((one) => !one.ok);
+          if (refused && !refused.ok) return stop(COPY.problems.referenceRefused(refused.link, refused.why));
+        } catch (error) {
+          return stop(COPY.references.notAsked(firstLine(error)));
+        }
       }
       setStatus({ kind: "posting" });
       try {

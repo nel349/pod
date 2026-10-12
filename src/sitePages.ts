@@ -4,6 +4,7 @@
  * A chain that cannot be read right now does not take a page down: the page is drawn without what the
  * chain would have added, says so where it matters, and the reason is logged for whoever runs this.
  */
+import { questionsOn } from "./door/QuestionBoard.ts";
 import { isAddress, isAddressEqual, type Address } from "viem";
 import { recordByRole } from "./agentpage.ts";
 import { firstLine } from "./errors.ts";
@@ -132,7 +133,7 @@ export async function yoursData(
     .filter(({ who }) => who.poster?.toLowerCase() === wanted)
     .map(async ({ record, who }) => yoursEntry(publicRecord(record, now), {
       ...who, ...(await moneyOnTheChain(record, owners, now)), ...(owners.isPreparedFirst(record) ? { takesBackBeforeASeat: true } : {}),
-    })));
+    }, await questionsOn(store, record))));
   const runningFirst = (a: YoursEntry, b: YoursEntry): number => Number(b.tile.verdict === "running") - Number(a.tile.verdict === "running");
   // what it paid for that is not on the wall: on a contract answered here, by a number no record here has
   const paid = await quietly(`what ${address} paid for`, () => owners.paidBy(address));
