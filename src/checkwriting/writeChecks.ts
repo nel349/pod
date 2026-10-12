@@ -54,7 +54,7 @@ const SaidSchema = z.object({ decision: z.string(), why: z.string() });
 const ReadBackSchema = z.object({
   checks: z.array(z.discriminatedUnion("checkable", [
     z.object({ checkable: z.literal(true), asks: z.string(), expects: z.string(), leavesOut: z.string().nullable().optional() }),
-    z.object({ checkable: z.literal(false), why: z.string() }),
+    z.object({ checkable: z.literal(false), why: z.string(), untold: z.boolean().optional() }),
   ])),
   howItIsAsked: HowItIsAskedSchema.nullable(),
 });
@@ -106,7 +106,8 @@ export async function writeChecks(
 
     const written = await Promise.all(plan.map(async ({ statement, entry, file, command }): Promise<Written> => {
       const { says, secret } = statement;
-      if (!entry.checkable) return { checkable: false, says, secret, why: plainDashes(entry.why) };
+      // only a sentence kept from the builders can be one they were never told: they are shown the rest
+      if (!entry.checkable) return { checkable: false, says, secret, why: plainDashes(entry.why), ...(entry.untold === true && secret ? { untold: true } : {}) };
       const trial = tried.get(command);
       if (!trial) throw new Error(`the check for "${says}" was written and never tried`);
       const source = await textFromTheBox(join(checks, file));

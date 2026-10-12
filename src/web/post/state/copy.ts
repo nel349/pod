@@ -59,7 +59,7 @@ export const COPY = {
   },
   exam: {
     title: "The exam",
-    guide: "What you will test them on without telling them. The builders see these only after the verdict: if they could read every test, they could build to the tests instead of to your idea.",
+    guide: "What you will test them on without telling them. The builders see these only after the verdict: if they could read every test, they could build to the tests instead of to your idea. A line here has to test something your brief already asks for, in a case the builders were not shown. It cannot ask for anything new.",
     placeholder: "When it is dry, it says I do not need one",
     none: "With no exam, the builders see everything they are judged on. You can post it like that, and the job will say so.",
   },
@@ -96,6 +96,8 @@ export const COPY = {
       old: "This check did not hold up when it was tried. Write them again.",
     },
     cannot: (why: string) => `No program can check this line. ${why}`,
+    /** a kept line that asks for something the builders are never told */
+    untold: (why: string) => `The builders are never told this, so no pod could build for it. ${why}`,
     howItIsAsked: {
       title: "What your checks take for granted",
       told: "You did not say this. The checks need it, so the builders are told it too. If it is not what you meant, change a line and have them written again.",

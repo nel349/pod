@@ -240,6 +240,25 @@ describe.skipIf(!withDocker)("every check is tried before it can be sealed", () 
     expect(readyToSeal(written)).toBe(false);
   }, 240_000);
 
+  test("a kept line that asks for something the builders are never told is refused as that, and the job cannot be sealed with it", async () => {
+    const untold = { checkable: false, untold: true, why: "Nothing the builders see says a city may be misspelled. Move it to the lines they see, or test a line they see with another city." };
+    const kept = { says: "A misspelled city still gets an answer", secret: true };
+    const asked = replyingInTurn({ checks: [good(0), untold] });
+    const { checks: written } = await writeChecks({ ...COAT_REQUEST, statements: [COAT_REQUEST.statements[0]!, kept] }, writerWith(asked.model));
+
+    expect(written[1]).toEqual({ checkable: false, says: kept.says, secret: true, why: untold.why, untold: true });
+    expect(readyToSeal(written)).toBe(false);
+    // the writer was told which lines the builders see and which they do not, since it cannot judge this without
+    expect(asked.prompts()[0]).toContain(`1. ${COAT_REQUEST.statements[0]!.says} [the builders see this]`);
+    expect(asked.prompts()[0]).toContain(`2. ${kept.says} [kept from the builders]`);
+
+    // a line the builders see is one they are told, whatever a writer says of it: it is never called untold
+    const { checks: seen } = await writeChecks(
+      { ...COAT_REQUEST, statements: [COAT_REQUEST.statements[0]!, { ...kept, secret: false }] }, writerWith(replying({ checks: [good(0), untold] }).model),
+    );
+    expect(seen[1]).toEqual({ checkable: false, says: kept.says, secret: false, why: untold.why });
+  }, 240_000);
+
   test("a line that depends on the time of day is not refused: the checks ask for a chosen hour, and say so plainly and exactly", async () => {
     // the poster's own words, which a check cannot decide by waiting for night
     const request: WriteRequest = {

@@ -15,7 +15,7 @@ export function WrittenCheck({ check }: { readonly check: Written }): ReactEleme
     return (
       <li className="written-check cannot">
         {which}{says}
-        <p className="cannot-why">{COPY.checks.cannot(check.why)}</p>
+        <p className="cannot-why">{check.untold ? COPY.checks.untold(check.why) : COPY.checks.cannot(check.why)}</p>
       </li>
     );
   }

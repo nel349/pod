@@ -69,8 +69,8 @@ function prompt(job) {
     `What it is: ${WHAT_IT_IS[job.kind]}.`,
     HOW_IT_IS_MADE[job.kind](job.port),
     "",
-    "What would prove it works, numbered:",
-    ...job.statements.map((statement, i) => `${i + 1}. ${statement.says}`),
+    "What would prove it works, numbered. The builders are shown some of these and not others:",
+    ...job.statements.map((statement, i) => `${i + 1}. ${statement.says} ${statement.secret ? "[kept from the builders]" : "[the builders see this]"}`),
     "",
     "Reply with one JSON object and nothing else, shaped like this:",
     "{",
@@ -85,8 +85,21 @@ function prompt(job) {
     '      "check": "<an ES module, see below>" }',
     '    or, only when a program cannot decide any part of the sentence from outside (taste, looks, anything needing the internet):',
     '    { "checkable": false, "why": "<one or two sentences the person can act on, see below>" }',
+    '    or, only for a sentence kept from the builders that asks for something they are never told (see below):',
+    '    { "checkable": false, "untold": true, "why": "<what in it the builders are never told, and what to do instead>" }',
     "  ]",
     "}",
+    "",
+    "A sentence kept from the builders is there to catch work built only to pass the checks its builders could read.",
+    "So it may only test what the builders are told: what the person wants, the sentences the builders see, and what you",
+    "say in howItIsAsked. It tests one of those in a situation the builders were not shown: another card, another",
+    "city, an empty answer, the same thing asked twice. It must not ask for anything new. If honest builders, reading",
+    "only what they are shown, would have no reason to build what a kept sentence asks for, that sentence is untold:",
+    "a different rule, a limit, a number, a page, a date or a behaviour that nothing they see mentions. Do not write",
+    "a check for an untold sentence. Answer it with untold true, and in why say plainly what the builders are never",
+    "told and that the person can either move the sentence to the ones the builders see, or change it to test",
+    "something they already ask for in a different situation. Judge this fairly: a kept sentence that follows",
+    "plainly from what the builders see is not untold only because it names a case they were not given.",
     "",
     "Each check:",
     "- is a complete ES module run with `node`, using only the standard library and the global fetch",
@@ -145,7 +158,7 @@ function parse(answer) {
 }
 
 function wellFormed(entry) {
-  if (entry && entry.checkable === false) return typeof entry.why === "string";
+  if (entry && entry.checkable === false) return typeof entry.why === "string" && (entry.untold === undefined || typeof entry.untold === "boolean");
   if (!entry || !["asks", "expects", "check"].every((key) => typeof entry[key] === "string")) return false;
   return entry.leavesOut === undefined || entry.leavesOut === null || typeof entry.leavesOut === "string";
 }
@@ -175,7 +188,7 @@ function wellFormed(entry) {
     if (!written) { say("refuse", `could not write the checks: ${problem}`); return; }
 
     const checks = written.checks.map((entry, i) => {
-      if (entry.checkable === false) return { checkable: false, why: entry.why };
+      if (entry.checkable === false) return { checkable: false, why: entry.why, ...(entry.untold === true ? { untold: true } : {}) };
       write(`/work/checks/check-${i + 1}.mjs`, entry.check);
       return { checkable: true, asks: entry.asks, expects: entry.expects, leavesOut: entry.leavesOut || null };
     });

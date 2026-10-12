@@ -40,6 +40,12 @@ export const WrittenSchema = z.discriminatedUnion("checkable", [
     secret: z.boolean(),
     /** what the writer suggests instead, in words the poster can act on */
     why: z.string(),
+    /**
+     * A sentence kept from the builders that asks for something they are never told. A program could
+     * check it, and no honest pod could build for it, so it is refused before the job can open: left in,
+     * its poster could look at the work and refuse it for nothing.
+     */
+    untold: z.boolean().optional(),
   }),
   z.object({
     checkable: z.literal(true),
