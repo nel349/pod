@@ -21,6 +21,8 @@ export const SeatViewSchema = z.object({
   /** in wei: the seat's share of the price */
   pay: WEI,
   approvedAt: z.string().optional(),
+  /** it stands behind the work, and the lead, naming who is paid, did not name it */
+  isKeptFromPay: z.boolean().optional(),
   /** how the jobs its agent held a seat on have ended, where the contract keeps count */
   record: AgentRecordSchema.optional(),
 });
@@ -49,6 +51,8 @@ export const JobViewSchema = z.object({
   answer: AnswerSchema.optional(),
   /** whether its poster has the last word on what its pod delivers, which its contract decides */
   hasLastWord: z.boolean().optional(),
+  /** the lead names who is paid on its contract: each seat leaves an account, and the lead says who earned their pay */
+  leadNames: z.boolean().optional(),
   /** its delivery: until when the poster may answer, what a refusal leaves the pod, and how it ended */
   delivery: DeliveryViewSchema.optional(),
   standing: z.string(),
@@ -143,6 +147,7 @@ export function jobView(record: JobRecord, notes: readonly Note[], chainSays: Ch
     jobId: tile.jobId, idea: tile.idea, verdict: tile.verdict,
     ...(answer ? { answer } : {}),
     ...(record.chain?.lastWord ? { hasLastWord: true } : {}),
+    ...(record.chain?.leadNames ? { leadNames: true } : {}),
     ...(delivery ? { delivery } : {}),
     standing: standingOf(tile, answer), mode: tile.mode,
     price: tile.price.toString(), seal: record.seal,
@@ -220,6 +225,6 @@ function seatsOf(record: JobRecord, records: ChainSays["agentRecords"] = {}): Se
     if (!seat) return { role, pay };
     const approval = approvals.find((one) => one.role === role && one.agent.toLowerCase() === seat.agent.toLowerCase());
     const counted = records[seat.agent.toLowerCase()];
-    return { role, agent: seat.agent, pay, ...(approval ? { approvedAt: approval.at } : {}), ...(counted ? { record: counted } : {}) };
+    return { role, agent: seat.agent, pay, ...(approval ? { approvedAt: approval.at } : {}), ...(approval?.isKeptFromPay ? { isKeptFromPay: true } : {}), ...(counted ? { record: counted } : {}) };
   });
 }

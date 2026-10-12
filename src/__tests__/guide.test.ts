@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { MOST_A_PUSH_MAY_WEIGH, MOST_A_REPOSITORY_MAY_WEIGH, MOST_A_STATEMENT_MAY_LAST_SECONDS, LONGEST_NOTE, NOTE_CLOCK_SLACK_SECONDS, NOTES_A_SEAT_MAY_WRITE_A_MINUTE, PUSHES_A_SEAT_MAY_MAKE_A_MINUTE, GISTS_READ_A_MINUTE, LIST_FRESH_FOR_MS, SEATS_FRESH_FOR_MS, SEATS_RECHECK_MS, agentEmail, branchFor } from "../door/index.ts";
 import { SHARES, SITE_FOLDER, SITE_FRONT_PAGE } from "../job.ts";
 import { REFUSAL_SHARE_PERCENT, REVIEW_SHARE_PERCENT } from "../jobsV3.ts";
+import { accountOf, seatBit } from "../jobsV4.ts";
 import { SITE_LIMITS } from "../hosting/index.ts";
 import { roleNumber } from "../jobs.ts";
 import { creditEmail, SIGNED } from "../credit.ts";
@@ -28,7 +29,7 @@ import { registryTag } from "../verdict.ts";
 const GUIDE = await readFile(new URL("../../public/llms.txt", import.meta.url), "utf8");
 /** the contract that prepares jobs, as it was compiled: what an agent's calls actually meet */
 const CONTRACT_ABI: readonly { readonly type: string; readonly name?: string; readonly inputs: readonly { readonly type: string }[] }[] =
-  JSON.parse(await readFile(new URL("../../contracts/out/PodJobsV3.sol/PodJobsV3.json", import.meta.url), "utf8")).abi;
+  JSON.parse(await readFile(new URL("../../contracts/out/PodJobsV4.sol/PodJobsV4.json", import.meta.url), "utf8")).abi;
 
 /** The worked example the guide uses throughout */
 const EXAMPLE = {
@@ -135,6 +136,22 @@ describe("the guide for outside agents", () => {
     expect(withABuildersCall.calls[0]?.functions).toEqual(["takeSeat(uint256,uint8,address)", "approve(uint256,uint8,bytes32)", "putForward(uint256,bytes32)"]);
     for (const signature of withABuildersCall.calls[0]?.functions ?? []) expect(GUIDE).toContain(`${signature.slice(0, signature.indexOf("("))}(`);
     expect(GUIDE).toContain("`seatAllowance`");
+
+    // where the lead names who is paid, a yes carries its account and the lead concludes: those are the calls a wallet allows
+    const whereTheLeadNames = seatAllowance(EXAMPLE.jobs, true, true);
+    expect(whereTheLeadNames.calls[0]?.functions).toEqual([
+      "takeSeat(uint256,uint8,address)", "approve(uint256,uint8,bytes32,bytes32)", "conclude(uint256,bytes32,uint256,bytes32)", "putForward(uint256,bytes32)",
+    ]);
+    for (const signature of whereTheLeadNames.calls[0]?.functions ?? []) expect(GUIDE).toContain(`${signature.slice(0, signature.indexOf("("))}(`);
+  });
+
+  test("the bits it gives for the seats a lead names, and the fingerprint of an account, are the code's own", () => {
+    expect(GUIDE).toContain(`the reviewer's first seat is bit ${seatBit("reviewer", 0).toString(2).length - 1}, QA's bit ${seatBit("qa", 0).toString(2).length - 1} and security's bit ${seatBit("security", 0).toString(2).length - 1}`);
+    expect(GUIDE).toContain("the keccak256 of the exact sentence you signed for that note");
+    // the same sentence gives the same fingerprint, and a different one another
+    const sentence = noteMessage({ jobId: EXAMPLE.jobId, onChainId: EXAMPLE.onChainId, jobs: EXAMPLE.jobs, role: "reviewer", about: "ab".repeat(20), says: "Approved: it does what was asked", at: 1_760_000_000 });
+    expect(accountOf(sentence)).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(accountOf(sentence)).not.toBe(accountOf(`${sentence}.`));
   });
 
   test("the plugin it tells an agent its grant is read from is the one the doors ask", () => {
@@ -148,7 +165,7 @@ describe("the guide for outside agents", () => {
   });
 
   test("what it says a refusal leaves a pod, and what a website may be, are the contract's and the host's own limits", () => {
-    expect(GUIDE).toContain(`each seat that stood behind it keep ${REFUSAL_SHARE_PERCENT}% of their pay`);
+    expect(GUIDE).toContain(`the seats that would have been paid keep ${REFUSAL_SHARE_PERCENT}% of their pay`);
     // and how long a review is: a quarter of the job's window, as the contract has it and as the pages say it
     expect(REVIEW_SHARE_PERCENT).toBe(25);
     expect(GUIDE).toContain("a quarter of the job's window later");
@@ -169,7 +186,7 @@ describe("the guide for outside agents", () => {
       if (spelled.length > 0) expect(spelled).toEqual(types ?? []);
     }
     expect(calls.map((call) => call.name)).toEqual(expect.arrayContaining([
-      "takeSeat", "approve", "close", "withdraw", "owed", "locked", "report", "accept", "refuse", "settleUnanswered", "posters", "agents",
+      "takeSeat", "approve", "conclude", "seatBit", "earns", "accounts", "concluded", "cuts", "close", "withdraw", "owed", "locked", "report", "accept", "refuse", "settleUnanswered", "posters", "agents",
     ]));
   });
 });

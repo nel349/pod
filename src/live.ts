@@ -45,6 +45,12 @@ export const OLD_JOBS_SETTING = "POD_OLD_JOBS_ADDRESS";
  * replaces it. Its jobs are finished and are still read; nothing is posted to it or worked on it.
  */
 export const SECOND_JOBS_SETTING = "POD_SECOND_JOBS_ADDRESS";
+/**
+ * The third contract, on which the poster has the last word and every seat that said yes is paid, set
+ * once the fourth replaces it. Its jobs are finished and are still read; nothing is posted to it or
+ * worked on it.
+ */
+export const THIRD_JOBS_SETTING = "POD_THIRD_JOBS_ADDRESS";
 /** The key the checks are written and signed with, which only the server holds, never the validator's */
 export const WRITER_KEY_SETTING = "POD_WRITER_KEY";
 
@@ -56,6 +62,8 @@ export interface Deployment {
   readonly earlier?: Address;
   /** the contract that prepared jobs before the one new jobs are posted to, when there was one */
   readonly second?: Address;
+  /** the contract on which the poster had the last word before the one new jobs are posted to, when there was one */
+  readonly third?: Address;
   readonly token: Address;
   readonly validator: Address;
 }
@@ -78,11 +86,15 @@ export function deployment(environment: Record<string, string | undefined> = pro
   const second = environment[SECOND_JOBS_SETTING]
     ? required(environment, SECOND_JOBS_SETTING, ADDRESS, "the address of the contract that prepared jobs before this one") as Address
     : undefined;
+  const third = environment[THIRD_JOBS_SETTING]
+    ? required(environment, THIRD_JOBS_SETTING, ADDRESS, "the address of the contract on which the poster had the last word before this one") as Address
+    : undefined;
   return {
     rpc: environment.MONAD_TESTNET_RPC ?? MONAD_TESTNET.rpc,
     jobs: required(environment, "POD_JOBS_ADDRESS", ADDRESS, "the PodJobs contract's address") as Address,
     ...(earlier ? { earlier } : {}),
     ...(second ? { second } : {}),
+    ...(third ? { third } : {}),
     token: required(environment, "POD_TOKEN_ADDRESS", ADDRESS, "the PodToken contract's address") as Address,
     validator: required(environment, "POD_VALIDATOR_ADDRESS", ADDRESS, "the address verdicts come from") as Address,
   };
@@ -95,6 +107,8 @@ export interface LiveContracts {
   readonly earlier?: Contract;
   /** the contract that prepared jobs before the one new jobs are posted to, still read */
   readonly second?: Contract;
+  /** the contract on which the poster had the last word before the one new jobs are posted to, still read */
+  readonly third?: Contract;
   readonly token: Contract;
   readonly publicClient: PublicClient;
   readonly validator: Address;
@@ -124,6 +138,7 @@ export function live(environment: Record<string, string | undefined> = process.e
     jobs: { address: where.jobs, publicClient, wallet },
     ...(where.earlier ? { earlier: { address: where.earlier, publicClient, wallet } } : {}),
     ...(where.second ? { second: { address: where.second, publicClient, wallet } } : {}),
+    ...(where.third ? { third: { address: where.third, publicClient, wallet } } : {}),
     token: { address: where.token, publicClient, wallet },
     publicClient,
     validator: where.validator,

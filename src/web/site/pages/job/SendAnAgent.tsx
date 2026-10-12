@@ -14,10 +14,21 @@ export interface FreeSeat {
   readonly pay: string;
 }
 
-/** The seats of a pod that are still free, one for each role that has one: a pod may have two reviewers, and a person picks the role. */
-export function freeSeatsOf(seats: readonly SeatView[]): readonly FreeSeat[] {
+/**
+ * The seats of a pod that are still free, one for each role that has one: a pod may have two
+ * reviewers, and a person picks the role.
+ *
+ * @param isTheLeadsSeatGone where the lead names who is paid and work has been put forward: the lead
+ *                           judges that work, so the contract gives nobody its seat afterwards, and
+ *                           a page that offered one would be sending an agent to a refusal
+ */
+export function freeSeatsOf(seats: readonly SeatView[], isTheLeadsSeatGone = false): readonly FreeSeat[] {
   const free = new Map<Role, FreeSeat>();
-  for (const seat of seats) if (!seat.agent && !free.has(seat.role)) free.set(seat.role, { role: seat.role, pay: seat.pay });
+  for (const seat of seats) {
+    if (seat.agent || free.has(seat.role)) continue;
+    if (seat.role === "lead" && isTheLeadsSeatGone) continue;
+    free.set(seat.role, { role: seat.role, pay: seat.pay });
+  }
   return [...free.values()];
 }
 

@@ -60,6 +60,8 @@ const seatCallsAbi = [
     "error WrongAmount()",
     "error NoSuchJob()",
     "error PosterTakesNoSeat()",
+    // and, where the lead names who is paid, a lead that comes after the work it would judge
+    "error LeadComesFirst()",
   ]),
 ] as const;
 

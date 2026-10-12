@@ -81,6 +81,8 @@ export interface OnChain {
   readonly answer?: Answered;
   /** the job is on a contract where its poster has the last word: its code is the pod's until they accept */
   readonly lastWord?: true;
+  /** the lead names who is paid on the contract this job is on: a seat behind the work may be kept from the pay */
+  readonly leadNames?: true;
 }
 
 /** A website put live at an address of its own when its pod delivered it. */

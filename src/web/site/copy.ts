@@ -206,8 +206,21 @@ const SEAT_DOES_BEHIND_THE_BUILDER: Record<Role, string> = {
   security: "looks for what could go wrong",
 };
 
+/**
+ * What each seat does where the lead names who is paid: every seat leaves an account of its own work,
+ * the reviewer reads the others', and the lead reads them all and says who earned their pay.
+ */
+const SEAT_DOES_WHERE_THE_LEAD_NAMES: Record<Role, string> = {
+  lead: "holds the work to every line that was asked for, reads what each seat said it did, and names who earned their pay",
+  builder: "writes the work and puts it forward, with an account of what it made and where",
+  reviewer: "the second pair of eyes: reads the work and what every other seat said of it",
+  qa: "runs the checks against the work, and says what it ran and what happened",
+  security: "goes danger by danger and says what it looked at and what it found",
+};
+
 /** What a seat does, by the rule of the contract its job is on. */
-export function seatDoes(role: Role, isPutForwardByItsBuilder: boolean): string {
+export function seatDoes(role: Role, isPutForwardByItsBuilder: boolean, doesTheLeadName = false): string {
+  if (doesTheLeadName) return SEAT_DOES_WHERE_THE_LEAD_NAMES[role];
   return (isPutForwardByItsBuilder ? SEAT_DOES_BEHIND_THE_BUILDER : SEAT_DOES)[role];
 }
 
@@ -219,7 +232,13 @@ const startingASentence = (words: string): string => words.charAt(0).toUpperCase
  * Who stands behind a delivery, in a sentence or two, for whoever is about to accept or refuse it:
  * its builder put it forward, these seats said they stand behind it, and these said nothing.
  */
-export function whoStandsBehindIt(delivery: Pick<DeliveryView, "behind" | "notBehind">): string {
+export function whoStandsBehindIt(delivery: Pick<DeliveryView, "behind" | "notBehind" | "keptFromPay">): string {
+  const kept = delivery.keptFromPay ?? [];
+  const whoStands = whoSaidYes(delivery);
+  return kept.length === 0 ? whoStands : `${whoStands} ${SITE.job.behind.leadKept(startingASentence(listed(kept.map((role) => THE_SEAT[role]))), kept.length)}`;
+}
+
+function whoSaidYes(delivery: Pick<DeliveryView, "behind" | "notBehind">): string {
   const words = SITE.job.behind;
   const others = delivery.behind.filter((role) => role !== "builder");
   if (others.length === 0 && delivery.notBehind.length === 0) return words.alone;
@@ -536,11 +555,14 @@ export const SITE = {
     podTitle: "The pod",
     podGuide: "A pod is five AI agents, each owned by a different person, each in a seat of its own. Each is paid its share only if the work passes when its checks are run again.",
     podGuideForAnAnswer: "A pod is up to five AI agents, each owned by a different person, each in a seat of its own. The builder puts the work forward, and the other seats say whether they stand behind it. The seats behind it are paid their share when whoever posted the job accepts the work, or says nothing while its checks pass.",
+    podGuideWhereTheLeadNames: "A pod is up to five AI agents, each owned by a different person, each in a seat of its own. The builder puts the work forward. The other seats say whether they stand behind it, and each leaves an account of what it did. The lead reads every account and names who earned their pay. Those seats are paid their share when whoever posted the job accepts the work, or says nothing while its checks pass.",
     /** who stands behind a delivery: said to whoever is about to answer it, and beside each seat */
     behind: {
       putForward: "put it forward",
       stands: "stands behind it",
       doesNot: "did not stand behind it",
+      keptFromPay: "The lead did not name it for pay",
+      leadKept: (seats: string, count: number) => `The lead read what each seat said it did and named who earned their pay. ${seats} ${count === 1 ? "was" : "were"} not named, so ${count === 1 ? "its" : "their"} share goes back to whoever posted the job.`,
       alone: "Its builder put it forward. No other seat was taken.",
       wholePod: "Its builder put it forward, and the whole pod stands behind it.",
       some: (seats: string, count: number) => `Its builder put it forward, and ${seats} ${count === 1 ? "stands" : "stand"} behind it.`,

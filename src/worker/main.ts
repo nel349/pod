@@ -17,6 +17,7 @@ import { GITHUB_OWNER_SETTING } from "../github.ts";
 import { confirmTheContracts } from "../contracts.ts";
 import { netlifyFromTheEnvironment } from "../hosting/index.ts";
 import { hasTheLastWord } from "../jobsV3.ts";
+import { doesTheLeadNameWhoIsPaid } from "../jobsV4.ts";
 import { live } from "../live.ts";
 import { PreparingStore } from "../preparing/index.ts";
 import { MONAD_REGISTRIES } from "../registry.ts";
@@ -37,9 +38,11 @@ await confirmTheContracts({
   publicClient: contracts.publicClient, jobs: contracts.jobs.address,
   ...(contracts.earlier ? { earlier: contracts.earlier.address } : {}),
   ...(contracts.second ? { second: contracts.second.address } : {}),
+  ...(contracts.third ? { third: contracts.third.address } : {}),
 });
 // asked of the contract itself, so the worker never settles where it should only report
 const posterHasTheLastWord = contracts.earlier !== undefined && (await hasTheLastWord(contracts.jobs));
+const leadNamesWhoIsPaid = posterHasTheLastWord && (await doesTheLeadNameWhoIsPaid(contracts.jobs));
 const publishTo = process.env[GITHUB_OWNER_SETTING];
 const siteHost = netlifyFromTheEnvironment();
 const site = siteFromTheEnvironment();
@@ -51,8 +54,9 @@ const worker = new Worker({
   // after the switch-over the contract new jobs go to prepares them, and the first one is graded still
   ...(contracts.earlier
     ? {
-      jobs: contracts.earlier, prepared: contracts.jobs, hasTheLastWord: posterHasTheLastWord,
+      jobs: contracts.earlier, prepared: contracts.jobs, hasTheLastWord: posterHasTheLastWord, leadNamesWhoIsPaid,
       ...(contracts.second ? { second: contracts.second } : {}),
+      ...(contracts.third ? { third: contracts.third } : {}),
       preparing: new PreparingStore(join(directory, PREPARING_FOLDER)),
     }
     : { jobs: contracts.jobs }),

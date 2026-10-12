@@ -87,11 +87,14 @@ Deployed once, from a laptop that holds the deployer's key, not from the host.
 ./scripts/deploy-testnet.sh      # the first jobs contract and the title contract
 ./scripts/deploy-jobs-v2.sh      # the contract that prepares jobs, numbered on from the first
 ./scripts/deploy-jobs-v3.sh      # the contract on which the poster has the last word, numbered on from the second
+./scripts/deploy-jobs-v4.sh      # the contract on which the lead names who is paid, numbered on from the third
 ```
+
+The fourth takes the third's validator, writer and next job number, and the same `POD_ANSWER_SECONDS`. It refuses while any job on the third is unfinished, and writes the third's address into `.env` as `POD_THIRD_JOBS_ADDRESS`, which the server and the worker need beside it: jobs on the third stay there, finished and still read.
 
 The third needs `POD_ANSWER_SECONDS` in `.env`, how long a poster has to accept or refuse a delivery, in seconds and fixed for good once it is deployed (259200 is three days). How long the other seats have to review what a builder put forward is not a setting: it is a quarter of each job's window, in the contract. It refuses while any job on the second contract is unfinished: one still being prepared is taken back by its poster first, since nothing finishes it after the switch. It names the contract it replaced as `POD_SECOND_JOBS_ADDRESS`; the same three addresses then go where the server and the worker run.
 
-All three read `.env`, refuse to run rather than guess, and write the addresses back into it. The first
+All four read `.env`, refuse to run rather than guess, and write the addresses back into it. The first
 refuses if the deployer has no MON, and refuses again once a title contract is named, since running
 it twice would replace the title contract. The second refuses while any job on the first contract is
 unfinished, if the writer's key is not the writer's, or if the writer is the validator.

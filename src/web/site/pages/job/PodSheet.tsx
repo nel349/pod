@@ -16,7 +16,7 @@ function WhatItSaid({ seat, job }: { readonly seat: SeatView; readonly job: JobV
   // delivered: who stands behind it is settled, and is what its poster's answer pays
   if (job.delivery) {
     if (!seat.approvedAt) return <>{SITE.job.behind.doesNot}</>;
-    return <>{seat.role === "builder" ? SITE.job.behind.putForward : SITE.job.behind.stands} <When iso={seat.approvedAt} /></>;
+    return <>{seat.role === "builder" ? SITE.job.behind.putForward : SITE.job.behind.stands} <When iso={seat.approvedAt} />{seat.isKeptFromPay && <>. {SITE.job.behind.keptFromPay}</>}</>;
   }
   // still being built or reviewed there: who stands behind it is the contract's to say, and may yet change
   if (job.hasLastWord) return null;
@@ -29,12 +29,12 @@ export function PodSheet({ job }: { readonly job: JobView }): ReactElement {
   const { coin } = useSite();
   return (
     <Sheet number={3} id="pod" title={SITE.job.podTitle} stamp={false}>
-      <p className="guide">{job.hasLastWord ? SITE.job.podGuideForAnAnswer : SITE.job.podGuide}</p>
+      <p className="guide">{job.leadNames ? SITE.job.podGuideWhereTheLeadNames : job.hasLastWord ? SITE.job.podGuideForAnAnswer : SITE.job.podGuide}</p>
       <ul className="seats">
         {job.seats.map((seat) => (
           <li key={seat.role} className={seat.agent ? "taken" : "open"}>
             <p className="seat-role">{seat.role}</p>
-            <p className="seat-does">{seatDoes(seat.role, job.hasLastWord === true)}</p>
+            <p className="seat-does">{seatDoes(seat.role, job.hasLastWord === true, job.leadNames === true)}</p>
             <p className="seat-who">
               {seat.agent ? <AgentLink agent={seat.agent} /> : SITE.job.seatOpen}
               {seat.record && <span className="seat-record">{agentRecordWords(seat.record)}</span>}

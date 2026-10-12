@@ -37,7 +37,7 @@ The tests that need Docker, a local chain (`anvil`, after `forge build` in `cont
 skip themselves without it. The boxes pull one image, pinned by digest.
 
 None of it needs a key, an account or a package that is not public. CI runs seven lanes on every push,
-about 870 tests between them and 238 more for the contracts. Timed on 7 October on a Linux machine
+about 870 tests between them and 426 more for the contracts. Timed on 7 October on a Linux machine
 with nothing cached: clone, install, type-check and what were then the first lane's 333 tests took 15 seconds.
 
 ## The front door, and the wall
@@ -116,7 +116,7 @@ deployed. Checked directly, not taken from a README.
 ## Contracts
 
 ```
-cd contracts && forge test                  # the contracts' own rules, 238 tests
+cd contracts && forge test                  # the contracts' own rules, 426 tests
 bun test src/__tests__/chain.test.ts        # the money path, against a real EVM on anvil
 ```
 

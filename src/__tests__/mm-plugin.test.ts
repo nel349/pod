@@ -6,6 +6,8 @@ import { Pod, PodDidNotAnswer, withASeatToTake } from "../../plugins/mm/src/pod.
 import { whyTheContractRefused } from "../../plugins/mm/src/refusal.ts";
 import { ListedJobSchema, type ListedJob } from "../door/JobList.ts";
 import { podJobsAbi } from "../jobs.ts";
+import { accountOf, earnedSeats } from "../jobsV4.ts";
+import { AN_ACCOUNT, seatsNamed } from "../../plugins/mm/src/named.ts";
 import { jobApiPath, ROUTES } from "../routes.ts";
 
 /**
@@ -89,6 +91,38 @@ describe("which commit a seat may put forward or approve, where the builder puts
     const refused = commitToApprove("builder", CANDIDATE, CANDIDATE, BUILDER_NAMES);
     expect(refused).toMatchObject({ ok: false, code: "BUILDERS_DO_NOT_APPROVE" });
     if (!refused.ok) expect(refused.hint).toContain("mm pod put-forward");
+  });
+});
+
+describe("the seats a lead names for pay, as it tells them", () => {
+  test("seats are named by their role, a second reviewer by its number, and nobody only by saying so", () => {
+    expect(seatsNamed("reviewer, qa, security")).toEqual({ ok: true, seats: [{ role: "reviewer", index: 0 }, { role: "qa", index: 0 }, { role: "security", index: 0 }] });
+    expect(seatsNamed(" Reviewer 2 ,QA")).toEqual({ ok: true, seats: [{ role: "reviewer", index: 1 }, { role: "qa", index: 0 }] });
+    expect(seatsNamed("none")).toEqual({ ok: true, seats: [] });
+    // said twice, a seat is named once
+    expect(seatsNamed("qa, qa")).toEqual({ ok: true, seats: [{ role: "qa", index: 0 }] });
+  });
+
+  test("the builder and the lead are nobody's to name, and a slip names nobody", () => {
+    for (const told of ["builder", "lead", "reviewer, builder", "qa 2", "reviewer 0", "reviewer 6", "everyone", "", " , "]) {
+      const named = seatsNamed(told);
+      expect(named.ok, told).toBe(false);
+      if (!named.ok) expect(named.code).toBe("NOT_A_SEAT_TO_NAME");
+    }
+    // nobody is named by saying so on its own, never beside a seat
+    expect(seatsNamed("none, qa").ok).toBe(false);
+  });
+
+  test("the bits sent for them are the contract's: eight to a role, in its order of roles", () => {
+    const named = seatsNamed("reviewer, reviewer 2, qa, security");
+    expect(named.ok && earnedSeats(named.seats)).toBe((1n << 16n) | (1n << 17n) | (1n << 24n) | (1n << 32n));
+  });
+
+  test("an account is 32 bytes in hex, which is what a note's fingerprint is", () => {
+    const fingerprint = accountOf("As the reviewer seat on job 1, I say:\nApproved: it does what was asked");
+    expect(AN_ACCOUNT.test(fingerprint)).toBe(true);
+    expect(AN_ACCOUNT.test("0x1234")).toBe(false);
+    expect(AN_ACCOUNT.test(fingerprint.slice(2))).toBe(false);
   });
 });
 

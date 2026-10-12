@@ -14,6 +14,7 @@ import { secondsNow } from "../../clock.ts";
 import { hasTriage, isWaiting } from "../../triage.ts";
 import { leadHasSpoken } from "./Asking.ts";
 import { ASKING_GRACE_SECONDS, briefFor, candidateBranchOf, candidateOf, passwordFor, settledFor, type Seated, type SeatWork } from "../Seated.ts";
+import { DUTIES, STANDARD } from "../../standard.ts";
 import { shortCommit } from "../../repo.ts";
 
 
@@ -132,6 +133,12 @@ export class Builder implements SeatWork {
         : `You are the builder on a small team. Write the whole of ${file} and nothing else.`,
       ...whatToWrite(seated.listed.kind),
       "",
+      "## What every seat here is held to",
+      ...STANDARD.map((line) => `- ${line}`),
+      "",
+      "## What your seat is for",
+      DUTIES.builder,
+      "",
       "## What is being asked for",
       briefFor(seated.listed, seated.references, await settledFor(seated)),
       ...(existing.length > 0 ? ["", "## What is there now, which you are replacing", ...existing.flatMap((one) => [`${FILE_MARK} ${one.name}`, "```", one.contents, "```"])] : []),
@@ -175,7 +182,7 @@ function whatToWrite(kind: Kind | undefined): readonly string[] {
       "The files are served as they are, with no program behind them: anything the site does, it does in the visitor's browser.",
       "People will open it and judge it by eye, so make it a site worth opening: laid out with care, readable on a phone.",
       "Build what is asked for real, not a picture of it. Where it names a wallet, ask the visitor's own browser wallet (window.ethereum) and say on the page what it is asked for; where it names a contract, a chain or a service, call the one that is named, by its address, with no library taken from another host unless what is asked allows one.",
-      "Where it asks for something real and names nothing to do it with (minting with no contract named, paying with nowhere to pay), build everything up to that point and say plainly on the page that this part is a mock-up and what is needed to make it real. Never let a button look as if it did something it does not.",
+      "A mock-up is not a delivery, and a page that admits one is refused by the other seats. Never let a button look as if it did something it does not.",
       `Reply with each file whole in a fenced code block of its own, and on the line before each block the file's name, like this: ${FILE_MARK} ${SITE_FOLDER}/${SITE_FRONT_PAGE}`,
       "No explanation before, between or after the files.",
     ];

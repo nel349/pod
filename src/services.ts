@@ -31,7 +31,8 @@ import { recordsAt } from "./records.ts";
 import { netlifyFromTheEnvironment, type SiteHost } from "./hosting/index.ts";
 import { Preparing, PreparingStore } from "./preparing/index.ts";
 import { confirmTheContracts, JOBS_ADDRESS_SETTING } from "./contracts.ts";
-import { OLD_JOBS_SETTING, SECOND_JOBS_SETTING, WRITER_KEY_SETTING } from "./live.ts";
+import { doesTheLeadNameWhoIsPaid } from "./jobsV4.ts";
+import { OLD_JOBS_SETTING, SECOND_JOBS_SETTING, THIRD_JOBS_SETTING, WRITER_KEY_SETTING } from "./live.ts";
 import type { Registries } from "./registry.ts";
 import type { Market, Services } from "./server.ts";
 import type { JobStore } from "./store.ts";
@@ -102,6 +103,8 @@ export interface ServicesInput {
   readonly earlier?: Address;
   /** the contract that prepared jobs before `jobs`, when `jobs` is the one on which the poster has the last word */
   readonly second?: Address;
+  /** the contract on which the poster had the last word before `jobs`, when `jobs` is the one on which the lead names who is paid */
+  readonly third?: Address;
   /** the title contract; without it nobody can claim anything here */
   readonly token?: Address;
   /** the writer's wallet, which a contract that prepares jobs needs, and no other */
@@ -123,10 +126,12 @@ export async function servicesFor(input: ServicesInput): Promise<Services> {
     publicClient, jobs,
     ...(input.earlier ? { earlier: input.earlier } : {}),
     ...(input.second ? { second: input.second } : {}),
+    ...(input.third ? { third: input.third } : {}),
     ...(input.writer ? { writer: input.writer.account.address } : {}),
   });
   // the contracts jobs were posted to before this one, newest first: their jobs are still read and answered for
   const before = [
+    ...(input.third ? [{ jobs: input.third, prepares: true }] : []),
     ...(input.second ? [{ jobs: input.second, prepares: true }] : []),
     ...(input.earlier ? [{ jobs: input.earlier, prepares: false }] : []),
   ];
@@ -149,12 +154,18 @@ export async function servicesFor(input: ServicesInput): Promise<Services> {
   const token = input.token ? { address: input.token, publicClient } : undefined;
   const preparing = input.earlier ? await preparingOn(input) : undefined;
   // who has done what, where the contract keeps count: asked of the contract itself
-  const records = preparing && (await hasTheLastWord(contract)) ? recordsAt(contract) : undefined;
+  const posterHasTheLastWord = preparing !== undefined && (await hasTheLastWord(contract));
+  const leadNamesWhoIsPaid = posterHasTheLastWord && (await doesTheLeadNameWhoIsPaid(contract));
+  // the third contract kept count too, and a record does not start again because it was replaced
+  const records = posterHasTheLastWord
+    ? recordsAt(contract, { ...(input.third ? { also: [{ address: input.third, publicClient }] } : {}), countsCuts: leadNamesWhoIsPaid })
+    : undefined;
   // the page says both before anybody pays, so it is told here, from the contract
   const lastWord = records
     ? {
       answerSeconds: Number(await readAnswerTime(contract)), refusalSharePercent: await readRefusalShare(contract), reviewSharePercent: await readReviewShare(contract),
       ...(input.tellsByMail ? { tellsByMail: true } : {}),
+      ...(leadNamesWhoIsPaid ? { leadNamesWhoIsPaid: true } : {}),
     }
     : undefined;
   // the page shows what writing costs before the poster pays, so it is told here
@@ -163,7 +174,7 @@ export async function servicesFor(input: ServicesInput): Promise<Services> {
     : undefined;
   const market: Market = {
     // an agent working for a wallet is told what the wallet has to allow, only where a wallet can grant at all
-    page: { ...input.page, jobs, ...(writing ? { writing } : {}), ...(lastWord ? { lastWord } : {}), ...(grants ? { seatAllowance: seatAllowance(jobs, lastWord !== undefined) } : {}) },
+    page: { ...input.page, jobs, ...(writing ? { writing } : {}), ...(lastWord ? { lastWord } : {}), ...(grants ? { seatAllowance: seatAllowance(jobs, lastWord !== undefined, leadNamesWhoIsPaid) } : {}) },
     chain: readerFor({ jobs, read: (id) => readJob(contract, id), now: async () => (await publicClient.getBlock()).timestamp }),
     ...(before.length > 0 ? { earlier: before.map((one) => ownedAt(one.jobs, publicClient).reader) } : {}),
     writing: new CheckWriting({ writer: input.checkWriter, proven }),
@@ -175,7 +186,7 @@ export async function servicesFor(input: ServicesInput): Promise<Services> {
     notes: new NoteBoard({ keeper, store }),
     questions: new QuestionBoard({ keeper, store }),
     identities: new IdentityDoor({ keeper, store, client: publicClient, registries: input.registries }),
-    jobList: new JobList({ keeper, store, ...(records ? { records } : {}) }),
+    jobList: new JobList({ keeper, store, ...(records ? { records } : {}), ...(leadNamesWhoIsPaid ? { leadComesFirst: true } : {}) }),
     credit: new CreditDoor({ book }),
     // who paid and who holds, on both contracts: old jobs keep their poster and their title holder (R12)
     owners: ownersFrom({
@@ -202,6 +213,7 @@ export async function servicesFromTheEnvironment(
   if (!jobs) return {};
   const earlier = addressSetting(environment, OLD_JOBS_SETTING);
   const second = addressSetting(environment, SECOND_JOBS_SETTING);
+  const third = addressSetting(environment, THIRD_JOBS_SETTING);
   const tokenAddress = addressSetting(environment, TOKEN_ADDRESS_SETTING);
   const { monadClient, writerWallet } = await import("./live.ts");
   const { MONAD_REGISTRIES, MONAD_TESTNET } = await import("./registry.ts");
@@ -222,6 +234,7 @@ export async function servicesFromTheEnvironment(
     registries: MONAD_REGISTRIES,
     ...(earlier ? { earlier, writer: writerWallet(environment) } : {}),
     ...(second ? { second } : {}),
+    ...(third ? { third } : {}),
     ...(tokenAddress ? { token: tokenAddress } : {}),
     checkWriter: { model, image: IMAGE, agents: new URL("../agents", import.meta.url).pathname },
     ...(siteHost ? { siteHost } : {}),

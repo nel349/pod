@@ -12,7 +12,8 @@ import { MOST_A_STATEMENT_MAY_LAST_SECONDS } from "../door/credentials.ts";
 import type { Role } from "../job.ts";
 import { approve, podJobsAbi, policyMet, readJob, readSeats, takeSeat, type HeldSeat, type OnChainJob } from "../jobs.ts";
 import { isLocked } from "../jobsV2.ts";
-import { isPutForwardByItsBuilder, putForward, readReviewBy } from "../jobsV3.ts";
+import { isPutForwardByItsBuilder, putForward, readReviewBy, readReviewTimeOf } from "../jobsV3.ts";
+import { accountOf, approveWithAccount, conclude, doesTheLeadNameWhoIsPaid, readAccount, readConcluded, type NamedSeat } from "../jobsV4.ts";
 import type { MarketConfig } from "../market.ts";
 import { doorMessage, noteMessage } from "../messages.ts";
 import { requestValidation, type Registries } from "../registry.ts";
@@ -38,6 +39,8 @@ export class Identity {
   readonly registries?: Registries;
   /** whether a builder puts its own work forward on this contract, asked of it once */
   private builderNames?: Promise<boolean>;
+  /** whether the lead names who is paid on this contract, asked of it once */
+  private leadNames?: Promise<boolean>;
 
   /**
    * @param owner who is behind the agent, for the contract's one-owner-to-a-job rule. Most people
@@ -85,6 +88,14 @@ export class Identity {
     return { agent: this.address, role, ...(about === undefined ? {} : { about }), says, at, signature };
   }
 
+  /**
+   * The fingerprint of a note this agent signed, which is what it binds to its yes on the contract:
+   * of the very sentence it signed, so anybody holding the published note can make it again.
+   */
+  accountOf(job: JobRef, note: { readonly role: Role; readonly about?: string; readonly says: string; readonly at: number }): Hex {
+    return accountOf(noteMessage({ jobId: job.jobId, onChainId: String(job.onChainId), jobs: this.jobs, role: note.role, about: note.about, says: note.says, at: note.at }));
+  }
+
   private get contract(): { readonly address: Address; readonly publicClient: PublicClient; readonly wallet: WalletClient } {
     return { address: this.jobs, publicClient: this.publicClient, wallet: this.wallet };
   }
@@ -93,8 +104,49 @@ export class Identity {
     return takeSeat(this.contract, job.onChainId, role, this.ownerAddress);
   }
 
-  approve(job: JobRef, role: Role, commit: string): Promise<Hex> {
-    return approve(this.contract, job.onChainId, role, commitToBytes32(commit));
+  /**
+   * Stand behind a commit as the seat held. Where the lead names who is paid, the yes carries the
+   * fingerprint of the account this seat wrote, and a yes with none is not sent.
+   */
+  async approve(job: JobRef, role: Role, commit: string, account?: Hex): Promise<Hex> {
+    if (!(await this.doesTheLeadNameWhoIsPaid())) return approve(this.contract, job.onChainId, role, commitToBytes32(commit));
+    if (!account) throw new Error(`the ${role} seat has no account to bind to its yes, and this contract takes no yes without one`);
+    return approveWithAccount(this.contract, job.onChainId, role, commitToBytes32(commit), account);
+  }
+
+  /**
+   * Whether the lead names who is paid on this contract: a seat's yes then carries the fingerprint of
+   * its account, and the lead stands behind the work by concluding its review. Asked of the contract once.
+   */
+  doesTheLeadNameWhoIsPaid(): Promise<boolean> {
+    this.leadNames ??= doesTheLeadNameWhoIsPaid(this.contract);
+    return this.leadNames;
+  }
+
+  /** The lead concludes the review: it stands behind the commit, names the seats that earned their pay, and binds its reasons. */
+  conclude(job: JobRef, commit: string, seats: readonly NamedSeat[], account: Hex): Promise<Hex> {
+    return conclude(this.contract, job.onChainId, commitToBytes32(commit), seats, account);
+  }
+
+  /** The fingerprint a seat bound to its yes on the contract, or nothing where it bound none. */
+  accountBound(job: JobRef, role: Role, index: number): Promise<Hex | undefined> {
+    return readAccount(this.contract, job.onChainId, role, index);
+  }
+
+  /** Whether the lead has concluded the review of the commit put forward. */
+  isConcluded(job: JobRef): Promise<boolean> {
+    return readConcluded(this.contract, job.onChainId);
+  }
+
+  /**
+   * How much of the commit's review has gone, from 0 at the moment it was put forward to 1 when it
+   * runs out, by the chain's own clock; nothing while no commit is put forward.
+   */
+  async reviewGone(job: JobRef): Promise<number | undefined> {
+    const [until, lasts, now] = await Promise.all([readReviewBy(this.contract, job.onChainId), readReviewTimeOf(this.contract, job.onChainId), this.now()]);
+    if (until === undefined) return undefined;
+    if (lasts === 0n || now >= until) return 1;
+    return Math.max(0, 1 - Number(until - now) / Number(lasts));
   }
 
   readJob(job: JobRef): Promise<OnChainJob> {

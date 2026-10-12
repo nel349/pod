@@ -9,7 +9,7 @@
  * What it never holds: the exam. The hidden checks are counted, never shown; the pod sees them when
  * the job has a verdict, like everybody else.
  */
-import { isAddress, isAddressEqual, type Address } from "viem";
+import { isAddress, isAddressEqual, zeroHash, type Address } from "viem";
 import { z } from "zod";
 import { KINDS, MODE_NAMES, publicSpec } from "../job.ts";
 import { checkFilePath, gitPath, isSafeName, jobPath, notesPath, referencePath, ROUTES } from "../routes.ts";
@@ -117,7 +117,13 @@ export const LIST_FRESH_FOR_MS = 2_000;
 export class JobList {
   private kept?: { readonly at: number; readonly listing: Promise<JobListing> };
 
-  constructor(private readonly options: { readonly keeper: Doorkeeper; readonly store: JobStore; readonly records?: Records }) {}
+  /**
+   * @param leadComesFirst whether the contract jobs are posted to gives nobody the lead's seat once a
+   *                       builder has put work forward, so the list stops offering one
+   */
+  constructor(private readonly options: {
+    readonly keeper: Doorkeeper; readonly store: JobStore; readonly records?: Records; readonly leadComesFirst?: boolean;
+  }) {}
 
   async handle(): Promise<Response> {
     return Response.json(await this.fresh(), { headers: NO_STORE });
@@ -181,7 +187,10 @@ export class JobList {
         sealedChecks: spec.checks.length - shown.checks.length,
         seats,
         owners: [...new Set(held.map((seat) => seat.owner))],
-        free: isLocked ? [] : [...new Set(seats.filter((seat) => !seat.heldBy).map((seat) => seat.role))],
+        free: isLocked ? [] : [...new Set(seats.filter((seat) => !seat.heldBy).map((seat) => seat.role))]
+          // the lead judges the work, so where the contract has it sit down first, its seat goes the
+          // moment work is put forward. The contract is the one that refuses it, with LeadComesFirst
+          .filter((role) => !(role === "lead" && this.options.leadComesFirst && onChain.commit !== zeroHash)),
       });
     }
     return { version: JOB_LIST_VERSION, guide: ROUTES.guide, market: ROUTES.market, jobs: listed };

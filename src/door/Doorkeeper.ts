@@ -9,7 +9,7 @@
  * mandate was never handed the seat's key. Which keys a wallet granted is the chain's answer too,
  * read from the session key plugin.
  */
-import { isAddressEqual, type Address } from "viem";
+import { isAddressEqual, type Address, type Hex } from "viem";
 import type { HeldSeat, JobState } from "../jobs.ts";
 import type { Role } from "../job.ts";
 import { isWallName } from "../routes.ts";
@@ -48,6 +48,8 @@ export interface ChainJob {
   readonly state: JobState;
   /** how many reviewer seats it has; every other role has one */
   readonly reviewers: number;
+  /** the commit its builder has put forward, or 32 zero bytes while none is */
+  readonly commit: Hex;
 }
 
 /** A job the doors answer for: on the wall, and with its money on one of the contracts the doors read. */

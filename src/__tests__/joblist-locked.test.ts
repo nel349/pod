@@ -44,12 +44,14 @@ beforeAll(async () => {
 
 afterAll(() => running?.stop());
 
-async function listed(base: string): Promise<ListedJob> {
+async function listedIn(base: string, jobId: string): Promise<ListedJob> {
   const listing = JobListingSchema.parse(await (await fetch(base + ROUTES.jobList)).json());
-  const job = listing.jobs.find((one) => one.jobId === JOB);
-  if (!job) throw new Error(`${JOB} is not in the list`);
+  const job = listing.jobs.find((one) => one.jobId === jobId);
+  if (!job) throw new Error(`${jobId} is not in the list`);
   return job;
 }
+
+const listed = (base: string): Promise<ListedJob> => listedIn(base, JOB);
 
 describe.skipIf(!available)("the list of open jobs, once a job is locked for grading", () => {
   test("a builder alone puts its work forward, and the list offers no seat on the job, though four stand empty", async () => {
@@ -72,5 +74,51 @@ describe.skipIf(!available)("the list of open jobs, once a job is locked for gra
     const asALatecomer = { address: pod$.jobs, publicClient: pod$.anvil.publicClient, wallet: pod$.anvil.wallet(pod.qa.key) };
     expect(await seatDeposit(pod$.reading, pod$.onChainId, "qa")).toBeGreaterThan(0n);
     await expect(takeSeat(asALatecomer, pod$.onChainId, "qa", pod.qa.address)).rejects.toThrow("Locked");
+  }, 120_000);
+});
+
+/**
+ * Where the lead names who is paid, its seat is not to be had once work is put forward: a lead that
+ * sat down afterwards would be judging work it never watched being made, and could keep every seat
+ * behind it from its pay. The list stops offering that one seat, and goes on offering the others.
+ */
+describe.skipIf(!available)("the list of open jobs, where the lead names who is paid", () => {
+  const JOB_NAMED = "a-coat-whose-lead-comes-first";
+  const named = aPod();
+  let naming: RunningPodServer | undefined;
+
+  beforeAll(async () => {
+    naming = await aPodServer({
+      jobId: JOB_NAMED, spec: { ...SPEC, salt: "a-number-nobody-can-guess-for-a-lead-that-comes-first" },
+      files: { "check-1.mjs": good(0).check, "check-2.mjs": good(1).check },
+      fund: Object.values(named), lastWordWithin: 4n * HOUR, leadNames: true,
+    });
+  }, 120_000);
+
+  afterAll(() => naming?.stop());
+
+  test("once a builder has put work forward the list offers no lead's seat, the contract refuses one, and the other seats are still offered", async () => {
+    const pod$ = naming!;
+    const asTheBuilder = { address: pod$.jobs, publicClient: pod$.anvil.publicClient, wallet: pod$.anvil.wallet(named.builder.key) };
+    await takeSeat(asTheBuilder, pod$.onChainId, "builder", named.builder.address);
+    // a seat is taken and silent, so putting work forward does not lock the job: there is a review to sit in
+    const asQA = { address: pod$.jobs, publicClient: pod$.anvil.publicClient, wallet: pod$.anvil.wallet(named.qa.key) };
+    await takeSeat(asQA, pod$.onChainId, "qa", named.qa.address);
+    await Bun.sleep(LIST_FRESH_FOR_MS + 200);
+    const listing = (await listedIn(pod$.base, JOB_NAMED)).free;
+    expect(listing).toEqual(["lead", "reviewer", "security"]);
+
+    await putForward(asTheBuilder, pod$.onChainId, commitToBytes32(A_COMMIT));
+    expect(await isLocked(pod$.reading, pod$.onChainId), "a seat that is taken has its review").toBe(false);
+    await Bun.sleep(LIST_FRESH_FOR_MS + 200);
+
+    const job = await listedIn(pod$.base, JOB_NAMED);
+    expect(job.free).toEqual(["reviewer", "security"]);
+    // the lead's seat is shown as it is, empty, and the contract says the same to anybody who tries
+    expect(job.seats.find((seat) => seat.role === "lead")?.heldBy).toBeUndefined();
+    const asALateLead = { address: pod$.jobs, publicClient: pod$.anvil.publicClient, wallet: pod$.anvil.wallet(named.lead.key) };
+    await expect(takeSeat(asALateLead, pod$.onChainId, "lead", named.lead.address)).rejects.toThrow("LeadComesFirst");
+    // and a seat that is nobody's to judge from is still taken, as the list says
+    await takeSeat({ address: pod$.jobs, publicClient: pod$.anvil.publicClient, wallet: pod$.anvil.wallet(named.security.key) }, pod$.onChainId, "security", named.security.address);
   }, 120_000);
 });

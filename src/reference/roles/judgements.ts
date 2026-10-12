@@ -13,11 +13,12 @@ import { lstat, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { grade, type CheckToRun } from "../../blackbox.ts";
-import { PORT, startFor } from "../../job.ts";
+import { PORT, startFor, type Role } from "../../job.ts";
 import { readableToTheBox } from "../../sandbox.ts";
 import { verdictFrom, type Verdict } from "../protocol.ts";
-import { briefFor, settledFor, type Seated } from "../Seated.ts";
-import type { Judgement } from "./Judge.ts";
+import { briefFor, passwordFor, settledFor, type Seated } from "../Seated.ts";
+import { DUTIES, STANDARD } from "../../standard.ts";
+import type { Judgement, Waiting } from "./Judge.ts";
 
 /**
  * How much of the work is shown to the model: enough for a service or a website of a few dozen pages,
@@ -26,25 +27,94 @@ import type { Judgement } from "./Judge.ts";
 const MOST_SOURCE_SHOWN = 300_000;
 /** How long a judging seat waits for its model */
 const MODEL_MAY_TAKE_MS = 3 * 60_000;
+/** How much of what a reviewer says it will look at goes into its note */
+const LONGEST_LOOKING_AT = 600;
+/** What the security seat answers for, one by one, in the order its account gives them */
+export const DANGERS = [
+  "A visitor's wallet",
+  "Money and data sent elsewhere",
+  "What is loaded from elsewhere",
+  "Secrets left in the work",
+  "Who holds what was made outside the repository",
+] as const;
 /** How much of a check's own words go into QA's note */
 const LONGEST_CHECK_SAID = 200;
 
-export const reviewing: Judgement = async (seated, files) => askTheModel(seated, [
-  `You are the ${seated.role} on a small team, reading work somebody else wrote.`,
-  "Decide whether it does what was asked. Be strict: a thing that looks right but answers the",
+/** What every seat is held to, as each of ours is told it: the one standard, word for word, and what its own seat is for. */
+function heldTo(seated: Seated): readonly string[] {
+  return ["## What every seat here is held to", ...STANDARD.map((line) => `- ${line}`), "", `## What your seat is for`, DUTIES[seated.role]];
+}
+
+/** The seats whose accounts the reviewer reads beside the work */
+const READ_BY_THE_REVIEWER: readonly Role[] = ["lead", "qa", "security"];
+
+/** What the other seats have said of this candidate so far, newest of each, as the reviewer reads them. */
+async function theOtherAccounts(seated: Seated, candidate: string): Promise<readonly string[]> {
+  const notes = await seated.server.notes(seated.job, seated.identity.address, await passwordFor(seated));
+  return READ_BY_THE_REVIEWER.flatMap((role) => {
+    const latest = notes.filter((note) => note.about === candidate && note.role === role).at(-1);
+    return latest ? [`### The ${role} seat says`, latest.says] : [`### The ${role} seat has said nothing of this work yet`];
+  });
+}
+
+export const reviewing: Judgement = async (seated, files, candidate) => askTheModel(seated, [
+  `You are the ${seated.role} on a small team: the second pair of eyes on everything, the work and what the other seats say of it.`,
+  "Decide whether the work does what was asked. Be strict: a thing that looks right but answers the",
   "wrong question is a refusal. So is a thing that only looks as if it works: a button that does nothing",
   "real, a payment that pays nothing, a form that sends nothing anywhere, numbers written in by hand",
-  "where the person asked for real ones. Say what is pretended, so the builder can make it real or say",
-  "on the page that it is a mock-up.",
+  "where the person asked for real ones. A page that admits a part is a mock-up is still a refusal: say what",
+  "is pretended, so the builder makes it real.",
+  "Look at what this kind of work calls for: how the pages hold together on a website, the contract's own code",
+  "where there is one, the tests where the work has them.",
+  "Then read what the other seats say they did, and say where an account is thin, wrong, or claims what the work does not bear out.",
   "",
-  "Reply with one line: APPROVE followed by why, or REFUSE followed by what is wrong.",
+  "Reply with a first line, APPROVE followed by why or REFUSE followed by what is wrong, and under it your account:",
+  "what you read, and what you found fragile, faked or unfinished, in the work and in each other seat's account.",
+  "",
+  ...heldTo(seated),
   "",
   "## What was asked for",
   briefFor(seated.listed, seated.references, await settledFor(seated)),
   "",
+  "## What the other seats say they did",
+  ...(await theOtherAccounts(seated, candidate)),
+  "",
   "## What was shipped",
   await sourcesIn(files),
 ]);
+
+/** How much of a review the reviewer leaves QA and security to speak in before it reads without them */
+const THE_REVIEWER_WAITS = 0.25;
+
+/**
+ * The reviewer reads the other seats' accounts, so it leaves QA and security a while to write them:
+ * the first quarter of the review, and no longer, since the lead may conclude at half.
+ */
+export const waitingForTheOtherAccounts: Waiting = async (seated, candidate) => {
+  const gone = await seated.identity.reviewGone(seated.job);
+  if (gone === undefined || gone >= THE_REVIEWER_WAITS) return false;
+  const seats = await seated.identity.readSeats(seated.job);
+  const awaited = (["qa", "security"] as const).filter((role) => seats.some((seat) => seat.role === role));
+  if (awaited.length === 0) return false;
+  const notes = await seated.server.notes(seated.job, seated.identity.address, await passwordFor(seated));
+  return awaited.some((role) => !notes.some((note) => note.about === candidate && note.role === role));
+};
+
+/** What a reviewer will look at on one job, said by its model from what is asked: a few plain lines. */
+export async function whatTheReviewerLooksAt(seated: Seated): Promise<string> {
+  if (!seated.model) throw new Error("the reviewer seat needs a model to say what it will look at");
+  const answer = await seated.model([
+    "You are the reviewer on a small team that is about to build what is asked for below.",
+    "A reviewer looks at different things on different work: a contract's code and who can call what, how a website's pages",
+    "hold together and whether what they offer is real, a fix's tests. Say what you will look at on this job, in at most",
+    "four short plain sentences on one line, so the pod and the person who asked know before the work starts.",
+    "No list, no heading, no promises about the outcome.",
+    "",
+    "## What is being asked for",
+    briefFor(seated.listed, seated.references, await settledFor(seated)),
+  ].join("\n"), AbortSignal.timeout(MODEL_MAY_TAKE_MS));
+  return answer.trim().split("\n").map((line) => line.trim()).filter((line) => line !== "").join(" ").slice(0, LONGEST_LOOKING_AT);
+}
 
 /**
  * The lead's judgement, where the builder puts its own work forward and the lead no longer names what
@@ -59,11 +129,13 @@ export const holdingToTheBrief: Judgement = async (seated, files) => askTheModel
   "Then read what they said they want, in their own words at the top, and ask what they will expect when they open it.",
   "If their words name something real, such as minting, paying, a wallet, signing in or saving, and the work only",
   "pretends to do it, refuse and say what is pretended: they would open it, find a mock-up, and be right to refuse it.",
-  "Work that says plainly on the page that a part is a mock-up, where nothing they wrote could make it real (no contract",
-  "was named to mint on, no service to call), has told them the truth: approve it, and say in your reason what is a mock-up",
-  "and what they would need to name for it to be real. Your reason is read by the person before they decide.",
+  "Work that says on the page that a part is a mock-up is refused the same: a pod supplies what the work needs to be real,",
+  "and where nothing was named to do it with, it makes it. Your reason is read by the person before they decide.",
   "",
-  "Reply with one line: APPROVE followed by why, or REFUSE followed by the line that is not answered or what is pretended.",
+  "Reply with a first line, APPROVE followed by why or REFUSE followed by the line that is not answered or what is pretended,",
+  "and under it your account: each line they asked for, and where in the work it is answered.",
+  "",
+  ...heldTo(seated),
   "",
   "## What was asked for",
   briefFor(seated.listed, seated.references, await settledFor(seated)),
@@ -99,11 +171,15 @@ export const securityReading: Judgement = async (seated, files) => askTheModel(s
   "You are the security seat on a small team. You do not judge whether the work is good; somebody else does.",
   ...mustNot(seated),
   "",
-  "Your reason is read by the person who asked for the work before they decide, so make it useful to them: say in plain",
-  "words what the work asks of a visitor's wallet and what it sends anywhere, with the address or host it goes to, or that",
-  "it does neither.",
+  "What you write is read by the person who asked for the work before they decide, and it is their proof that nothing of",
+  "high risk is being handed to them. An opinion is not proof: name the file and what in it you looked at.",
   "",
-  "Reply with one line: APPROVE followed by why it is safe, or REFUSE followed by exactly what it does that it must not.",
+  "Reply with a first line, APPROVE followed by why it is safe or REFUSE followed by exactly what it does that it must not,",
+  "and under it one line for each of these, in this order, each saying what you looked at and what you found:",
+  ...DANGERS.map((danger) => `${danger}:`),
+  "Where there is nothing of a kind, say so and say where you looked. Never leave one out.",
+  "",
+  ...heldTo(seated),
   "",
   "## What was shipped",
   await sourcesIn(files),
@@ -128,17 +204,31 @@ export const qaRunning: Judgement = async (seated, files) => {
     });
     const failed = graded.checks.filter((check) => check.exitCode !== 0);
     if (graded.passed && failed.length === 0) {
-      return { approve: true, why: `every visible check passes: ${graded.checks.map((check) => check.says).join("; ")}` };
+      return { approve: true, why: `every visible check passes: ${graded.checks.map((check) => check.says).join("; ")}`, account: whatWasRun(graded.checks) };
     }
     return {
       approve: false,
       why: failed.map((check) => `"${check.says}" failed: ${whatItSaid(check.output) ?? `exit ${check.exitCode}`}`).join("; ")
         || "the work did not start",
+      account: whatWasRun(graded.checks),
     };
   } finally {
     await rm(checks, { recursive: true, force: true });
   }
 };
+
+/**
+ * QA's account: each check it ran against the work, started for real in a sealed box, and how each
+ * ended. It says what it did and no more: a check it could not see, and anything a check cannot do,
+ * such as pressing a button in a browser, it did not do, and says so.
+ */
+function whatWasRun(checks: readonly { readonly says: string; readonly exitCode: number; readonly output: string }[]): string {
+  return [
+    "Started the work in a sealed box and ran each check the poster's lines were given, from a second box:",
+    ...checks.map((check) => `- "${check.says}": ${check.exitCode === 0 ? "passed" : `failed, ${whatItSaid(check.output) ?? `exit ${check.exitCode}`}`}`),
+    "Not done by this seat: the checks sealed until the verdict, and anything a check does not do, such as opening the pages in a browser and pressing what they offer.",
+  ].join("\n");
+}
 
 /**
  * The line of a check's output that says what went wrong. Not simply the last line: when a check

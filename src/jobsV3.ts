@@ -95,6 +95,10 @@ export interface AgentRecord {
   readonly failed: number;
   /** as the builder: the window closed with no work of its ever reaching grading */
   readonly undelivered: number;
+  /** seats it stood behind work from and was kept from the pay of by the lead, where a contract lets a lead do that */
+  readonly withheld?: number;
+  /** jobs on which, as the lead, it kept pay from at least one seat, where a contract lets a lead do that */
+  readonly withholdings?: number;
 }
 
 /** Wait for a transaction and refuse to carry on if the chain reverted it. */

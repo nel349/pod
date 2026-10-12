@@ -8,6 +8,7 @@ import { DEPOSIT_PERCENT, SHARES, type Role } from "../job.ts";
 import {
   jobView, moneyAt, needsTheChainForMoney, receiptView, renderSite, seatsOfYours, tileView, unpublishedView, type AgentFactsView, type AgentRecordView, type SiteData, type SitePage,
 } from "../web/site/index.ts";
+import { freeSeatsOf } from "../web/site/pages/job/SendAnAgent.tsx";
 import { SEATS } from "../seal.ts";
 import { agentAnsweredWords, agentRecordWords, lengthOf, posterRecordWords, SITE, timeLeft, whenInUTC, whereTheDeliveryStands, whereTheReviewStands, whoStandsBehindIt } from "../web/site/copy.ts";
 import { CONNECTOR_INSTALL, MANDATE_STEPS, SKILL_INSTALL, WALLET_ADDRESS } from "../mandate.ts";
@@ -471,6 +472,45 @@ describe("a job delivered to a poster who has the last word", () => {
     expect(jobView(delivered({}, false, ["builder"]), [], {}).delivery?.keptOnRefusal).toBe("0");
     // once the poster has refused, what was kept is the chain's own word, whatever this would have worked out
     expect(jobView(answered("refused", true, "123"), [], {}).delivery?.keptOnRefusal).toBe("123");
+  });
+
+  test("while work is under review, no lead's seat is offered where the lead names who is paid, and every other free seat is", () => {
+    const underReview = record({
+      tile: tile({ verdict: "running", pod: [] }),
+      chain: { ...ON_CHAIN, leadNames: true },
+      review: { commit: signed.receipt.commit, reviewBy: "2026-10-01T13:00:00.000Z", behind: [], putForwardAt: "2026-10-01T11:00:00.000Z" },
+    });
+    const view = jobView(underReview, [], {});
+    expect(view.leadNames).toBe(true);
+    expect(view.seats.filter((seat) => !seat.agent).map((seat) => seat.role)).toEqual([...SEATS]);
+    // the seats a page offers an agent: every free one, the lead's apart, since the contract refuses that now
+    expect(freeSeatsOf(view.seats, view.leadNames === true && view.review !== undefined).map((seat) => seat.role))
+      .toEqual(SEATS.filter((role) => role !== "lead"));
+    // before work is put forward, and on a contract where every seat that says yes is paid, the lead's seat is offered
+    const notYetBuilt = jobView({ ...underReview, review: undefined }, [], {});
+    expect(freeSeatsOf(notYetBuilt.seats, notYetBuilt.leadNames === true && notYetBuilt.review !== undefined).map((seat) => seat.role)).toEqual([...SEATS]);
+    const onTheThird = jobView({ ...underReview, chain: { ...ON_CHAIN } }, [], {});
+    expect(onTheThird.leadNames).toBeUndefined();
+    expect(freeSeatsOf(onTheThird.seats, onTheThird.leadNames === true && onTheThird.review !== undefined).map((seat) => seat.role)).toEqual([...SEATS]);
+  });
+
+  test("a seat its lead kept from the pay stands behind the work and is paid nothing: the page says so, and counts its share as the poster's", () => {
+    // 20 coins, the whole pod behind it, and the lead named the reviewer and QA and not security: 4 + 8 + 3 + 3, and security's 2 goes back
+    const whole = delivered();
+    const named: JobRecord = { ...whole, approvals: whole.approvals.map((approval) => (approval.role === "security" ? { ...approval, isKeptFromPay: true } : approval)) };
+    const view = jobView(named, [], {});
+    expect(view.delivery?.behind).toEqual([...SEATS]);
+    expect(view.delivery?.keptFromPay).toEqual(["security"]);
+    expect(view.delivery?.paidOnAcceptance).toBe("18000000000000000000");
+    expect(view.delivery?.keptOnRefusal).toBe("4500000000000000000");
+    expect(view.seats.find((seat) => seat.role === "security")?.isKeptFromPay).toBe(true);
+    expect(view.seats.find((seat) => seat.role === "reviewer")?.isKeptFromPay).toBeUndefined();
+    expect(whoStandsBehindIt(view.delivery!)).toBe("Its builder put it forward, and the whole pod stands behind it. The lead read what each seat said it did and named who earned their pay. Security was not named, so its share goes back to whoever posted the job.");
+    expect(whoStandsBehindIt({ behind: [...SEATS], notBehind: [], keptFromPay: ["reviewer", "qa"] }))
+      .toContain("The reviewer and QA were not named, so their share goes back to whoever posted the job.");
+    // where nobody is kept from the pay, nothing is said of it, and every seat behind the work is paid
+    expect(jobView(whole, [], {}).delivery?.keptFromPay).toBeUndefined();
+    expect(jobView(whole, [], {}).delivery?.paidOnAcceptance).toBe("20000000000000000000");
   });
 
   test("what a refusal would leave the pod is a quarter when the checks passed, and nothing when they failed", () => {

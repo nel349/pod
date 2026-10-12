@@ -29,6 +29,7 @@ import { branchFor } from "../door/seat.ts";
 import { firstLine } from "../errors.ts";
 import { SITE_FOLDER, SITE_FRONT_PAGE, startFor } from "../job.ts";
 import { NotAWebsite, siteFilesIn, siteMadeFor, siteNameFor, type SiteHost } from "../hosting/index.ts";
+import { readAccount, readEarns } from "../jobsV4.ts";
 import { policyMet, readApprovals, readJob, readSeats, readSeatsTaken, settle, type Contract, type HeldSeat, type OnChainJob } from "../jobs.ts";
 import { closeJob, isLocked, releaseLock, settleV2, type VerdictOnChain } from "../jobsV2.ts";
 import { readAnswerBy, readHowItEnded, readReviewBy, readTheAnswersTransaction, readWhenPutForward, report, settleUnanswered } from "../jobsV3.ts";
@@ -135,8 +136,16 @@ export interface WorkerOptions {
    * what the checks found and settles nothing, until the poster's time to answer has run out.
    */
   readonly hasTheLastWord?: boolean;
+  /**
+   * Whether the lead names who is paid on the contract that prepares jobs: each seat behind the work
+   * then has an account bound on the contract, and may be kept from the pay, both of which are
+   * written beside the job when it is graded.
+   */
+  readonly leadNamesWhoIsPaid?: boolean;
   /** a contract that prepared jobs before that one: its jobs are finished, and still answered for in ERC-8004 */
   readonly second?: Contract;
+  /** the contract on which the poster had the last word before that one: finished too, and answered for the same way */
+  readonly third?: Contract;
   /** how long after a grading started a release may be sent: a full grading's time unless said */
   readonly releaseAfterMs?: number;
   /**
@@ -226,6 +235,7 @@ export class Worker {
         store: options.store, jobs: options.jobs, runner: this.runner,
         ...(options.prepared ? { prepared: options.prepared } : {}),
         ...(options.second ? { second: options.second } : {}),
+        ...(options.third ? { third: options.third } : {}),
         registries: options.registry.registries, stateFolder: options.registry.stateFolder,
         ...(options.site ? { site: options.site } : {}),
         onTheChain: (write) => this.onTheChain(write),
@@ -620,6 +630,14 @@ export class Worker {
           : found.find((approval) => approval.role === seat.role && isAddressEqual(approval.agent, seat.agent));
         return { role: seat.role, agent: seat.agent, commit, at: when ? isoOf(when.at) : `before ${isoOf(lookedBackTo)}` };
       });
+      const withTheLeadsWord = isPutForward && this.options.leadNamesWhoIsPaid
+        ? await Promise.all(approvals.map(async (approval) => {
+          // a role's seats are numbered in the order they were taken, which is the order the contract lists them in
+          const index = seats.filter((seat) => seat.role === approval.role).findIndex((seat) => isAddressEqual(seat.agent, approval.agent));
+          const [account, earns] = await Promise.all([readAccount(jobs, onChainId, approval.role, index), readEarns(jobs, onChainId, approval.role, index)]);
+          return { ...approval, ...(account ? { account } : {}), ...(earns ? {} : { isKeptFromPay: true }) };
+        }))
+        : approvals;
 
       // read before the verdict is published, which writes the record afresh from the receipt alone:
       // whatever is to stay with the job is what was beside it a moment before that
@@ -627,7 +645,7 @@ export class Worker {
       const published = await publish(store, {
         jobId: record.jobId, seal: record.seal, idea: spec.idea, mode: spec.mode, price: spec.price, report,
         pod: seats.map((seat) => ({ role: seat.role, agent: seat.agent, owner: seat.owner })),
-        checksDirectory: checks, approvals,
+        checksDirectory: checks, approvals: withTheLeadsWord,
         ...(fetchFrom.onGitHub ? { repository: fetchFrom.url } : record.repository ? { repository: record.repository } : {}),
         ...(record.podHolder ? { podHolder: record.podHolder } : {}),
       });
@@ -953,7 +971,7 @@ export class Worker {
     await store.save({
       ...opened, poster: setUp.poster,
       ...(opened.brief && setUp.references ? { brief: { ...opened.brief, references: setUp.references } } : {}),
-      chain: { network: "monad-testnet", jobId: onChainId, jobs: prepared.address, ...(this.options.hasTheLastWord ? { lastWord: true } : {}) },
+      chain: { network: "monad-testnet", jobId: onChainId, jobs: prepared.address, ...(this.options.hasTheLastWord ? { lastWord: true } : {}), ...(this.options.leadNamesWhoIsPaid ? { leadNames: true } : {}) },
     }, approved.files);
     await store.saveSpec(setUp.name, spec);
     this.say(`${setUp.name}: its poster approved its checks, so it is on the wall and open to a pod`);

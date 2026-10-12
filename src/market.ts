@@ -71,6 +71,12 @@ export const MarketConfigSchema = z.object({
     reviewSharePercent: z.number().int().min(1).max(99),
     /** a poster who leaves an address is told by mail when their job is delivered: only where a mail service is set up, so the page never promises a message nobody sends */
     tellsByMail: z.boolean().optional(),
+    /**
+     * Whether the lead names who is paid on this contract: a seat's yes then carries the fingerprint of
+     * its account, and the lead stands behind the work by concluding the review, naming the seats that
+     * earned their pay. Absent where every seat that said yes is paid.
+     */
+    leadNamesWhoIsPaid: z.boolean().optional(),
   }).optional(),
 });
 

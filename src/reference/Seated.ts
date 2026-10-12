@@ -1,7 +1,7 @@
 /**
  * What a reference agent has once it holds a seat, and the few things every seat reads the same way.
  */
-import { zeroHash } from "viem";
+import { zeroHash, type Hex } from "viem";
 import type { Model } from "../broker.ts";
 import { plainDashes } from "../checkwriting/fromTheBox.ts";
 import type { ListedJob } from "../door/index.ts";
@@ -34,6 +34,11 @@ export interface Seated {
    * lead by bringing it into its branch: the contract's rule, read from it when the seat was taken
    */
   readonly builderNames: boolean;
+  /**
+   * Whether the lead names who is paid here: each seat then binds its account to its yes, and the lead
+   * stands behind the work by concluding its review. The contract's rule, read from it when the seat was taken
+   */
+  readonly leadNames: boolean;
   /** how long a builder on a job long enough for questions leaves its lead to ask the poster before it builds; left out, the usual */
   readonly askingGraceSeconds?: number;
   /** how long a lead leaves the other seats to raise their questions before it puts the pod's list to the poster; left out, the usual */
@@ -111,9 +116,12 @@ export function passwordFor(seated: Seated): Promise<string> {
 /**
  * The seat's notes to its pod, signed and sent. Much of what they say is the model's words, and notes
  * are published with the job, so the dashes a model likes are taken out as they are for the checks.
+ * Comes back with the note's fingerprint, which is what a seat binds to its yes where a contract takes one.
  */
-export async function tellThePod(seated: Seated, says: string, about?: string): Promise<void> {
-  await seated.server.writeNote(seated.job, await seated.identity.note(seated.job, seated.role, plainDashes(says), about));
+export async function tellThePod(seated: Seated, says: string, about?: string): Promise<Hex> {
+  const note = await seated.identity.note(seated.job, seated.role, plainDashes(says), about);
+  await seated.server.writeNote(seated.job, note);
+  return seated.identity.accountOf(seated.job, note);
 }
 
 /** The brief as the model reads it: the idea, what the visible checks ask, and where the work may reach. */

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { LONGEST_NOTE } from "../note.ts";
 import { verdictFrom } from "../reference/index.ts";
+import { noteOf } from "../reference/protocol.ts";
 import { whatItSaid } from "../reference/roles/judgements.ts";
 import { briefFor } from "../reference/Seated.ts";
 import type { ListedJob } from "../door/index.ts";
@@ -12,8 +14,19 @@ describe("a model's verdict", () => {
   test("APPROVE and REFUSE are read with their reasons, whatever the model put between", () => {
     expect(verdictFrom("APPROVE: it answers the question")).toEqual({ approve: true, why: "it answers the question" });
     expect(verdictFrom("Approve — it answers the question")).toEqual({ approve: true, why: "it answers the question" });
-    expect(verdictFrom("REFUSE - it never says take a coat\nand more")).toEqual({ approve: false, why: "it never says take a coat" });
+    expect(verdictFrom("REFUSE - it never says take a coat").why).toBe("it never says take a coat");
     expect(verdictFrom("REFUSE")).toEqual({ approve: false, why: "it does not do what was asked" });
+  });
+
+  test("what follows the first line is the seat's account, kept with its verdict and written under it in its note", () => {
+    const verdict = verdictFrom("APPROVE it is a page of cards\n\nRead site/index.html.\nOne card, with a mint button.\n");
+    expect(verdict).toEqual({ approve: true, why: "it is a page of cards", account: "Read site/index.html.\nOne card, with a mint button." });
+    expect(noteOf(verdict)).toBe("Approved: it is a page of cards\nRead site/index.html.\nOne card, with a mint button.");
+    // a verdict of one line has no account, and its note is that line
+    expect(verdictFrom("REFUSE it mints nothing").account).toBeUndefined();
+    expect(noteOf(verdictFrom("REFUSE it mints nothing"))).toBe("Refused: it mints nothing");
+    // an account longer than a note can hold is cut, never refused by the door
+    expect(noteOf(verdictFrom(`APPROVE fine\n${"x".repeat(LONGEST_NOTE * 2)}`)).length).toBeLessThanOrEqual(LONGEST_NOTE);
   });
 
   test("anything but a clear yes is a refusal", () => {

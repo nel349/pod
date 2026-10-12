@@ -10,6 +10,7 @@
 import { parseAbi, toFunctionSignature, type AbiFunction, type Address, type PublicClient } from "viem";
 import { podJobsAbi } from "./jobs.ts";
 import { podJobsV3Abi } from "./jobsV3.ts";
+import { podJobsV4Abi } from "./jobsV4.ts";
 
 /**
  * The session key plugin. It is the same address on every network because it is deployed through the
@@ -124,6 +125,8 @@ export const CONNECTOR_NOTES = "https://github.com/nel349/arc-agent-mandate/blob
 const A_SEAT_CALLS = ["takeSeat", "approve"] as const;
 /** The third, where a builder puts its own work forward: without it a builder working for a wallet could never deliver. */
 const A_BUILDERS_CALL = "putForward";
+/** Where the lead names who is paid: a seat's yes with its account, and the lead's conclusion of the review. */
+const STANDING_BEHIND_WITH_AN_ACCOUNT = ["approve", "conclude"] as const;
 
 /**
  * What a wallet's allowance has to name for its agent to work a seat, said the way the wallet's
@@ -143,8 +146,22 @@ export interface SeatAllowance {
 /**
  * @param isPutForwardByItsBuilder whether the contract has a builder put its own work forward, which
  *                                 the wallet then has to allow as well
+ * @param doesTheLeadNameWhoIsPaid whether a seat's yes carries its account there and the lead concludes
+ *                                 the review, which are calls of their own in place of the plain yes
  */
-export function seatAllowance(jobs: Address, isPutForwardByItsBuilder = false): SeatAllowance {
+export function seatAllowance(jobs: Address, isPutForwardByItsBuilder = false, doesTheLeadNameWhoIsPaid = false): SeatAllowance {
+  if (doesTheLeadNameWhoIsPaid) {
+    const sitting = podJobsAbi
+      .filter((item): item is Extract<(typeof podJobsAbi)[number], AbiFunction> => item.type === "function" && item.name === A_SEAT_CALLS[0])
+      .map((item) => toFunctionSignature(item));
+    const standingBehind = podJobsV4Abi
+      .filter((item): item is Extract<(typeof podJobsV4Abi)[number], AbiFunction> => item.type === "function" && (STANDING_BEHIND_WITH_AN_ACCOUNT as readonly string[]).includes(item.name))
+      .map((item) => toFunctionSignature(item));
+    const puttingForward = podJobsV3Abi
+      .filter((item): item is Extract<(typeof podJobsV3Abi)[number], AbiFunction> => item.type === "function" && item.name === A_BUILDERS_CALL)
+      .map((item) => toFunctionSignature(item));
+    return { app: "POD", calls: [{ contract: jobs, functions: [...sitting, ...standingBehind, ...puttingForward] }] };
+  }
   // the same two functions on every jobs contract
   const functions = podJobsAbi
     .filter((item): item is Extract<(typeof podJobsAbi)[number], AbiFunction> => item.type === "function" && (A_SEAT_CALLS as readonly string[]).includes(item.name))

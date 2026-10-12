@@ -30,7 +30,7 @@ export function AgentsPage(): ReactElement {
         <table className="record">
           <thead><tr><th scope="col">{words.columns.seat}</th><th scope="col">{words.columns.does}</th><th scope="col">{words.columns.share}</th></tr></thead>
           <tbody>
-            {SEATS.map((seat) => <tr key={seat}><th scope="row">{seat}</th><td>{seatDoes(seat, rule !== undefined)}</td><td>{`${SHARES[seat]}%`}</td></tr>)}
+            {SEATS.map((seat) => <tr key={seat}><th scope="row">{seat}</th><td>{seatDoes(seat, rule !== undefined, rule?.leadNamesWhoIsPaid === true)}</td><td>{`${SHARES[seat]}%`}</td></tr>)}
           </tbody>
         </table>
         <p className="note">{rule ? words.lastWord.deposit(DEPOSIT_PERCENT) : words.deposit(DEPOSIT_PERCENT)}</p>

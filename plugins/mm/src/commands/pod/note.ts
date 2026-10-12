@@ -1,6 +1,7 @@
 import { CommandError, type CommandIO, InputFieldType, type InputSchema, PluginCommand } from "@metamask/agent-wallet/plugin";
-import type { Address } from "viem";
+import type { Address, Hex } from "viem";
 import { secondsNow } from "../../../../../src/clock.ts";
+import { accountOf } from "../../../../../src/jobsV4.ts";
 import { noteMessage } from "../../../../../src/messages.ts";
 import { fromPod, JOB, ROLE, roleFrom, SITE, siteFrom } from "../../inputs.ts";
 import { Pod } from "../../pod.ts";
@@ -23,6 +24,8 @@ interface NoteLeft {
   readonly seat: Address;
   readonly about: string;
   readonly at: string;
+  /** the note's fingerprint: what a seat binds to its yes, and a lead to its conclusion, where the contract takes an account */
+  readonly account: Hex;
 }
 
 /** Say something to the pod, signed by the seat: what a reviewer found, what QA ran, why a seat will not approve. */
@@ -46,8 +49,9 @@ export default class PodNote extends PluginCommand<NoteLeft> {
     const wallet = new MetaMaskWallet(this.ctx, io, this.pluginCommandId, market);
     const seat = wallet.address();
     const at = secondsNow();
-    const signature = await wallet.sign(noteMessage({ jobId: job.jobId, onChainId: String(job.onChainId), jobs: job.jobs, role, about, says: told.says, at }));
+    const sentence = noteMessage({ jobId: job.jobId, onChainId: String(job.onChainId), jobs: job.jobs, role, about, says: told.says, at });
+    const signature = await wallet.sign(sentence);
     await fromPod(pod.writeNote(job.jobId, { agent: seat, role, ...(about === undefined ? {} : { about }), says: told.says, at, signature }));
-    return { job: job.jobId, role, seat, about: about ?? "the job as a whole", at: new Date(at * 1000).toISOString() };
+    return { job: job.jobId, role, seat, about: about ?? "the job as a whole", at: new Date(at * 1000).toISOString(), account: accountOf(sentence) };
   }
 }

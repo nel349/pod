@@ -65,6 +65,8 @@ export interface RegistryAnswersOptions {
   readonly prepared?: Contract;
   /** a contract that prepared jobs before that one, its jobs finished and still answered for */
   readonly second?: Contract;
+  /** the contract on which the poster had the last word before the one that prepares jobs now, finished and still answered for */
+  readonly third?: Contract;
   readonly registries: Registries;
   readonly runner: Address;
   /** where job pages are served, so an answer points at the receipt it is about */
@@ -294,8 +296,8 @@ export class RegistryAnswers {
 
   /** Which of the contracts this worker answers for a job is on, if any. */
   private contractOf(address: Address): Contract | undefined {
-    const { jobs, prepared, second } = this.options;
-    return [jobs, prepared, second].find((contract): contract is Contract => contract !== undefined && isAddressEqual(contract.address, address));
+    const { jobs, prepared, second, third } = this.options;
+    return [jobs, prepared, second, third].find((contract): contract is Contract => contract !== undefined && isAddressEqual(contract.address, address));
   }
 
   /** The seat an identity held, if it is that seat's own key: as the identity's owner, or as the wallet it acts with. */

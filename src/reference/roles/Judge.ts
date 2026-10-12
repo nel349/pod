@@ -1,6 +1,8 @@
 /**
  * A seat that judges the candidate: the reviewer, QA and security, and the lead where the builder
- * puts its own work forward.
+ * puts its own work forward and every seat that says yes is paid. Where the lead names who is paid,
+ * the lead concludes the review instead (see Concluding.ts), and each of these binds to its yes the
+ * fingerprint of the note it wrote, which is its account of what it did.
  *
  * Each looks at every candidate named, once, and either approves it on the contract or refuses it in
  * a note that says why, which is what the builder answers. How it judges is the seat's own (see
@@ -19,19 +21,25 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { APPROVED, REFUSED, type Verdict } from "../protocol.ts";
-import { isAddressEqual } from "viem";
+import { noteOf, type Verdict } from "../protocol.ts";
+import { isAddressEqual, type Hex } from "viem";
 import { candidateBranchOf, candidateOf, tellThePod, type Seated, type SeatWork } from "../Seated.ts";
 import { shortCommit } from "../../repo.ts";
 
 /** How one seat judges a candidate, given its files laid out in a folder of their own. */
-export type Judgement = (seated: Seated, files: string) => Promise<Verdict>;
+export type Judgement = (seated: Seated, files: string, candidate: string) => Promise<Verdict>;
+
+/**
+ * Whether a seat should wait before judging a candidate, for something it reads first: the reviewer,
+ * which reads the other seats' accounts, waits a while for them. Left out, a seat judges at once.
+ */
+export type Waiting = (seated: Seated, candidate: string) => Promise<boolean>;
 
 export class Judge implements SeatWork {
   /** what this seat made of each candidate, so a turn that failed half way does not ask the model again */
   private readonly verdicts = new Map<string, Verdict>();
-  /** candidates whose note is sent */
-  private readonly told = new Set<string>();
+  /** candidates whose note is sent, each with the note's fingerprint, which is bound to the yes where a contract takes one */
+  private readonly told = new Map<string, Hex>();
   /** candidates this seat refused, which it does not look at again */
   private readonly refused = new Set<string>();
   /**
@@ -46,7 +54,7 @@ export class Judge implements SeatWork {
    */
   private readonly saidTooLate = new Set<string>();
 
-  constructor(private readonly seated: Seated, private readonly judgement: Judgement) {}
+  constructor(private readonly seated: Seated, private readonly judgement: Judgement, private readonly waiting?: Waiting) {}
 
   async step(): Promise<void> {
     const { seated } = this;
@@ -54,16 +62,14 @@ export class Judge implements SeatWork {
     if (!candidate || this.refused.has(candidate)) return;
     if (this.approved.has(candidate) && (await this.myApprovalStands())) return;
     if (await this.isItsReviewOver(candidate)) return;
+    if (!this.verdicts.has(candidate) && this.waiting && (await this.waiting(seated, candidate))) return;
     const verdict = this.verdicts.get(candidate) ?? await this.judge(candidate);
     if (!verdict) return;
     this.verdicts.set(candidate, verdict);
 
     // the note goes first, while the job is certainly still open: the approval can be the one that
     // completes the policy, and a job the grader settles a moment later takes no more notes
-    if (!this.told.has(candidate)) {
-      await tellThePod(seated, `${verdict.approve ? APPROVED : REFUSED}${verdict.why}`, candidate);
-      this.told.add(candidate);
-    }
+    if (!this.told.has(candidate)) this.told.set(candidate, await tellThePod(seated, noteOf(verdict), candidate));
     if (!verdict.approve) {
       this.refused.add(candidate);
       seated.say(`refused ${shortCommit(candidate)}: ${verdict.why}`);
@@ -76,7 +82,7 @@ export class Judge implements SeatWork {
     // judging takes a while, and the review may have run out during it: the contract would refuse the approval
     if (await this.isItsReviewOver(candidate)) return;
     // counted done only once the chain has it: a transaction that failed is sent again on the next look
-    await seated.identity.approve(seated.job, seated.role, candidate);
+    await seated.identity.approve(seated.job, seated.role, candidate, this.told.get(candidate));
     seated.say(`${this.approved.has(candidate) ? "approved again, once its approval was cleared," : "approved"} ${shortCommit(candidate)}: ${verdict.why}`);
     this.approved.add(candidate);
   }
@@ -95,10 +101,13 @@ export class Judge implements SeatWork {
    */
   private async isItsReviewOver(candidate: string): Promise<boolean> {
     const { seated } = this;
-    if (!seated.builderNames || !(await seated.identity.isReviewOver(seated.job))) return false;
+    if (!seated.builderNames) return false;
+    // where the lead names who is paid, its conclusion ends the review as surely as the clock does
+    const isConcluded = seated.leadNames && (await seated.identity.isConcluded(seated.job));
+    if (!isConcluded && !(await seated.identity.isReviewOver(seated.job))) return false;
     // read again: the builder may have put something newer forward, whose review has only begun
     if ((await candidateOf(seated)) !== candidate) return true;
-    if (!this.saidTooLate.has(candidate)) seated.say(`the review of ${shortCommit(candidate)} ran out before this seat had judged it, so it does not stand behind it and is not paid for it`);
+    if (!this.saidTooLate.has(candidate)) seated.say(`the review of ${shortCommit(candidate)} ${isConcluded ? "was concluded by the lead" : "ran out"} before this seat had judged it, so it does not stand behind it and is not paid for it`);
     this.saidTooLate.add(candidate);
     return true;
   }
@@ -111,7 +120,7 @@ export class Judge implements SeatWork {
     const files = await mkdtemp(join(tmpdir(), `pod-${seated.role}-`));
     try {
       await seated.copy.layOut(candidate, files);
-      return await this.judgement(seated, files);
+      return await this.judgement(seated, files, candidate);
     } finally {
       await rm(files, { recursive: true, force: true });
     }

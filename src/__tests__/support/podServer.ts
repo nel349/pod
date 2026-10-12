@@ -118,6 +118,8 @@ export async function aPodServer(input: {
    * deployed beside it as the earlier one.
    */
   readonly lastWordWithin?: bigint;
+  /** With `lastWordWithin`: post on the contract on which the lead names who is paid, in place of the one that pays every seat that said yes. */
+  readonly leadNames?: boolean;
   /** what the wallets granted, for a seat worked under a mandate; without it only a seat's own key is let in */
   readonly grants?: Grants;
 }): Promise<RunningPodServer> {
@@ -126,7 +128,7 @@ export async function aPodServer(input: {
   const earlierJobs = await anvil.deploy("PodJobs", [validator]);
   const isPrepared = input.prepared === true || input.lastWordWithin !== undefined;
   const jobs = input.lastWordWithin !== undefined
-    ? await anvil.deploy("PodJobsV3", [validator, privateKeyToAccount(WRITER).address, 1n, WRITING_PRICE, PAYOUT_GAS, input.lastWordWithin])
+    ? await anvil.deploy(input.leadNames ? "PodJobsV4" : "PodJobsV3", [validator, privateKeyToAccount(WRITER).address, 1n, WRITING_PRICE, PAYOUT_GAS, input.lastWordWithin])
     : input.prepared
       ? await anvil.deploy("PodJobsV2", [validator, privateKeyToAccount(WRITER).address, 1n, WRITING_PRICE, PAYOUT_GAS])
       : earlierJobs;
@@ -147,7 +149,7 @@ export async function aPodServer(input: {
   // as the worker leaves a job it puts on the wall: on a contract where the poster has the last word, it says so, and who they are
   await store.save({
     ...opened,
-    chain: { network: "monad-testnet", jobId: String(onChainId), jobs, ...(input.lastWordWithin !== undefined ? { lastWord: true as const } : {}) },
+    chain: { network: "monad-testnet", jobId: String(onChainId), jobs, ...(input.lastWordWithin !== undefined ? { lastWord: true as const } : {}), ...(input.leadNames ? { leadNames: true as const } : {}) },
     ...(input.lastWordWithin !== undefined ? { poster: privateKeyToAccount(POSTER).address } : {}),
   }, input.files);
   await store.saveSpec(input.jobId, input.spec);
@@ -166,7 +168,7 @@ export async function aPodServer(input: {
     door: new GitDoor({ repositories, keeper, credit }),
     notes: new NoteBoard({ keeper, store }),
     questions: new QuestionBoard({ keeper, store }),
-    jobList: new JobList({ keeper, store }),
+    jobList: new JobList({ keeper, store, ...(input.leadNames ? { leadComesFirst: true } : {}) }),
     credit: new CreditDoor({ book: credit }),
   });
 

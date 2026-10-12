@@ -123,7 +123,7 @@ export function StandsSheet({ job, lostTouch }: { readonly job: JobView; readonl
   const { market } = useSite();
   const isRunning = job.verdict === "running";
   const seatsTaken = job.seats.filter((seat) => seat.agent).length;
-  const free = freeSeatsOf(job.seats);
+  const free = freeSeatsOf(job.seats, job.leadNames === true && job.review !== undefined);
   const { delivery, chain, poster } = job;
   const isAwaited = delivery?.answer === "awaited";
   // a review that has run out waits for nobody: the work is graded with whoever stands behind it

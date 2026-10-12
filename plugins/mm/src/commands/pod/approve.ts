@@ -2,9 +2,11 @@ import { CommandError, type CommandIO, InputFieldType, type InputSchema, PluginC
 import { encodeFunctionData, zeroHash, type Address, type Hex } from "viem";
 import { podJobsAbi, readJob, roleNumber } from "../../../../../src/jobs.ts";
 import { isPutForwardByItsBuilder } from "../../../../../src/jobsV3.ts";
+import { doesTheLeadNameWhoIsPaid, podJobsV4Abi } from "../../../../../src/jobsV4.ts";
 import { bytes32ToCommit, commitToBytes32 } from "../../../../../src/repo.ts";
 import { commitToApprove } from "../../candidate.ts";
 import { fromPod, JOB, ROLE, roleFrom, SITE, siteFrom } from "../../inputs.ts";
+import { AN_ACCOUNT } from "../../named.ts";
 import { Pod } from "../../pod.ts";
 import { whyTheContractRefused } from "../../refusal.ts";
 import { MetaMaskWallet } from "../../wallet.ts";
@@ -13,6 +15,7 @@ const inputs = {
   job: JOB,
   role: ROLE,
   commit: { type: InputFieldType.Text, flag: "commit", required: false, prompt: false, message: "The full commit id, to be sure which one is approved. A seat approves the pod's candidate, which the builder puts forward" },
+  account: { type: InputFieldType.Text, flag: "account", required: false, prompt: false, message: "The fingerprint of the note this seat wrote about the commit, as `mm pod note` gives it. Needed where the lead names who is paid" },
   site: SITE,
 } satisfies InputSchema;
 
@@ -51,19 +54,29 @@ export default class PodApprove extends PluginCommand<Approved> {
     const seat = wallet.address();
     const contract = { address: job.jobs, publicClient: wallet.reads };
     // read just before approving: the candidate is whatever the chain holds now
-    const [{ commit: held }, builderNames] = await Promise.all([readJob(contract, job.onChainId), isPutForwardByItsBuilder(contract)]);
+    const [{ commit: held }, builderNames, leadNames] = await Promise.all([readJob(contract, job.onChainId), isPutForwardByItsBuilder(contract), doesTheLeadNameWhoIsPaid(contract)]);
+    if (leadNames && role === "lead") {
+      throw new CommandError("LEADS_CONCLUDE", "On this job the lead does not approve: it concludes the review, which is its yes and names who is paid.", "Use `mm pod conclude --job <name> --earned <seats> --account <fingerprint>`.");
+    }
+    const account = told.account?.trim().toLowerCase();
+    if (leadNames && (!account || !AN_ACCOUNT.test(account))) {
+      throw new CommandError("NO_ACCOUNT", "On this job a yes carries the account the seat wrote of what it did, and none was given.", "Write the account with `mm pod note --about <commit>`, and pass the fingerprint it gives as --account.");
+    }
     const toApprove = commitToApprove(role, told.commit, held === zeroHash ? undefined : bytes32ToCommit(held), builderNames);
     if (!toApprove.ok) throw new CommandError(toApprove.code, toApprove.why, toApprove.hint);
     const { commit } = toApprove;
 
-    const approving = { address: contract.address, abi: podJobsAbi, functionName: "approve", args: [job.onChainId, roleNumber(role), commitToBytes32(commit)] } as const;
+    // one yes, written as the job's contract takes it: with the account bound to it where the lead names who is paid
+    const args = [job.onChainId, roleNumber(role), commitToBytes32(commit)] as const;
+    const withAccount = leadNames && account ? { address: contract.address, abi: podJobsV4Abi, functionName: "approve", args: [...args, account as Hex] } as const : undefined;
+    const plain = { address: contract.address, abi: podJobsAbi, functionName: "approve", args } as const;
     try {
-      await wallet.reads.simulateContract({ ...approving, account: seat });
+      await (withAccount ? wallet.reads.simulateContract({ ...withAccount, account: seat }) : wallet.reads.simulateContract({ ...plain, account: seat }));
     } catch (error) {
       throw new CommandError("APPROVAL_REFUSED", `The contract would refuse this approval: ${whyTheContractRefused(error)}.`, `Only the address that holds the ${role} seat may approve as it, while the job is open and the candidate's review still runs.`);
     }
     io.progress?.(`Asking MetaMask to approve ${commit} as the ${role} seat on "${job.jobId}".`);
-    const transaction = await wallet.send({ to: contract.address, data: encodeFunctionData(approving) });
+    const transaction = await wallet.send({ to: contract.address, data: withAccount ? encodeFunctionData(withAccount) : encodeFunctionData(plain) });
     return { job: job.jobId, role, seat, commit, transaction };
   }
 }

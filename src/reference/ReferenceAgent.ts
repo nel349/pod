@@ -19,9 +19,11 @@ import { Identity, type JobRef } from "./Identity.ts";
 import { PodServer } from "./PodServer.ts";
 import { Asking } from "./roles/Asking.ts";
 import { Builder } from "./roles/Builder.ts";
+import { Concluding } from "./roles/Concluding.ts";
 import { Judge } from "./roles/Judge.ts";
 import { Lead } from "./roles/Lead.ts";
-import { holdingToTheBrief, qaRunning, reviewing, securityReading } from "./roles/judgements.ts";
+import { SayingWhatItLooksAt } from "./roles/SayingWhatItLooksAt.ts";
+import { holdingToTheBrief, qaRunning, reviewing, securityReading, waitingForTheOtherAccounts } from "./roles/judgements.ts";
 import type { Seated, SeatWork } from "./Seated.ts";
 import { WorkingCopy } from "./WorkingCopy.ts";
 
@@ -74,6 +76,7 @@ export async function runReferenceAgent(options: ReferenceAgentOptions): Promise
   const server = new PodServer(options.server);
   const identity = new Identity(options.key, await server.market(), options.owner);
   const builderNames = await identity.buildersPutTheirWorkForward();
+  const leadNames = await identity.doesTheLeadNameWhoIsPaid();
   // where the builder puts its own work forward the lead judges it like any other seat, and thinks to
   if (options.role === "lead" && builderNames && !options.model) throw new Error("the lead seat needs a model on a server where the builder puts its own work forward");
   // a server with no credit door credits nobody, and says so with a 404
@@ -94,7 +97,7 @@ export async function runReferenceAgent(options: ReferenceAgentOptions): Promise
   );
   const seated: Seated = {
     job, role: options.role, listed: taken, references: await server.references(taken), identity, server, copy,
-    model: options.model, image: options.image ?? IMAGE, builderNames, say,
+    model: options.model, image: options.image ?? IMAGE, builderNames, leadNames, say,
     ...(options.askingGraceSeconds === undefined ? {} : { askingGraceSeconds: options.askingGraceSeconds }),
     ...(options.gatheringSeconds === undefined ? {} : { gatheringSeconds: options.gatheringSeconds }),
   };
@@ -127,9 +130,13 @@ function workFor(seated: Seated): SeatWork {
 
 function ownWorkFor(seated: Seated): SeatWork {
   switch (seated.role) {
-    case "lead": return seated.builderNames ? new Judge(seated, holdingToTheBrief) : new Lead(seated);
+    case "lead":
+      if (seated.leadNames) return new Concluding(seated, holdingToTheBrief);
+      return seated.builderNames ? new Judge(seated, holdingToTheBrief) : new Lead(seated);
     case "builder": return new Builder(seated);
-    case "reviewer": return new Judge(seated, reviewing);
+    case "reviewer":
+      // where accounts are bound and weighed, the reviewer says what it will look at and reads the other seats' first
+      return seated.leadNames ? new SayingWhatItLooksAt(seated, new Judge(seated, reviewing, waitingForTheOtherAccounts)) : new Judge(seated, reviewing);
     case "qa": return new Judge(seated, qaRunning);
     case "security": return new Judge(seated, securityReading);
   }
