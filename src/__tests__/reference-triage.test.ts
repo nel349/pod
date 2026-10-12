@@ -120,6 +120,8 @@ describe.skipIf(!available)("a week's job, where the pod asks before it builds",
     const lead = seated("lead");
     await until("the lead putting the list to the poster", said, async () => (await questions()).length === 2);
     expect(leadGathered[0]).toContain(`- builder: ${BUILDER_ASKS} (it would assume: ${BUILDER_ASSUMES})`);
+    // a seat is told what can be built before it asks: a website here has no program behind it
+    expect(leadGathered[0]).toContain("a website of plain files, served as they are with no program behind them");
     expect(said).toContain("[lead] put 2 questions to the poster for the pod, before the work starts");
     const asked = await questions();
     expect(asked.map((one) => [one.role, one.asks])).toEqual([["lead", ASKS], ["lead", BUILDER_ASKS]]);

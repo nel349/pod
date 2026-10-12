@@ -14,7 +14,7 @@
 import { isAddress, isAddressEqual } from "viem";
 import { z } from "zod";
 import { secondsNow } from "../../clock.ts";
-import type { Role } from "../../job.ts";
+import type { Kind, Role } from "../../job.ts";
 import { ASKS_THE_POSTER, hasTriage, MOST_QUESTIONS_A_ROUND, MOST_RAISED_A_ROUND, NOTHING_TO_ASK, raisedIn, roundAt } from "../../triage.ts";
 import { askThePoster, briefFor, GATHERING_SECONDS, passwordFor, raiseWithTheLead, tellThePod, type Seated, type SeatWork } from "../Seated.ts";
 
@@ -53,6 +53,17 @@ export function questionsIn(answer: string, most: number = MOST_QUESTIONS_A_ROUN
   }
 }
 
+/**
+ * What a seat has to know about what can be built before it asks or assumes anything: a website here
+ * is files and nothing else. Without it, a seat assumes a server that keeps orders, which no builder
+ * here can build, and the poster is asked to choose between things that cannot exist.
+ */
+function whatCanBeBuilt(kind: Kind | undefined): readonly string[] {
+  return kind === "site"
+    ? ["What gets built is a website of plain files, served as they are with no program behind them: by itself it cannot save anything, send anything or remember a visitor. Anything it does, it does in the visitor's browser. Ask and assume only what such a site can do, and where the person seems to expect more, ask them how they want it handled within that."]
+    : [];
+}
+
 const HOW_TO_REPLY = 'Reply with a JSON list and nothing else, each item {"asks": "...", "assumes": "..."}, or [] to ask nothing.';
 const WHAT_IS_WORTH_ASKING = "A question is worth asking only where their words leave open something that changes what gets built. Not taste, not wording, not anything a careful builder can decide and say on the work. If what they wrote is enough to build from, ask nothing.";
 
@@ -88,6 +99,7 @@ export class Asking implements SeatWork {
       `Read what they asked for, and say what your lead should ask them for you. ${WHAT_IS_WORTH_ASKING}`,
       `Your seat asks about ${ASKS_ABOUT[seated.role]}. Leave the rest to the other seats.`,
       `Raise at most ${MOST_RAISED_A_ROUND} questions. For each, say what you will assume if they do not answer: the smallest honest reading of their words.`,
+      ...whatCanBeBuilt(seated.listed.kind),
       "",
       HOW_TO_REPLY,
       "",
@@ -117,6 +129,7 @@ export class Asking implements SeatWork {
       `Before the work starts you may put one short list of questions to them. Each one costs them time, and the team up to a day of waiting. ${WHAT_IS_WORTH_ASKING}`,
       `Read what they asked for, and what your team raised for you to ask. Add your own, about ${ASKS_ABOUT.lead}. Fold together questions that ask the same thing, and drop any the team can decide for itself.`,
       `Ask at most ${MOST_QUESTIONS_A_ROUND} questions, the ones that matter most first. For each, say what the team will assume if they do not answer: the smallest honest reading of their words.`,
+      ...whatCanBeBuilt(seated.listed.kind),
       "",
       HOW_TO_REPLY,
       "",
