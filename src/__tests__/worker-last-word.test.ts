@@ -489,6 +489,28 @@ describe.skipIf(!available)("the worker, where the poster has the last word", ()
       expect(kept.live?.removedAt).toBeUndefined();
       expect(host.removed).toEqual(["site-1"]);
       expect(isCodePublic(kept)).toBe(true);
+
+      // nobody was given the link that takes the site, so the host is not asked who holds it
+      const whoHolds = (one: NetlifySaying): number => one.asked.filter((asked) => asked.method === "GET" && asked.path.endsWith(`/sites/${kept.live?.siteId}`)).length;
+      expect(whoHolds(host)).toBe(0);
+      // its holder is given the link, and for a day after that the worker asks: the host still holds it, so nothing changes
+      await store.save({ ...kept, live: { ...kept.live!, offeredAt: new Date().toISOString() } });
+      await aWorker(said, host).tick();
+      expect(whoHolds(host)).toBe(1);
+      expect((await recordOf(accepted.jobId)).live?.takenAt).toBeUndefined();
+      // then they take it into their own account, and the worker writes that down once and stops asking
+      const taken = netlifySaying({ takenBy: { [kept.live!.siteId]: "its-holders-own-team" } });
+      try {
+        const after = aWorker(said, taken);
+        await after.tick();
+        expect((await recordOf(accepted.jobId)).live?.takenAt).toBeDefined();
+        expect(said.some((line) => line.includes("taken into its holder's own Netlify account"))).toBe(true);
+        expect((await recordOf(accepted.jobId)).live?.removedAt).toBeUndefined();
+        await after.tick();
+        expect(whoHolds(taken)).toBe(1);
+      } finally {
+        taken.stop();
+      }
     } finally {
       host.stop();
     }

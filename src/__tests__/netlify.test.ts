@@ -4,7 +4,7 @@ import { chmod, mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { handoverToken, netlify, NETLIFY_CLAIM, NETLIFY_SETTINGS, netlifyFromTheEnvironment, NotAWebsite, SITE_LIMITS, siteFilesIn, siteNameFor } from "../hosting/index.ts";
-import { NAMED_BY_NETLIFY, netlifySaying as standIn, type Asked } from "./support/netlify.ts";
+import { GONE, NAMED_BY_NETLIFY, netlifySaying as standIn, type Asked } from "./support/netlify.ts";
 
 /**
  * A delivered website put live on Netlify, asked for real over HTTP.
@@ -34,6 +34,23 @@ const wordFor = (madeFor: string, secret: string): string => createHmac("sha256"
 const SITE = new Map([["/index.html", bytes("<h1>front</h1>")], ["/cards/mewtwo.html", bytes("<h1>Mewtwo</h1>")], ["/copy of front.html", bytes("<h1>front</h1>")]]);
 
 describe("a website put live on Netlify", () => {
+  test("it says whether its own account still holds a site: yes while it does, no once somebody took it or it is gone", async () => {
+    const { endpoint, asked } = netlifySaying({ takenBy: { "site-taken": "somebody-elses-team" } });
+    const host = netlify({ token: "the-token", endpoint });
+    expect(await host.holds("site-1")).toBe(true);
+    expect(await host.holds("site-taken")).toBe(false);
+    expect(await host.holds(GONE)).toBe(false);
+    // which accounts the token acts for is asked once, however many sites are asked about
+    expect(asked.filter((one) => one.path.endsWith("/accounts")).length).toBe(1);
+    expect(asked.every((one) => one.headers.get("authorization") === "Bearer the-token")).toBe(true);
+    // a server set to one team holds what is in that team, and asks Netlify for no list
+    const teamed = netlifySaying({ takenBy: { "site-ours": "our-team" } });
+    const inATeam = netlify({ token: "the-token", endpoint: teamed.endpoint, team: "our-team" });
+    expect(await inATeam.holds("site-ours")).toBe(true);
+    expect(await inATeam.holds("site-1")).toBe(false);
+    expect(teamed.asked.some((one) => one.path.endsWith("/accounts"))).toBe(false);
+  });
+
   test("the site is made under its own word, its files offered by fingerprint and sent once each, and its address comes back when it is ready", async () => {
     const { endpoint, asked, addressOf, visited } = netlifySaying();
     const live = await netlify({ token: "the-token", endpoint }).publish({ name: "pod-a-coat", files: SITE, madeFor: "a-coat:0xseal" });

@@ -32,6 +32,8 @@ export interface SiteHost {
   publish(input: { readonly name: string; readonly files: SiteFiles; readonly madeFor: string }): Promise<LiveSite>;
   /** A link whoever opens takes the site made for this into their own account with. To be shown to the one person it is for. */
   handoverLink(madeFor: string): Promise<string>;
+  /** Whether this host's own account still holds the site: no longer, once whoever it was handed to has taken it, or it is gone. */
+  holds(siteId: string): Promise<boolean>;
   /** Take the site down for good. Taking down one already gone is no failure. */
   remove(siteId: string): Promise<void>;
 }

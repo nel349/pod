@@ -65,7 +65,8 @@ export interface NetlifyOptions {
   readonly readyWithinMs?: number;
 }
 
-const SiteSchema = z.object({ id: z.string().min(1), name: z.string().optional(), ssl_url: z.string().optional(), url: z.string().optional() });
+const SiteSchema = z.object({ id: z.string().min(1), name: z.string().optional(), ssl_url: z.string().optional(), url: z.string().optional(), account_slug: z.string().optional() });
+const AccountsSchema = z.array(z.object({ slug: z.string() }));
 type Site = z.infer<typeof SiteSchema>;
 const DeploySchema = z.object({ id: z.string().min(1), required: z.array(z.string()).optional(), state: z.string().optional() });
 
@@ -161,6 +162,35 @@ export function netlify(options: NetlifyOptions): SiteHost {
     throw new Error(`Netlify would not take the site down: ${response.status}`);
   }
 
+  /** The accounts this token acts for, by Netlify's short name for each: asked once, since they do not change under a running server. */
+  let acting: Promise<ReadonlySet<string>> | undefined;
+  const actsFor = (): Promise<ReadonlySet<string>> => {
+    acting ??= (options.team
+      ? Promise.resolve(new Set([options.team]))
+      : ask("/accounts", { what: "say which accounts this token acts for" }).then(async (response) => new Set((await readAs(response, AccountsSchema, "which accounts this token acts for")).map((account) => account.slug)))
+    ).catch((error: unknown) => {
+      acting = undefined;
+      throw error;
+    });
+    return acting;
+  };
+
+  /**
+   * Whether the site is still in an account this token acts for. Netlify goes on answering for a site
+   * by its own name after somebody has taken it, and says whose account it is in now.
+   */
+  async function holds(siteId: string): Promise<boolean> {
+    let site: Site;
+    try {
+      site = await readAs(await ask(`/sites/${encodeURIComponent(siteId)}`, { what: "say who holds the site" }), SiteSchema, "who holds the site");
+    } catch (error) {
+      if (error instanceof Refused && error.status === 404) return false;
+      throw error;
+    }
+    // an answer that names no account says nothing of a move, so nothing is concluded from it
+    return site.account_slug === undefined || (await actsFor()).has(site.account_slug);
+  }
+
   /** Send a made site its files, by fingerprint, and wait until Netlify says it is ready. */
   async function fill(siteId: string, files: SiteFiles): Promise<void> {
     const prints = new Map([...files].map(([address, bytes]) => [address, sha1(bytes)] as const));
@@ -228,6 +258,7 @@ export function netlify(options: NetlifyOptions): SiteHost {
       return `${NETLIFY_CLAIM}?utm_source=${MADE_BY}#${handoverToken({ clientId, clientSecret, handover: wordFor(madeFor) })}`;
     },
 
+    holds,
     remove,
   };
 }

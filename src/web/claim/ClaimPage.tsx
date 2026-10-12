@@ -5,7 +5,7 @@
 import type { ReactElement } from "react";
 import type { MarketConfig } from "../../market.ts";
 import { useWalletPresent } from "../shared/index.ts";
-import { ClaimBill, WhatSheet, WhereSheet } from "./components/index.ts";
+import { ClaimBill, HandedSheet, WhatSheet, WhereSheet } from "./components/index.ts";
 import { useConnectedAccount } from "../shared/index.ts";
 import { useClaim, useClaimable } from "./hooks/index.ts";
 import { COPY, type Claimable } from "./state/index.ts";
@@ -28,7 +28,9 @@ function Claiming({ claimable, market }: { readonly claimable: Claimable; readon
   return (
     <main className="sheets">
       <WhatSheet claimable={claimable} explorer={market.explorer} />
-      <WhereSheet claimable={claimable} hasWallet={hasWallet} connected={connected} status={status} onClaim={claim} />
+      {claimable.handed
+        ? <HandedSheet claimable={claimable} handed={claimable.handed} hasWallet={hasWallet} status={status} onSign={claim} />
+        : <WhereSheet claimable={claimable} hasWallet={hasWallet} connected={connected} status={status} onClaim={claim} />}
     </main>
   );
 }

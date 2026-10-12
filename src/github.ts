@@ -178,6 +178,22 @@ export async function transferRepository(to: Published, account: string): Promis
 }
 
 /**
+ * Where a repository lives now. GitHub answers for a repository that has moved at the address it had
+ * before, so asking at the old one says who has it today.
+ */
+export async function whereItLives(to: Published): Promise<Published> {
+  const now = await call<RepositoryAnswer>(`/repos/${to.owner}/${to.name}`);
+  const [owner = to.owner, name = to.name] = now.full_name.split("/");
+  return { owner, name, url: now.html_url, cloneUrl: now.clone_url };
+}
+
+/** A repository's owner and name, from its address on GitHub. */
+export function publishedAt(repository: string): Published {
+  const [owner = "", name = ""] = new URL(repository).pathname.split("/").filter(Boolean);
+  return { owner, name, url: repository, cloneUrl: `${repository}.git` };
+}
+
+/**
  * Set a finished job's repository read-only.
  *
  * Thirty days after a job ends, however it ended. Read-only rather than deleted: the evidence has to

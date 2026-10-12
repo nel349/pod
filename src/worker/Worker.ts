@@ -52,6 +52,7 @@ import { isWaiting } from "../triage.ts";
 import { RegistryAnswers } from "./RegistryAnswers.ts";
 import type { PreparingStore } from "../preparing/PreparingStore.ts";
 import type { BoxSlots } from "../docker/index.ts";
+import { isInvitationOpen, isSiteOfferOpen, noticeHandover, noticeSiteTaken } from "../claims.ts";
 import { openJob } from "../publish.ts";
 import { sealSpec } from "../job.ts";
 import { specFromTheWire, SpecOnTheWireSchema } from "../specWire.ts";
@@ -60,6 +61,9 @@ import { specFromTheWire, SpecOnTheWireSchema } from "../specWire.ts";
 export const GRADED_AT_ONCE = 2;
 /** How often the worker looks at every job */
 export const LOOK_EVERY_MS = 10_000;
+
+/** How often GitHub and the host are asked whether a repository or a live site offered to its holder has moved */
+export const HANDOVER_ASKED_EVERY_MS = 60_000;
 
 /** How long before a poster's time runs out they are told once more that their answer is waited for. */
 export const LAST_DAY_SECONDS = 24n * 60n * 60n;
@@ -198,6 +202,8 @@ export const stillToPublish = (record: JobRecord): boolean => record.opensOnMain
 
 export class Worker {
   private readonly grading = new Map<string, Promise<void>>();
+  /** when GitHub was last asked where an invited job's repository lives */
+  private readonly handoverAskedAt = new Map<string, number>();
   /** when each job's last grading failed, so a job that keeps failing is not graded again every look */
   private readonly failedAt = new Map<string, number>();
   /** messages that could not be sent, by job: how many times, and when last */
@@ -243,12 +249,31 @@ export class Worker {
         // one job's trouble is not every job's: it is said, and tried again on the next look
         this.say(`${record.jobId}: ${firstLine(error)}`);
       }
+      await this.seeIfHandedOver(record.jobId).catch((error: unknown) => this.say(`${record.jobId}: GitHub did not say where its repository is, and is asked again: ${firstLine(error)}`));
     }
     try {
       await this.answers?.look();
     } catch (error) {
       this.say(`the registry could not be read, and will be on the next look: ${firstLine(error)}`);
     }
+  }
+
+  /**
+   * While an invitation to take a job's repository may still be accepted, ask GitHub now and then
+   * whether it has moved, and for a day after its live site was offered ask the host the same, so the
+   * job's page says the code and the site are with their holder once they are.
+   */
+  private async seeIfHandedOver(jobId: string): Promise<void> {
+    const { store, siteHost } = this.options;
+    const record = await store.read(jobId);
+    if (!record || !(isInvitationOpen(record) || (siteHost && isSiteOfferOpen(record)))) return;
+    if (Date.now() - (this.handoverAskedAt.get(jobId) ?? 0) < HANDOVER_ASKED_EVERY_MS) return;
+    this.handoverAskedAt.set(jobId, Date.now());
+    const moved = isInvitationOpen(record) ? await noticeHandover(store, record) : record;
+    if (moved.handed && !record.handed) this.say(`${jobId}: its repository is with ${moved.handed.account} on GitHub now`);
+    if (!siteHost || !isSiteOfferOpen(moved)) return;
+    const taken = await noticeSiteTaken(store, siteHost, moved);
+    if (taken.live?.takenAt) this.say(`${jobId}: its live site has been taken into its holder's own ${siteHost.name} account`);
   }
 
   /** Look every so often until told to stop, then let grading under way finish. */

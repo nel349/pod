@@ -598,7 +598,11 @@ export const SITE = {
     holderUnread: "Who holds it could not be read from the chain just now.",
     claim: "Claim the code",
     invitedTo: (account: string) => `GitHub was asked to hand it to ${account} on`,
-    invitationLasts: "The invitation lasts a day.",
+    invitationLasts: "GitHub emails that account a link to accept, at the address it uses there. The link lasts a day.",
+    handedTo: (account: string) => `The code is with ${account} on GitHub, since`,
+    handedSays: "POD no longer holds it, so there is nothing left to claim here.",
+    titleHanded: (tokenId: string) => `POD #${tokenId} is the certificate of ownership for this work. Its code has been claimed.`,
+    siteLink: "Get the link to the live site",
     noTitle: "No certificate of ownership was made for this job, so nobody can claim the code yet.",
     /** delivered and not answered yet: the certificate is made by the poster's yes */
     titleOnAcceptance: "The code and its certificate of ownership go to whoever posted the job when they accept the work. Until then both are the pod's.",

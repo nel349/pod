@@ -119,4 +119,31 @@ describe.skipIf(!available)("claiming a POD's repository from a browser", () => 
     expect(await page.evaluate<boolean>(`!!document.querySelector("#not-holder button")`)).toBe(true);
     expect(await said(page)).not.toContain("GitHub");
   }, 120_000);
+
+  test("once the code has moved, the page says who has it and where, and asks for no account", async () => {
+    const titled = await store.read(JOB);
+    if (!titled) throw new Error("the titled job is not kept");
+    const handed = { account: "octocat", at: new Date().toISOString() };
+    const moved = "https://github.com/octocat/pod-a-coat";
+    // its live website was taken into the holder's own account as well, so there is no link left to sign for
+    const live = { host: "Netlify", siteId: "site-1", url: "https://pod-a-coat.netlify.app", at: handed.at, takenAt: handed.at };
+    await store.save({ ...titled, repository: moved, invited: { account: "octocat", by: HOLDER, at: handed.at }, handed, live });
+    try {
+      browser = await Browser.start();
+      await browser.beforeEveryPage(walletInThePage({ rpc: anvil.rpc, address: HOLDER, chainId: 31337, startsOn: 31337 }));
+      await browser.open(base + claimPath(JOB));
+      await browser.until(`document.querySelector("#handed")`, "where the code went to appear");
+      const text = await browser.evaluate<string>(`document.querySelector("#handed").textContent`);
+      expect(text).toContain(COPY.handed.to(handed));
+      expect(text).toContain("octocat/pod-a-coat");
+      expect(text).toContain(COPY.handed.says);
+      expect(await browser.evaluate<string>(`document.querySelector("#handed a").href`)).toBe(moved);
+      expect(text).toContain(COPY.site.taken);
+      // nothing to type, nothing to claim and nothing to sign for
+      expect(await browser.evaluate<boolean>(`document.querySelector("#account") === null && document.querySelector("#claim") === null`)).toBe(true);
+      expect(await browser.evaluate<boolean>(`document.querySelector("#sign-for-the-site") === null`)).toBe(true);
+    } finally {
+      await store.save(titled);
+    }
+  }, 120_000);
 });

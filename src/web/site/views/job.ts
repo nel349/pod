@@ -33,6 +33,8 @@ export const TitleViewSchema = z.object({
   holder: z.string().optional(),
   claim: z.string().optional(),
   invited: z.object({ account: z.string(), by: z.string(), at: z.string() }).optional(),
+  /** who has the code on GitHub, once it has left POD's account: nothing is left to claim here */
+  handed: z.object({ account: z.string(), at: z.string() }).optional(),
 });
 export type TitleView = z.infer<typeof TitleViewSchema>;
 
@@ -167,8 +169,10 @@ export function jobView(record: JobRecord, notes: readonly Note[], chainSays: Ch
     ...(tokenId !== undefined ? { title: {
       tokenId,
       ...(chainSays.holder ? { holder: chainSays.holder } : {}),
-      ...(record.repository ? { claim: claimPath(tile.jobId) } : {}),
-      ...(record.invited ? { invited: record.invited } : {}),
+      // once the code has moved, the claim page has one thing left to give: a live website's link, to its holder
+      ...(record.repository && (!record.handed || (record.live && !record.live.removedAt && !record.live.takenAt)) ? { claim: claimPath(tile.jobId) } : {}),
+      ...(record.invited && !record.handed ? { invited: record.invited } : {}),
+      ...(record.handed ? { handed: record.handed } : {}),
     } } : {}),
     ...(record.repository ? { repository: record.repository } : {}),
     ...(isCodePublic(record) ? {} : { isCodePrivate: true }),

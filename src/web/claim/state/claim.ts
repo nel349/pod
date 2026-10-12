@@ -10,6 +10,8 @@ import { shortAddress } from "../../shared/copy.ts";
 const AddressSchema = z.string().refine((value): value is Address => isAddress(value), "an address");
 
 export const InvitationSchema = z.object({ account: z.string(), by: AddressSchema, at: z.string() });
+/** Who has the repository now, once it has left POD's account */
+export const HandedSchema = z.object({ account: z.string(), at: z.string() });
 
 /** What there is to claim, as the server says it */
 export const ClaimableSchema = z.object({
@@ -20,14 +22,18 @@ export const ClaimableSchema = z.object({
   repository: z.url(),
   /** where the work is live, when it is a website */
   live: z.url().optional(),
+  /** the live website is already in its holder's own account at its host */
+  isSiteTaken: z.literal(true).optional(),
   invited: InvitationSchema.optional(),
+  handed: HandedSchema.optional(),
 });
 
 /** The link that takes a live website into the holder's own account at its host. */
 export const SiteToTakeSchema = z.object({ host: z.string(), takeIt: z.url() });
 export type SiteToTake = z.infer<typeof SiteToTakeSchema>;
 
-export const ClaimedSchema = z.object({ invited: InvitationSchema, site: SiteToTakeSchema.optional() });
+/** A claim the server took: an invitation sent, or the code already with its holder's account, and the live site's link either way */
+export const ClaimedSchema = z.object({ invited: InvitationSchema.optional(), handed: HandedSchema.optional(), site: SiteToTakeSchema.optional() });
 export const WhySchema = z.object({ why: z.string() });
 /** A claim GitHub would not take, from the title's own holder: why, and their live website all the same */
 export const NotClaimedSchema = z.object({ why: z.string(), site: SiteToTakeSchema.optional() });
@@ -43,6 +49,7 @@ export const NotClaimableSchema = z.object({ why: z.string(), job: z.string().op
 
 export type Claimable = z.infer<typeof ClaimableSchema>;
 export type Invitation = z.infer<typeof InvitationSchema>;
+export type Handed = z.infer<typeof HandedSchema>;
 
 /** The job the page's own address names: /claim/<job> */
 export function jobIdFrom(pathname: string): string {
@@ -53,7 +60,7 @@ export function jobIdFrom(pathname: string): string {
 export type ClaimStatus =
   | { readonly kind: "idle" }
   | { readonly kind: "working"; readonly step: ClaimStep }
-  | { readonly kind: "sent"; readonly invited: Invitation; readonly site?: SiteToTake }
+  | { readonly kind: "sent"; readonly invited?: Invitation; readonly site?: SiteToTake }
   /** the step it stopped at, and why */
   | { readonly kind: "stopped"; readonly step: ClaimStep; readonly why: string; readonly site?: SiteToTake };
 
@@ -113,12 +120,24 @@ export const COPY = {
     stepStates: { done: "done", doing: "under way", failed: "stopped here", waiting: "not yet" } satisfies Record<StepState, string>,
   },
   sent: (invited: Invitation, repository: string) =>
-    `GitHub is handing ${shortRepository(repository)} to ${invited.account}. If ${invited.account} does not already own where it lives, GitHub emails an invitation, which has to be accepted within a day. Until it is, the repository stays where it is.`,
+    `GitHub is handing ${shortRepository(repository)} to ${invited.account}. GitHub emails ${invited.account} a link to accept, at the address that account uses there, and the link lasts a day. Until it is accepted, the repository stays where it is.`,
+  handed: {
+    title: "Where it went",
+    to: (handed: Handed) => `The code was handed to ${handed.account} on GitHub. It lives at`,
+    says: "POD no longer holds it, so there is nothing left to claim here. Whoever holds the title next asks that account for it.",
+    allDone: "Nothing here is waiting for you.",
+    site: {
+      guide: "The live site goes with the title too. Sign with the wallet that holds the title, and you are given the link that takes the site into your own account at its host.",
+      button: "Sign for the live site's link",
+      busy: "Signing…",
+    },
+  },
   /** the live website, which goes with the title as the repository does */
   site: {
     live: "It is live at",
+    taken: "The live site has been taken into its holder's own account at its host, so there is no link left to give.",
     takeIt: (host: string) => `Take the live site into your own ${host} account`,
     takeItSays: (host: string) => `The site stays where it is, at the same address, and becomes yours to change or move. Whoever opens this link takes it, so keep it to yourself. No ${host} account yet? Opening it offers to make one.`,
   },
-  before: (invited: Invitation) => `An invitation was sent to ${invited.account} on ${invited.at.slice(0, 10)}. Claim again if it lapsed.`,
+  before: (invited: Invitation) => `GitHub emailed ${invited.account} a link to accept on ${invited.at.slice(0, 10)}, at the address that account uses there. The link lasts a day: claim again if it lapsed.`,
 } as const;

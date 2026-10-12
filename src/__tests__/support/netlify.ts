@@ -13,6 +13,11 @@ const FRONT_PAGE = "/index.html";
 /** the name it gives a site asked for with none, as Netlify does */
 export const NAMED_BY_NETLIFY = "curious-otter-1a2b3c";
 
+/** the account the stand-in's caller acts for */
+export const OUR_ACCOUNT = "pod-works";
+/** a site's own name it says it has never heard of */
+export const GONE = "site-gone";
+
 export interface Asked { readonly method: string; readonly path: string; readonly headers: Headers; readonly body: Uint8Array }
 
 export interface NetlifySaying {
@@ -39,6 +44,8 @@ export interface NetlifySaying {
 export function netlifySaying(options: {
   /** sites it holds before anything is asked: this account's, or somebody else's, whose name is taken all the same */
   readonly sites?: readonly { readonly id: string; readonly name: string; readonly ours: boolean }[];
+  /** the account each site it is asked about by its own name is in now: this token's own, unless named here */
+  readonly takenBy?: Readonly<Record<string, string>>;
   readonly holds?: readonly string[];
   readonly readyAfter?: number;
   readonly refuses?: { readonly path: RegExp; readonly status: number; readonly body: string };
@@ -71,6 +78,12 @@ export function netlifySaying(options: {
         // as Netlify lists them: this account's alone, any whose name has the asked one in it
         return Response.json((options.sites ?? []).filter((site) => site.ours && site.name.includes(searchParams.get("name") ?? ""))
           .map((site) => ({ id: site.id, name: site.name, ssl_url: addressOf(site.name) })));
+      }
+      if (request.method === "GET" && path.endsWith("/accounts")) return Response.json([{ slug: OUR_ACCOUNT }]);
+      const named = /\/sites\/([^/]+)$/.exec(path)?.[1];
+      if (request.method === "GET" && named !== undefined) {
+        // Netlify answers for a site by its own name whoever holds it, and says whose account it is in
+        return named === GONE ? new Response("Not Found", { status: 404 }) : Response.json({ id: named, name: named, account_slug: options.takenBy?.[named] ?? OUR_ACCOUNT });
       }
       if (request.method === "POST" && /\/sites\/?$/.test(path)) {
         const { name } = JSON.parse(new TextDecoder().decode(body)) as { name?: string };

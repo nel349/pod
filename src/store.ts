@@ -14,7 +14,7 @@ import type { Reference } from "./references/index.ts";
 import { appendFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Address, Hex } from "viem";
-import type { Invitation } from "./claims.ts";
+import type { Handed, Invitation } from "./claims.ts";
 import type { Tile } from "./gallery.ts";
 import type { Approval } from "./jobpage.ts";
 import type { SignedReceipt } from "./receipt.ts";
@@ -93,6 +93,10 @@ export interface Live {
   readonly at: string;
   /** when it was taken down, which is what happens to a delivery its pod was not paid for */
   readonly removedAt?: string;
+  /** when the link that hands the site over was last given to the title's holder */
+  readonly offeredAt?: string;
+  /** when POD saw that the site had left its account at the host for its holder's own */
+  readonly takenAt?: string;
 }
 
 /** How a delivered job ended: what its poster said, or that they said nothing in time and the checks decided. */
@@ -148,6 +152,8 @@ export interface JobRecord {
   readonly podHolder?: string;
   /** the last invitation GitHub sent to hand the repository to the title's holder */
   readonly invited?: Invitation;
+  /** the repository has left POD's account for its holder's: who has it, and when POD saw that it had moved */
+  readonly handed?: Handed;
   /** why the worker has not graded it although the pod says it is done, such as the approved commit never having been pushed */
   readonly waitingBecause?: string;
   /** what its poster was told by mail, and when: each message is sent once */

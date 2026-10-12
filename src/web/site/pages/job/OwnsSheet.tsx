@@ -21,7 +21,7 @@ function Title({ title }: { readonly title: TitleView }): ReactElement {
   const { market } = useSite();
   return (
     <>
-      <p>{SITE.job.title(title.tokenId)}</p>
+      <p>{title.handed ? SITE.job.titleHanded(title.tokenId) : SITE.job.title(title.tokenId)}</p>
       <p>
         {title.holder
           ? <>{SITE.job.heldBy} {market
@@ -30,8 +30,9 @@ function Title({ title }: { readonly title: TitleView }): ReactElement {
             <InTheBrowser><You holder={title.holder} /></InTheBrowser>.</>
           : SITE.job.holderUnread}
       </p>
-      {title.invited && <p className="note">{SITE.job.invitedTo(title.invited.account)} <When iso={title.invited.at} />. {SITE.job.invitationLasts}</p>}
-      {title.claim && <p><a className="primary" href={title.claim}>{SITE.job.claim}</a></p>}
+      {title.handed && <p id="handed" className="note">{SITE.job.handedTo(title.handed.account)} <When iso={title.handed.at} />. {SITE.job.handedSays}</p>}
+      {title.invited && <p id="invited" className="note">{SITE.job.invitedTo(title.invited.account)} <When iso={title.invited.at} />. {SITE.job.invitationLasts}</p>}
+      {title.claim && <p><a className="primary" href={title.claim}>{title.handed ? SITE.job.siteLink : SITE.job.claim}</a></p>}
     </>
   );
 }

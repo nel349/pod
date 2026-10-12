@@ -3,6 +3,7 @@ import type { Address } from "viem";
 import { isAddressEqual } from "viem";
 import { CLAIM_STEPS, COPY, stepStates, type Claimable, type ClaimStatus } from "../state/index.ts";
 import { ChooseAccount, CHROME, Sheet } from "../../shared/index.ts";
+import { TakeTheSite } from "./TakeTheSite.tsx";
 
 interface WhereSheetProps {
   readonly claimable: Claimable;
@@ -41,15 +42,13 @@ export function WhereSheet({ claimable, hasWallet, connected, status, onClaim }:
       <p id="said" className={status.kind === "sent" ? "said-status done" : "said-status"} role="status">
         {!hasWallet && COPY.noWallet}
         {status.kind === "stopped" && status.why}
-        {status.kind === "sent" && COPY.sent(status.invited, claimable.repository)}
+        {status.kind === "sent" && status.invited && COPY.sent(status.invited, claimable.repository)}
         {status.kind === "idle" && claimable.invited && COPY.before(claimable.invited)}
       </p>
       {claimable.live && status.kind !== "sent" && <p id="live" className="note">{COPY.site.live} <a href={claimable.live}>{claimable.live}</a>.</p>}
-      {(status.kind === "sent" || status.kind === "stopped") && status.site && (
-        <div id="take-the-site" className="take-the-site">
-          <p><a className="primary" href={status.site.takeIt}>{COPY.site.takeIt(status.site.host)}</a></p>
-          <p className="note">{COPY.site.takeItSays(status.site.host)}</p>
-        </div>
+      {claimable.isSiteTaken && <p id="site-taken" className="note">{COPY.site.taken}</p>}
+      {(status.kind === "sent" || status.kind === "stopped") && status.site && !claimable.isSiteTaken && (
+        <TakeTheSite site={status.site} />
       )}
       {status.kind !== "idle" && (
         <ol id="progress" className="progress" aria-live="polite">

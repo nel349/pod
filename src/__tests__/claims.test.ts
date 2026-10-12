@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Address, Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { Claims } from "../claims.ts";
+import { Claims, INVITATION_LASTS_MS, isInvitationOpen, isSiteOfferOpen, noticeHandover } from "../claims.ts";
+import { credentialAvailable } from "../github.ts";
 import { netlify, siteMadeFor } from "../hosting/index.ts";
 import { claimToSign } from "../messages.ts";
 import { claimApiPath, jobPath } from "../routes.ts";
@@ -10,6 +11,7 @@ import type { JobStore } from "../store.ts";
 import { podTokenAbi } from "../token.ts";
 import { anvilAvailable, startAnvil, type Anvil } from "./support/anvil.ts";
 import { COAT_IDEA } from "./support/coat.ts";
+import { netlifySaying } from "./support/netlify.ts";
 import { anAgent } from "./support/podServer.ts";
 import { aTitledJob, POSTER } from "./support/titled.ts";
 
@@ -23,6 +25,11 @@ import { aTitledJob, POSTER } from "./support/titled.ts";
  */
 
 const available = await anvilAvailable();
+/** asking GitHub where a repository lives takes a credential GitHub knows */
+const canAskGitHub = available && (await credentialAvailable());
+
+/** A repository POD published and really handed to its title's holder, on 12 October 2026: job 21 on Monad testnet */
+const MOVED = { from: "https://github.com/proof-of-development/pod-a-page-of-pokemon-cards-each-1", to: "https://github.com/nel349/pod-a-page-of-pokemon-cards-each-1", account: "nel349" };
 
 const JOB = "a-coat-to-claim";
 const COMMIT = "c0".repeat(20);
@@ -64,6 +71,56 @@ async function withGitHubRefusing<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
+describe.skipIf(!available)("a repository that has been handed over", () => {
+  const HANDED = "a-coat-handed";
+  const invited = { account: "octocat", by: privateKeyToAccount(POSTER).address, at: new Date().toISOString() };
+
+  test("an invitation is open for a day, and never once the repository has moved", async () => {
+    const titled = await store.read(JOB);
+    if (!titled) throw new Error("the titled job is not kept");
+    const sent = Date.parse(invited.at);
+    expect(isInvitationOpen(titled)).toBe(false);
+    expect(isInvitationOpen({ ...titled, invited }, sent + INVITATION_LASTS_MS)).toBe(true);
+    expect(isInvitationOpen({ ...titled, invited }, sent + INVITATION_LASTS_MS + 1)).toBe(false);
+    expect(isInvitationOpen({ ...titled, invited, handed: { account: "octocat", at: invited.at } }, sent)).toBe(false);
+  }, 60_000);
+
+  test("it says who has it and where it lives, and a claim after that is answered without asking GitHub", async () => {
+    const titled = await store.read(JOB);
+    if (!titled) throw new Error("the titled job is not kept");
+    const handed = { account: "octocat", at: new Date().toISOString() };
+    await store.save({ ...titled, jobId: HANDED, tile: { ...titled.tile, jobId: HANDED }, repository: "https://github.com/octocat/pod-a-coat-to-claim", invited, handed });
+
+    const read = await claims.handle(new Request(`http://pod.test${claimApiPath(HANDED)}`));
+    expect(read.status).toBe(200);
+    expect(await read.json()).toMatchObject({ repository: "https://github.com/octocat/pod-a-coat-to-claim", invited, handed });
+
+    // GitHub would refuse, and is never asked: the code is already where it is going
+    const again = await withGitHubRefusing(() => claimAs(POSTER, "octocat", HANDED));
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual({ handed });
+    expect((await claimAs(anAgent().key, "octocat", HANDED)).status).toBe(403);
+  }, 60_000);
+
+  test.skipIf(!canAskGitHub)("GitHub is asked where an invited repository lives: one that moved is written down as handed, one that did not is left", async () => {
+    const titled = await store.read(JOB);
+    if (!titled) throw new Error("the titled job is not kept");
+    const moved = "a-coat-that-moved";
+    await store.save({ ...titled, jobId: moved, tile: { ...titled.tile, jobId: moved }, repository: MOVED.from, invited });
+    const read = await claims.handle(new Request(`http://pod.test${claimApiPath(moved)}`));
+    const said = (await read.json()) as { repository: string; handed?: { account: string } };
+    expect(said.repository).toBe(MOVED.to);
+    expect(said.handed?.account).toBe(MOVED.account);
+    expect((await store.read(moved))?.repository).toBe(MOVED.to);
+
+    const stayed = "a-coat-that-stayed";
+    const kept = { ...titled, jobId: stayed, tile: { ...titled.tile, jobId: stayed }, repository: MOVED.to, invited };
+    await store.save(kept);
+    expect((await noticeHandover(store, kept)).handed).toBeUndefined();
+    expect((await store.read(stayed))?.handed).toBeUndefined();
+  }, 60_000);
+});
+
 describe.skipIf(!available)("claiming a POD's repository", () => {
   test("what there is to claim: the title, who holds it now, and the repository", async () => {
     const answer = await claims.handle(new Request(`http://pod.test${claimApiPath(JOB)}`));
@@ -92,10 +149,14 @@ describe.skipIf(!available)("claiming a POD's repository", () => {
     if (!record) throw new Error("the titled job is not on the wall");
     const live = { host: "Netlify", siteId: "site-1", url: "https://pod-a-coat-to-claim.netlify.app", at: new Date().toISOString() };
     await store.save({ ...record, live });
-    const withASite = new Claims({
+    // the host answers that its own account holds the site, until the last part of this test
+    const host = netlifySaying();
+    const taken = netlifySaying({ takenBy: { [live.siteId]: "its-holders-own-team" } });
+    const hostedAt = (endpoint: string): Claims => new Claims({
       store, token: { address: tokenAddress, publicClient: anvil.publicClient },
-      siteHost: netlify({ token: "t", clientId: "the-app", clientSecret: "the-secret" }),
+      siteHost: netlify({ token: "t", clientId: "the-app", clientSecret: "the-secret", endpoint }),
     });
+    const withASite = hostedAt(host.endpoint);
     const claim = async (key: Hex): Promise<Response> => {
       const signature = await privateKeyToAccount(key).signMessage({ message: claimToSign({ jobId: JOB, tokenId, toAccount: "octocat" }) });
       return withASite.handle(new Request(`http://pod.test${claimApiPath(JOB)}`, { method: "POST", body: JSON.stringify({ toAccount: "octocat", signature }) }));
@@ -118,10 +179,30 @@ describe.skipIf(!available)("claiming a POD's repository", () => {
       expect(answer.site?.takeIt).toBe(await netlify({ token: "t", clientId: "the-app", clientSecret: "the-secret" }).handoverLink(siteMadeFor(record)));
       expect(held.headers.get("cache-control")).toContain("no-store");
 
+      // the link having been given is written down, which is what has the worker ask the host after it for a day
+      const offered = await store.read(JOB);
+      expect(offered?.live?.offeredAt).toBeDefined();
+      expect(offered && isSiteOfferOpen(offered)).toBe(true);
+      expect(offered?.live?.takenAt).toBeUndefined();
+
+      // once the holder has taken the site into their own account, the host says so: it is written down,
+      // said to whoever asks what there is to claim, and no link is given again
+      const afterTaking = hostedAt(taken.endpoint);
+      const said = await (await afterTaking.handle(new Request(`http://pod.test${claimApiPath(JOB)}`))).json() as { live?: string; isSiteTaken?: boolean };
+      expect(said).toMatchObject({ live: live.url, isSiteTaken: true });
+      const kept = await store.read(JOB);
+      expect(kept?.live?.takenAt).toBeDefined();
+      expect(kept && isSiteOfferOpen(kept)).toBe(false);
+      const signature = await privateKeyToAccount(POSTER).signMessage({ message: claimToSign({ jobId: JOB, tokenId, toAccount: "octocat" }) });
+      const again = await withGitHubRefusing(() => afterTaking.handle(new Request(`http://pod.test${claimApiPath(JOB)}`, { method: "POST", body: JSON.stringify({ toAccount: "octocat", signature }) })));
+      expect(await again.json()).not.toHaveProperty("site");
+
       // a site taken down is not there to hand over
       await store.save({ ...record, live: { ...live, removedAt: new Date().toISOString() } });
       expect(await (await withGitHubRefusing(() => claim(POSTER))).json()).not.toHaveProperty("site");
     } finally {
+      host.stop();
+      taken.stop();
       await store.save(record);
     }
   });

@@ -45,7 +45,7 @@ export function useClaim(claimable: Claimable): { readonly status: ClaimStatus; 
       return await readAnswer(response, ClaimedSchema);
     },
     onSuccess: (claimed) => {
-      setStatus({ kind: "sent", invited: claimed.invited, ...(claimed.site ? { site: claimed.site } : {}) });
+      setStatus({ kind: "sent", ...(claimed.invited ? { invited: claimed.invited } : {}), ...(claimed.site ? { site: claimed.site } : {}) });
       void client.invalidateQueries({ queryKey: CLAIM_QUERY_KEYS.claimable(claimable.jobId) });
     },
     onError: (error) => setStatus({

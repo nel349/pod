@@ -14,7 +14,7 @@ export function WhatSheet({ claimable, explorer }: { readonly claimable: Claimab
         <dt>{COPY.what.holder}</dt>
         <dd><a href={explorerAddress(explorer, claimable.holder)}><code>{claimable.holder}</code></a></dd>
       </dl>
-      <p className="guide">{COPY.what.sold}</p>
+      {!claimable.handed && <p className="guide">{COPY.what.sold}</p>}
     </Sheet>
   );
 }

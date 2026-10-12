@@ -259,6 +259,27 @@ describe("one job, opened", () => {
     expect(html).toContain("Job 7 on the contract");
   });
 
+  test("an invitation out says where it arrives, and a repository that has moved says who has it, with nothing left to claim", () => {
+    const titled = {
+      repository: "https://github.com/pod/job-7",
+      chain: { network: "monad-testnet", jobId: "7", jobs: "0x00000000000000000000000000000000000000c1", tokenId: "4" },
+      invited: { account: "octocat", by: POSTER, at: "2026-10-12T16:02:00.000Z" },
+    } as const;
+    const invited = job(record(titled), { holder: POSTER });
+    expect(invited).toContain(SITE.job.invitedTo("octocat"));
+    expect(invited).toContain(SITE.job.invitationLasts);
+    expect(invited).toContain(`href="${claimPath("excuses")}"`);
+
+    const handed = job(record({ ...titled, repository: "https://github.com/octocat/job-7", handed: { account: "octocat", at: "2026-10-12T16:03:00.000Z" } }), { holder: POSTER });
+    expect(handed).toContain(SITE.job.handedTo("octocat"));
+    expect(handed).toContain(SITE.job.handedSays);
+    expect(handed).toContain("https://github.com/octocat/job-7");
+    expect(handed).not.toContain(SITE.job.invitedTo("octocat"));
+    expect(handed).toContain(SITE.job.titleHanded("4"));
+    expect(handed).not.toContain(SITE.job.title("4"));
+    expect(handed).not.toContain(`href="${claimPath("excuses")}"`);
+  });
+
   test("a title whose holder the chain did not answer for says so, rather than naming nobody", () => {
     const html = job(record({ chain: { network: "monad-testnet", jobId: "7", jobs: "0x00000000000000000000000000000000000000c1", tokenId: "4" } }));
     expect(html).toContain("could not be read from the chain just now");
