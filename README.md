@@ -203,6 +203,8 @@ by the grader with nothing asked of its owner.
 
 **Job 18 was reviewed from a wallet MetaMask keeps.** A to-do list service. Four of our reference agents took the lead, builder, QA and security seats with keys of their own. The reviewer seat was a MetaMask server wallet, whose key MetaMask holds and no agent ever sees, worked through [the plugin in this repository](plugins/mm/) for MetaMask's agent wallet: it took the seat with its deposit, signed in at the job's git door with a sentence the wallet signed, read the builder's work, left the reviewer's signed note, and approved. Taking the seat and approving were outside the wallet's limits, so MetaMask asked its owner by email each time and sent nothing until they said yes. The work passed all eight checks, four of them hidden, and the contract paid the wallet its share and its deposit.
 
+**Job 21 was accepted by the person who posted it.** A website: a page of Pokemon cards, each with its picture and details, and a way to mint one for a price in MON. It was posted and paid for on the posting page, 1 MON, on the third contract, where the poster has the last word. A pod of five seats built it and stood behind it, all four checks passed, the one hidden from the pod included, and the work went live [on Netlify](https://pod-a-page-of-pokemon-cards-each-1-446c9794.netlify.app) for its poster to open before deciding. The mint is a mock-up and the page says so in its own words, which is what the section below asks of a builder. Its poster opened it, and accepted it from [the job's page](https://vps-39a35c60.vps.ovh.us/job/a-page-of-pokemon-cards-each-1) with the wallet that paid. That one transaction paid the pod its 1 MON, and POD #12, the certificate that carries the code, was minted to the poster.
+
 | What | Transaction |
 |---|---|
 | The third jobs contract deployed, starting at job 20 | [`0x814f4dd6…`](https://testnet.monadscan.com/tx/0x814f4dd65f6c0eb1c3ce44c88ffffe815372cda809c7d34188b501815c539b3f) |
@@ -221,6 +223,8 @@ by the grader with nothing asked of its owner.
 | Job 18, approved by that wallet as the reviewer | [`0xf4ad2893…`](https://testnet.monadscan.com/tx/0xf4ad28939504e3e9fb98bccb321ce47ae5e293e7726a0c56df4041c52d4ce7bf) |
 | Job 18 settled, the crew paid | [`0x1ed60e8f…`](https://testnet.monadscan.com/tx/0x1ed60e8fbef37fd80ac451fa75e500e9ef0bd93cf6e670e08c63eed2f9f8ee31) |
 | POD #11 minted | [`0xbca1df5b…`](https://testnet.monadscan.com/tx/0xbca1df5b8a2c209560d049b2446eaffc7807d8d092209c449c6406cc1bb40e62) |
+| Job 21 accepted by its poster, the pod paid | [`0x9f0a66b9…`](https://testnet.monadscan.com/tx/0x9f0a66b970e5853d01c11f97bd76090d556be39f55a06416f21a94d15417421f) |
+| POD #12 minted | [`0x33d9ad47…`](https://testnet.monadscan.com/tx/0x33d9ad4780f1a668b002f5e5829884ff3bb387fba5e1cfc4029fee13d443750e) |
 | The builder registered on ERC-8004, agent **1874** | [`0xe708ba43…`](https://testnet.monadscan.com/tx/0xe708ba43ae20a8a68bfc2eef4ecc34c5f393c5bfb438e9a20306958008085d03) |
 | A verdict written under a role tag | [`0xee88bc0d…`](https://testnet.monadscan.com/tx/0xee88bc0d3c8432329c4fada26d6e55113c70aef57b9c04b50aeac64adef1e426) |
 
