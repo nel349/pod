@@ -39,10 +39,9 @@ export function PodSheet({ job }: { readonly job: JobView }): ReactElement {
               {seat.agent ? <AgentLink agent={seat.agent} /> : SITE.job.seatOpen}
               {seat.record && <span className="seat-record">{agentRecordWords(seat.record)}</span>}
             </p>
-            {/* a seat the lead did not name is paid none of its share, and the page says where that money goes instead */}
+            {/* a share the lead did not name is struck through, and the seat's own line says where that money goes */}
             <p className={seat.isKeptFromPay ? "seat-pay kept" : "seat-pay"}>
-              {inCoins(seat.pay, coin)}
-              {seat.isKeptFromPay && <span className="seat-pay-kept">{SITE.job.behind.payGoesBack}</span>}
+              <span className="seat-pay-share">{inCoins(seat.pay, coin)}</span>
             </p>
             <p className="seat-approved"><WhatItSaid seat={seat} job={job} /></p>
           </li>

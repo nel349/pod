@@ -325,14 +325,18 @@ button.quiet:hover { color: var(--pink); text-decoration: line-through; }
 .wallet button.change { font: 400 13px/1 var(--type); text-transform: none; letter-spacing: 0; color: var(--paper); background: none; padding: 4px 2px; box-shadow: none; text-decoration: underline; text-underline-offset: 3px; }
 .wallet button.change:hover { color: var(--yellow); transform: none; box-shadow: none; }
 .wallet .who::before { content: "● "; color: #3ddc84; }
+/* a narrow header cannot hold the mark, four pages and a connected wallet's address in one line, and the links would
+   scroll sideways under a scrollbar: the page a poster never needs gives way first, linked at the foot of every page */
+@media (max-width: 700px) {
+  .site-header nav a.roomy { display: none; }
+}
+
 /* on a phone the header holds the mark, the pages and the wallet in one line: the words before the address are read, not drawn */
 @media (max-width: 560px) {
   .site-header { gap: 10px; }
   .site-header .mark { font-size: 26px; }
   .site-header nav { gap: 10px; }
   .site-header nav a { font-size: 13px; }
-  /* a phone's header holds the pages a poster uses; the rest are linked at the foot of every page */
-  .site-header nav a.roomy { display: none; }
   /* what the wallet asks for, switching chain or connecting, fits beside the pages rather than pushing them out */
   .wallet { min-width: 0; flex-shrink: 1; }
   .wallet button { font-size: 13px; padding: 7px 8px 5px; white-space: normal; text-align: left; }

@@ -10,7 +10,7 @@ import {
 } from "../web/site/index.ts";
 import { freeSeatsOf } from "../web/site/pages/job/SendAnAgent.tsx";
 import { SEATS } from "../seal.ts";
-import { agentAnsweredWords, agentRecordWords, lengthOf, posterRecordWords, SITE, timeLeft, whenInUTC, whereTheDeliveryStands, whereTheReviewStands, whoStandsBehindIt } from "../web/site/copy.ts";
+import { agentAnsweredWords, agentCutWords, agentRecordWords, lengthOf, posterRecordWords, SITE, timeLeft, whenInUTC, whereTheDeliveryStands, whereTheReviewStands, whoStandsBehindIt } from "../web/site/copy.ts";
 import { CONNECTOR_INSTALL, MANDATE_STEPS, SKILL_INSTALL, WALLET_ADDRESS } from "../mandate.ts";
 import type { SignedReceipt } from "../receipt.ts";
 
@@ -494,6 +494,17 @@ describe("a job delivered to a poster who has the last word", () => {
     expect(freeSeatsOf(onTheThird.seats, onTheThird.leadNames === true && onTheThird.review !== undefined).map((seat) => seat.role)).toEqual([...SEATS]);
   });
 
+  test("an agent's own page says when a lead kept it from the pay, and when it was the lead that kept somebody's", () => {
+    const none = { accepted: 2, paidUnanswered: 0, refusedPassed: 0, failed: 0, undelivered: 0 };
+    expect(agentCutWords(none)).toBeUndefined();
+    expect(agentCutWords({ ...none, withheld: 0, withholdings: 0 })).toBeUndefined();
+    expect(agentCutWords({ ...none, withheld: 1 }))
+      .toBe("On 1 job a pod's lead kept it from the pay of a seat it stood behind. The contract counts both, so a pod can see how an agent has been judged and how it judges.");
+    expect(agentCutWords({ ...none, withholdings: 2 })).toContain("On 2 jobs it was the lead and kept pay from a seat.");
+    expect(agentCutWords({ ...none, withheld: 2, withholdings: 1 }))
+      .toContain("On 2 jobs a pod's lead kept it from the pay of a seat it stood behind and on 1 job it was the lead and kept pay from a seat.");
+  });
+
   test("a seat its lead kept from the pay stands behind the work and is paid nothing: the page says so, and counts its share as the poster's", () => {
     // 20 coins, the whole pod behind it, and the lead named the reviewer and QA and not security: 4 + 8 + 3 + 3, and security's 2 goes back
     const whole = delivered();
@@ -505,7 +516,7 @@ describe("a job delivered to a poster who has the last word", () => {
     expect(view.delivery?.keptOnRefusal).toBe("4500000000000000000");
     expect(view.seats.find((seat) => seat.role === "security")?.isKeptFromPay).toBe(true);
     // and the page says beside its share where that money goes, so the figure is not read as money it gets
-    expect(SITE.job.behind.payGoesBack).toContain("goes back to whoever posted the job");
+    expect(SITE.job.behind.keptFromPay).toContain("goes back to whoever posted the job");
     expect(view.seats.find((seat) => seat.role === "reviewer")?.isKeptFromPay).toBeUndefined();
     expect(whoStandsBehindIt(view.delivery!)).toBe("Its builder put it forward, and the whole pod stands behind it. The lead read what each seat said it did and named who earned their pay. Security was not named, so its share goes back to whoever posted the job.");
     expect(whoStandsBehindIt({ behind: [...SEATS], notBehind: [], keptFromPay: ["reviewer", "qa"] }))

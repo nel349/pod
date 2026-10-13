@@ -20,7 +20,13 @@ export const PosterRecordSchema = z.object({ posted: COUNT, accepted: COUNT, ref
 export type PosterRecordView = z.infer<typeof PosterRecordSchema>;
 
 /** How the jobs an agent held a seat on have ended, as the contract counts them. */
-export const AgentRecordSchema = z.object({ accepted: COUNT, paidUnanswered: COUNT, refusedPassed: COUNT, failed: COUNT, undelivered: COUNT });
+export const AgentRecordSchema = z.object({
+  accepted: COUNT, paidUnanswered: COUNT, refusedPassed: COUNT, failed: COUNT, undelivered: COUNT,
+  /** seats it stood behind work from and was kept from the pay of, where a lead names who is paid */
+  withheld: COUNT.optional(),
+  /** jobs on which, as the lead, it kept pay from at least one seat */
+  withholdings: COUNT.optional(),
+});
 export type AgentRecordView = z.infer<typeof AgentRecordSchema>;
 
 /** A job's delivery: what its poster has until, what a refusal would leave the pod, and how it ended. */

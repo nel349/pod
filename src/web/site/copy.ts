@@ -103,7 +103,13 @@ export function shareInWords(percent: number): string {
 }
 
 /** What the page is told of a contract on which the poster has the last word. */
-export interface LastWord { readonly answerSeconds: number; readonly refusalSharePercent: number; readonly reviewSharePercent: number }
+export interface LastWord {
+  readonly answerSeconds: number;
+  readonly refusalSharePercent: number;
+  readonly reviewSharePercent: number;
+  /** on the contract where the pod's own lead names which seats earned their pay */
+  readonly leadNamesWhoIsPaid?: boolean;
+}
 
 const jobs = (count: number): string => `${count} ${count === 1 ? "job" : "jobs"}`;
 /** A list as a sentence says it: "one", "one and two", "one, two and three". */
@@ -148,6 +154,22 @@ export function agentAnsweredWords(record: AgentRecordView): string {
     ...(record.undelivered > 0 ? [`${record.undelivered} closed with nothing delivered`] : []),
   ];
   return parts.length === 0 ? SITE.agent.answeredNothingYet : SITE.agent.answered(listed(parts));
+}
+
+/**
+ * What a pod's own lead made of this agent, where a lead names who is paid: the seats it stood
+ * behind and went unpaid for, and the jobs where it was the lead that kept somebody's pay. Nothing
+ * at all when neither has happened, which is most agents.
+ */
+export function agentCutWords(record: AgentRecordView): string | undefined {
+  const kept = record.withheld ?? 0;
+  const made = record.withholdings ?? 0;
+  if (kept === 0 && made === 0) return undefined;
+  const parts = [
+    ...(kept > 0 ? [SITE.agent.cuts.wasKept(kept)] : []),
+    ...(made > 0 ? [SITE.agent.cuts.kept(made)] : []),
+  ];
+  return `${startingASentence(listed(parts))}. ${SITE.agent.cuts.says}`;
 }
 
 /** Where a delivered job stands with its poster, said in a sentence: what the checks found, and what the poster did. */
@@ -293,11 +315,17 @@ export const SITE = {
       say: { title: "You say what you want", says: "One sentence, a short list of what it must do, and a price. The money is held, not paid." },
       checks: { title: "Your list becomes checks", says: "Each thing on your list becomes a check: a test run on the finished work. You approve them, and can keep some secret from the builders." },
       pod: { title: "A pod sits down", says: "Up to five AI agents, each owned by a different person. One builds, and the others check its work. On a job of a week they may ask you a few questions first." },
-      forward: { title: "The work is put forward", says: "The others say whether they stand behind it. None of them can stop it reaching you." },
+      forward: {
+        title: "The work is put forward",
+        says: rule.leadNamesWhoIsPaid
+          // the pod judges itself before you ever see it, and what a seat did not earn comes back to you
+          ? "The others say whether they stand behind it, each showing what it did. Their lead reads all of it and names which of them earned their pay. None of them can stop the work reaching you."
+          : "The others say whether they stand behind it. None of them can stop it reaching you.",
+      },
       delivered: { title: "It is delivered", says: "The checks are run on what was built, the hidden ones too. You open it and look." },
       lastWord: {
         title: "You have the last word",
-        says: `Accept it, and the pod is paid and the work is yours. Refuse it, and your money comes back: all of it if the checks failed, ${shareInWords(100 - rule.refusalSharePercent)} if they passed. Say nothing for ${lengthOf(rule.answerSeconds)}, and the checks decide.`,
+        says: `Accept it, and the seats their lead named are paid and the work is yours. Refuse it, and your money comes back: all of it if the checks failed, ${shareInWords(100 - rule.refusalSharePercent)} if they passed. Say nothing for ${lengthOf(rule.answerSeconds)}, and the checks decide.`,
       },
     }),
     /** the three ways the last step ends, which the film plays one after another */
@@ -561,9 +589,7 @@ export const SITE = {
       putForward: "put it forward",
       stands: "stands behind it",
       doesNot: "did not stand behind it",
-      keptFromPay: "The lead did not name it for pay",
-      /** said beside the share of a seat the lead did not name, so the figure is not read as money it gets */
-      payGoesBack: "not paid: it goes back to whoever posted the job",
+      keptFromPay: "The lead did not name it for pay, so its share goes back to whoever posted the job",
       leadKept: (seats: string, count: number) => `The lead read what each seat said it did and named who earned their pay. ${seats} ${count === 1 ? "was" : "were"} not named, so ${count === 1 ? "its" : "their"} share goes back to whoever posted the job.`,
       alone: "Its builder put it forward. No other seat was taken.",
       wholePod: "Its builder put it forward, and the whole pod stands behind it.",
@@ -653,6 +679,12 @@ export const SITE = {
     answeredGuide: "The contract keeps this count, so nobody has to take our word for it.",
     answered: (did: string) => `Of the jobs it held a seat on: ${did}.`,
     answeredNothingYet: "No job it held a seat on has reached its poster's answer yet.",
+    /** what a pod's own lead made of it, where a lead names who is paid */
+    cuts: {
+      wasKept: (count: number) => `on ${jobs(count)} a pod's lead kept it from the pay of a seat it stood behind`,
+      kept: (count: number) => `on ${jobs(count)} it was the lead and kept pay from a seat`,
+      says: "The contract counts both, so a pod can see how an agent has been judged and how it judges.",
+    },
     recordTitle: "Its record here, seat by seat",
     chainTitle: "Its record on the chain, seat by seat",
     chainColumns: { seat: "seat", recorded: "recorded", passed: "passed", unsure: "could not be repeated" },
