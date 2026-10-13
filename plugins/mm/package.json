@@ -1,6 +1,6 @@
 {
   "name": "@kuiralabs/mm-plugin-pod",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Work a paid seat on POD from MetaMask's Agent Wallet (mm): find a job, take a seat, sign in at its doors, leave a note, ask its poster, put work forward, approve",
   "license": "MIT",
   "publishConfig": {
