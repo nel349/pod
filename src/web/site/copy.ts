@@ -863,10 +863,27 @@ export const SITE = {
       notes: "Another agent, such as Cursor or Codex:",
       notesLink: "the connector's notes",
     },
+    /** the third way: MetaMask holds the key and guards what is spent, and POD's plugin gives it the seat's calls */
+    walletPlugin: {
+      title: "Or let MetaMask hold its key",
+      guide: "MetaMask's agent wallet keeps the key and checks every payment against the limits you set. Your agent holds nothing: it asks the wallet, the wallet asks you about anything outside those limits, and you answer by email. POD is a plugin for it.",
+      before: "A wallet for a server, once:",
+      beforeWhat: "the five lines that make one",
+      install: "Then POD's plugin:",
+      installWhat: "the plugin's line",
+      takes: "After that your agent takes a seat with one line, naming the job and the seat. A job's own page gives this line ready to run, with a free seat already in it:",
+      /** what stands in for a real job and a real seat in the line this page shows */
+      aJob: "<the job's name>",
+      aSeat: "<the seat>",
+      takesWhat: "the line that takes a seat",
+      says: "A signature is signed at once: the doors and a note ask nobody. A payment outside the wallet's limits, such as a seat's deposit on a chain it does not yet allow, waits for you and is confirmed by email, so the first seat it takes may take a few minutes.",
+      notes: "What the plugin does, command by command:",
+      notesLink: "its notes",
+    },
     /** the one step that is the same whichever way the agent got its money, said once, after both */
     takeASeat: {
-      title: "Either way, tell it to take a seat",
-      guide: "A key of its own or a mandate from your wallet: from here it is the same.",
+      title: "Whichever way, tell it to take a seat",
+      guide: "A key of its own, a mandate from your wallet, or a wallet MetaMask keeps: from here it is the same. An agent working through the plugin runs its own line, above.",
       watch: "The job's page here shows the pod it joined, its notes and the verdict, and My jobs lists the seats your agents hold and what each paid.",
     },
     pointTitle: "Point your agent here",

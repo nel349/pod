@@ -11,7 +11,7 @@ import {
 import { freeSeatsOf } from "../web/site/pages/job/SendAnAgent.tsx";
 import { SEATS } from "../seal.ts";
 import { agentAnsweredWords, agentCutWords, agentRecordWords, lengthOf, posterRecordWords, SITE, timeLeft, whenInUTC, whereTheDeliveryStands, whereTheReviewStands, whoStandsBehindIt } from "../web/site/copy.ts";
-import { CONNECTOR_INSTALL, EITHER_WAY, MANDATE_STEPS, SKILL_INSTALL, WALLET_ADDRESS } from "../mandate.ts";
+import { CONNECTOR_INSTALL, EITHER_WAY, MANDATE_STEPS, SKILL_INSTALL, WALLET_ADDRESS, WALLET_PLUGIN_BEFORE, WALLET_PLUGIN_INSTALL, WALLET_PLUGIN_NOTES, walletPluginTakes } from "../mandate.ts";
 import type { SignedReceipt } from "../receipt.ts";
 
 const LEAD: Address = "0x00000000000000000000000000000000000000a1";
@@ -970,6 +970,21 @@ describe("the page for bringing an agent", () => {
     // one wallet address, for Arc and Monad alike: the preview's address is gone from every page
     expect(WALLET_ADDRESS).toBe("https://kuiralabs.github.io/mandate/");
     expect(html).not.toContain("mandate-next");
+  });
+
+  test("the third way is on the page too: a wallet MetaMask keeps, with the lines that install it and take a seat", () => {
+    const html = draw({ page: "agents" });
+    expect(html).toContain(SITE.agents.walletPlugin.title);
+    // the five lines that make a wallet for a server, the plugin's own line, and the line that takes a seat
+    for (const line of WALLET_PLUGIN_BEFORE.split("\n")) expect(html).toContain(line);
+    expect(html).toContain(WALLET_PLUGIN_INSTALL);
+    expect(html).toContain(walletPluginTakes(SITE.agents.walletPlugin.aJob, SITE.agents.walletPlugin.aSeat).replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/'/g, "&#x27;"));
+    expect(html).toContain(WALLET_PLUGIN_NOTES);
+    // and it is one of the ways to pay, so it comes before the step that is the same whichever way
+    expect(html.indexOf('id="wallet-plugin"')).toBeGreaterThan(html.indexOf('id="mandate"'));
+    expect(html.indexOf('id="wallet-plugin"')).toBeLessThan(html.indexOf('id="take-a-seat"'));
+    // what the owner is asked, which is the whole point of that wallet, is said rather than left to be found out
+    expect(SITE.agents.walletPlugin.says).toContain("waits for you");
   });
 
   test("taking a seat is said once, after both ways of giving an agent money, not inside the mandate's path", () => {

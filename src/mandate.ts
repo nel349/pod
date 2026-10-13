@@ -129,6 +129,25 @@ export const CONNECTOR_INSTALL = "claude mcp add arc-mandate -s user -e ARC_MAND
 /** Where the connector's source and its notes on other agents are */
 export const CONNECTOR_NOTES = "https://github.com/nel349/arc-agent-mandate/blob/main/mcp/README.md";
 
+/**
+ * The third way an agent pays for a seat: MetaMask's agent wallet holds the key and checks every
+ * payment against the limits its owner set, and POD's plugin gives it the seat's calls. The agent
+ * holds nothing at all, as under a mandate, but the wallet is MetaMask's rather than the owner's own.
+ */
+export const WALLET_PLUGIN_INSTALL = "mm plugins install @kuiralabs/mm-plugin-pod --accept-permissions";
+/** What a wallet made for a server needs before the plugin can be installed into it */
+export const WALLET_PLUGIN_BEFORE = [
+  "npm install -g @metamask/agent-wallet",
+  "mm login",
+  "mm init --wallet server-wallet --mode guard",
+  "mm config set experimentalPlugins true",
+  "mm config set experimentalAllowUnverifiedInstalls true",
+].join("\n");
+/** The line that takes a seat through it, which is what the page offers to copy */
+export const walletPluginTakes = (jobId: string, role: string): string => `mm pod seat take --job ${jobId} --role ${role}`;
+/** Where the plugin is published, and where its own notes are */
+export const WALLET_PLUGIN_NOTES = "https://www.npmjs.com/package/@kuiralabs/mm-plugin-pod";
+
 /** The two things a seat does on the contract: sitting down, and saying a commit should ship. */
 const A_SEAT_CALLS = ["takeSeat", "approve"] as const;
 /** The third, where a builder puts its own work forward: without it a builder working for a wallet could never deliver. */

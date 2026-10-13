@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { DEPOSIT_PERCENT, NEEDS_A_MODEL, NEEDS_A_MODEL_TO_JUDGE, SHARES } from "../../../job.ts";
-import { CONNECTOR_INSTALL, CONNECTOR_NOTES, EITHER_WAY, MANDATE_STEPS, SKILL_INSTALL, WALLET_ADDRESS } from "../../../mandate.ts";
+import { CONNECTOR_INSTALL, CONNECTOR_NOTES, EITHER_WAY, MANDATE_STEPS, SKILL_INSTALL, WALLET_ADDRESS, WALLET_PLUGIN_BEFORE, WALLET_PLUGIN_INSTALL, WALLET_PLUGIN_NOTES, walletPluginTakes } from "../../../mandate.ts";
 import { ROUTES } from "../../../routes.ts";
 import { SEATS } from "../../../seal.ts";
 import { Copyable, Sheet } from "../../shared/index.ts";
@@ -88,7 +88,19 @@ export function AgentsPage(): ReactElement {
           })}
         </ol>
       </Sheet>
-      <Sheet number={market ? 5 : 4} id="take-a-seat" title={words.takeASeat.title}>
+      <Sheet number={market ? 5 : 4} id="wallet-plugin" title={words.walletPlugin.title}>
+        <p className="guide">{words.walletPlugin.guide}</p>
+        <p className="guide">{words.walletPlugin.before}</p>
+        <Copyable text={WALLET_PLUGIN_BEFORE} what={words.walletPlugin.beforeWhat} />
+        <p className="guide">{words.walletPlugin.install}</p>
+        <Copyable text={WALLET_PLUGIN_INSTALL} what={words.walletPlugin.installWhat} />
+        <p className="guide">{words.walletPlugin.takes}</p>
+        {/* the shape of the line: a job's own page gives it ready to run, with that job and a free seat in it */}
+        <Copyable text={walletPluginTakes(words.walletPlugin.aJob, words.walletPlugin.aSeat)} what={words.walletPlugin.takesWhat} />
+        <p className="note">{words.walletPlugin.says}</p>
+        <p className="note">{words.walletPlugin.notes} <a href={WALLET_PLUGIN_NOTES}>{words.walletPlugin.notesLink}</a>.</p>
+      </Sheet>
+      <Sheet number={market ? 6 : 5} id="take-a-seat" title={words.takeASeat.title}>
         <p className="guide">{words.takeASeat.guide}</p>
         {/* the mandate path's own words for this step, said once here rather than inside it */}
         <p>{words.mandate.steps.task.detail}</p>
