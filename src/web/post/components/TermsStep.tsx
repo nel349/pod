@@ -1,9 +1,44 @@
 import type { ReactElement } from "react";
 import { useFormContext, useWatch } from "react-hook-form";
 import { MODE_NAMES } from "../../../job.ts";
-import { COPY, type PostForm } from "../state/index.ts";
+import { useCoinInDollars, type Rate } from "../hooks/index.ts";
+import { coinsForDollars, COPY, type PostForm } from "../state/index.ts";
 import { holdEnter } from "./holdEnter.ts";
 import { Step } from "./Step.tsx";
+
+/**
+ * The three prices a poster can pick, in dollars, with what each is in the chain's coin.
+ *
+ * A poster thinks in dollars and the contract takes the chain's coin, so the dollars are the label
+ * and the coin amount is what is paid: picking one writes that amount into the price. Without today's
+ * price there are no dollars to show, and the page asks in the coin, as it always did.
+ */
+function PriceChoices({ rate, coin, isPaid }: { readonly rate: Rate; readonly coin: string; readonly isPaid: boolean }): ReactElement {
+  const { control, setValue } = useFormContext<PostForm>();
+  const price = useWatch({ control, name: "price" });
+  return (
+    <div className="price-choices" role="group" aria-label={COPY.terms.price}>
+      {COPY.terms.priceChoices.map((choice) => {
+        const amount = coinsForDollars(choice.usd, rate.usd);
+        return (
+          <button
+            key={choice.usd}
+            type="button"
+            id={`price-${choice.usd}`}
+            className={price === amount ? "price-choice picked" : "price-choice"}
+            aria-pressed={price === amount}
+            disabled={isPaid}
+            onClick={() => setValue("price", amount, { shouldValidate: true, shouldDirty: true })}
+          >
+            <span className="in-dollars">{COPY.terms.priceInDollars(choice.usd)}</span>
+            <span className="in-coins">{COPY.terms.priceInCoins(Number(amount).toLocaleString("en-US"), coin)}</span>
+            <span className="buys">{choice.buys}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 /**
  * What they pay, how long the builders have, and where the job will live on the wall. Once paid for,
@@ -17,11 +52,14 @@ export function TermsStep({ coin, isPaid = false, canTell = false }: {
 }): ReactElement {
   const { register, control } = useFormContext<PostForm>();
   const mode = useWatch({ control, name: "mode" });
+  // today's price, from this server, which reads it from a free endpoint. Nothing waits for it
+  const rate = useCoinInDollars();
   return (
     <Step name="terms" title={COPY.terms.title}>
+      {rate && !isPaid && <PriceChoices rate={rate} coin={coin} isPaid={isPaid} />}
       <div className="terms">
         <label className="field">
-          {COPY.terms.price}
+          {rate && !isPaid ? COPY.terms.anotherAmount : COPY.terms.price}
           <span className="with-unit">
             <input id="price" type="text" inputMode="decimal" autoComplete="off" readOnly={isPaid} onKeyDown={holdEnter} {...register("price")} /> {coin}
           </span>
@@ -33,6 +71,7 @@ export function TermsStep({ coin, isPaid = false, canTell = false }: {
           ))}
         </fieldset>
       </div>
+      {!isPaid && <p id="price-says" className="note">{rate ? COPY.terms.rateSays(rate.from, coin) : COPY.terms.noRate(coin)}</p>}
       <p id="mode-says" className="note mode-says" role="status">{COPY.terms.modeSays[mode]}</p>
       {isPaid && <p className="note paid-fixed">{COPY.terms.paidFixed}</p>}
       <label className="field">

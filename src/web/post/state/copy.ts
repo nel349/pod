@@ -133,6 +133,20 @@ export const COPY = {
   terms: {
     title: "Price and time",
     price: "What you pay",
+    /** the three prices offered, in dollars, and what each buys: a poster thinks in dollars, the chain takes its own coin */
+    priceChoices: [
+      { usd: 10, buys: "a page" },
+      { usd: 25, buys: "a small site" },
+      { usd: 100, buys: "something bigger" },
+    ],
+    /** a price in dollars, with what it is in the chain's coin: that amount is what is paid */
+    priceInDollars: (usd: number) => `$${usd}`,
+    priceInCoins: (amount: string, coin: string) => `about ${amount} ${coin}`,
+    /** where the day's price came from, said beside the choices */
+    rateSays: (from: string, coin: string) => `Prices in dollars, at today's ${coin} price from ${from}. You pay the ${coin} amount shown.`,
+    /** without a rate the page asks in the coin, as it always did, and says why there are no dollars */
+    noRate: (coin: string) => `Today's ${coin} price could not be read, so this asks in ${coin}.`,
+    anotherAmount: "Another amount",
     modeLegend: "How long the builders have",
     modes: { flash: "Two hours", sprint: "A day", project: "A week" } satisfies Record<Mode, string>,
     /** what each length means for the poster: whether the pod builds from what it is given, or may ask first */

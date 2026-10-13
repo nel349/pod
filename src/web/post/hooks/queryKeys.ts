@@ -11,6 +11,8 @@ export const QUERY_KEYS = {
   preparedJob: (onChainId: string) => ["prepared", onChainId] as const,
   /** a paid job as the chain has it */
   chainJob: (jobs: string, onChainId: string) => ["chain-job", jobs.toLowerCase(), onChainId] as const,
+  /** what one of the chain's coins is worth in dollars, read by the server from a free endpoint */
+  coinInDollars: () => ["coin-in-dollars"] as const,
   /** where a paid job is on the wall, once it is */
   wallPage: (jobs: string, onChainId: string) => ["wall-page", jobs.toLowerCase(), onChainId] as const,
 };

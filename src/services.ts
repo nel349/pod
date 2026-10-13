@@ -31,6 +31,7 @@ import { recordsAt } from "./records.ts";
 import { netlifyFromTheEnvironment, type SiteHost } from "./hosting/index.ts";
 import { Preparing, PreparingStore } from "./preparing/index.ts";
 import { confirmTheContracts, JOBS_ADDRESS_SETTING } from "./contracts.ts";
+import { ratesFromCoinGecko } from "./prices.ts";
 import { doesTheLeadNameWhoIsPaid } from "./jobsV4.ts";
 import { OLD_JOBS_SETTING, SECOND_JOBS_SETTING, THIRD_JOBS_SETTING, WRITER_KEY_SETTING } from "./live.ts";
 import type { Registries } from "./registry.ts";
@@ -179,6 +180,8 @@ export async function servicesFor(input: ServicesInput): Promise<Services> {
     ...(before.length > 0 ? { earlier: before.map((one) => ownedAt(one.jobs, publicClient).reader) } : {}),
     writing: new CheckWriting({ writer: input.checkWriter, proven }),
     proven,
+    // the page offers its prices in dollars, so it is told what one coin is worth, from the free endpoint
+    ...(input.page.coinId ? { rates: ratesFromCoinGecko(input.page.coinId) } : {}),
   };
   return {
     market,
@@ -230,7 +233,7 @@ export async function servicesFromTheEnvironment(
   return servicesFor({
     store, directory, jobs,
     publicClient: monadClient(rpc),
-    page: { chainId: MONAD_TESTNET.id, chainName: "Monad testnet", rpc, explorer: "https://testnet.monadscan.com", coin: MONAD_TESTNET.coin, faucet: MONAD_TESTNET.faucet, sending: MONAD_TESTNET.sending, registries: MONAD_REGISTRIES },
+    page: { chainId: MONAD_TESTNET.id, chainName: "Monad testnet", rpc, explorer: "https://testnet.monadscan.com", coin: MONAD_TESTNET.coin, coinId: MONAD_TESTNET.coinId, faucet: MONAD_TESTNET.faucet, sending: MONAD_TESTNET.sending, registries: MONAD_REGISTRIES },
     registries: MONAD_REGISTRIES,
     ...(earlier ? { earlier, writer: writerWallet(environment) } : {}),
     ...(second ? { second } : {}),

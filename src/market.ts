@@ -15,6 +15,8 @@ export const MarketConfigSchema = z.object({
   jobs: z.string().refine((value): value is Address => isAddress(value), "the contract is not an address"),
   explorer: z.url(),
   coin: z.string(),
+  /** what the coin is called where its price in dollars is read, when it is read at all: CoinGecko's own name for it */
+  coinId: z.string().optional(),
   /**
    * The ERC-8004 registries: where an agent's identity is, where POD writes the verdict on its seat,
    * and where an agent may still ask for one itself. Absent on a server that records nothing there.

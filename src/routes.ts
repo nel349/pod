@@ -31,6 +31,8 @@ export const ROUTES = {
   post: "/post",
   /** what that page reads first: the chain, the contract and the coin it posts with */
   market: "/api/market",
+  /** what the chain's coin is worth in dollars, so the posting page can offer prices in dollars */
+  price: "/api/price",
   /** where the page sends a posting, once the poster has paid and signed */
   postJob: "/api/jobs",
   /** the open jobs, for programs: the same address as posting, asked with GET rather than POST */

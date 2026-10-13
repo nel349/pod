@@ -9,6 +9,7 @@
  * receipt is missing. A missing source is a sentence, never a placeholder number.
  */
 import { acceptPosting, type ChainReader } from "./posting.ts";
+import type { Rates } from "./prices.ts";
 import type { Records } from "./records.ts";
 import type { CheckWriting, ProvenChecks } from "./checkwriting/index.ts";
 import type { MarketConfig } from "./market.ts";
@@ -66,6 +67,8 @@ export interface Market {
   readonly writing: CheckWriting;
   /** the checks the writer proved, which every posting's checks must be among */
   readonly proven: ProvenChecks;
+  /** what the chain's coin is worth in dollars, so the posting page can offer prices in dollars; left out, it asks in the coin */
+  readonly rates?: Rates;
 }
 
 /** What this server opens beyond the wall, each only when it has a chain to answer to. */
@@ -199,6 +202,12 @@ export async function handle(request: Request, store: JobStore, { site, market, 
   }
 
   // the posting page itself is a bundled app served by `serve`; this is what it reads first
+  // what the coin is worth, asked by the posting page on its own: it changes, and the market does not
+  if (pathname === ROUTES.price) {
+    const rate = await market?.rates?.now();
+    return rate ? Response.json(rate, { headers: NO_STORE }) : Response.json({ why: "the coin's price in dollars could not be read" }, { status: 503, headers: NO_STORE });
+  }
+
   if (pathname === ROUTES.market) {
     if (!market) return Response.json({ why: "posting is not open on this server: it has no contract to post to" }, { status: 404 });
     return Response.json(market.page);

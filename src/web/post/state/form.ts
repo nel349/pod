@@ -103,3 +103,20 @@ export const requestKey = (request: DraftRequest): string => JSON.stringify(requ
 export function nameFrom(idea: string): string {
   return idea.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").split("-").slice(0, WORDS_IN_A_NAME).join("-");
 }
+
+/** how many figures a price in the coin is rounded to, so it reads as a price and not as a conversion */
+const FIGURES_IN_A_PRICE = 2;
+
+/**
+ * What a price in dollars is in the chain's coin, as the posting page offers it: a round-looking
+ * amount, which is the amount that is paid, since the contract takes the coin and not dollars.
+ */
+export function coinsForDollars(usd: number, perCoin: number): string {
+  const coins = usd / perCoin;
+  if (!Number.isFinite(coins) || coins <= 0) return "0";
+  const figures = Math.floor(Math.log10(coins)) + 1;
+  const step = 10 ** (figures - FIGURES_IN_A_PRICE);
+  const rounded = Math.round(coins / step) * step;
+  // a step smaller than one leaves a long tail in binary, so it is cut to the figures it stands for
+  return `${Number(rounded.toPrecision(FIGURES_IN_A_PRICE + 2))}`;
+}

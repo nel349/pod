@@ -228,6 +228,29 @@ button.add:hover { background: var(--ink); color: var(--yellow); text-decoration
 .with-unit { display: flex; align-items: baseline; gap: 10px; font: 900 32px/1 var(--shout); white-space: nowrap; }
 .sheets .with-unit input[type="text"] { font: 900 40px/1 var(--shout); padding: 6px 10px 4px; width: 100%; }
 
+/* the three prices a poster can pick, in dollars, with what each is in the chain's coin */
+.price-choices { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+.price-choice {
+  flex: 1 1 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 16px 10px;
+  border: 3px solid var(--ink);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+.price-choice .in-dollars { font: 900 32px/1 var(--shout); }
+.price-choice .in-coins { font: 400 13px/1.2 var(--type); }
+.price-choice .buys { font: 400 13px/1.2 var(--type); opacity: 0.75; }
+.price-choice:hover:not(:disabled) { background: var(--ink); color: var(--paper); }
+.price-choice.picked { background: var(--ink); color: var(--yellow); }
+.price-choice.picked .buys { opacity: 0.9; }
+.price-choice:disabled { cursor: default; opacity: 0.6; }
+
 .modes { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
 .modes legend { padding: 0; margin-bottom: 10px; font: 400 14px/1.2 var(--type); width: 100%; }
 .modes label {

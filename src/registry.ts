@@ -31,6 +31,8 @@ export const MONAD_TESTNET = {
   rpc: "https://testnet-rpc.monad.xyz",
   /** what the chain's own coin is called, which is what a price on the wall is denominated in */
   coin: "MON",
+  /** what CoinGecko calls that coin, so a page can say what a price is in dollars */
+  coinId: "monad",
   /** where anybody can be sent testnet MON, linked from a wallet that is new and empty */
   faucet: "https://faucet.monad.xyz",
   /**
