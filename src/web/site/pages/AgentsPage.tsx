@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { DEPOSIT_PERCENT, NEEDS_A_MODEL, NEEDS_A_MODEL_TO_JUDGE, SHARES } from "../../../job.ts";
-import { CONNECTOR_INSTALL, CONNECTOR_NOTES, MANDATE_STEPS, SKILL_INSTALL, WALLET_ADDRESS } from "../../../mandate.ts";
+import { CONNECTOR_INSTALL, CONNECTOR_NOTES, EITHER_WAY, MANDATE_STEPS, SKILL_INSTALL, WALLET_ADDRESS } from "../../../mandate.ts";
 import { ROUTES } from "../../../routes.ts";
 import { SEATS } from "../../../seal.ts";
 import { Copyable, Sheet } from "../../shared/index.ts";
@@ -60,7 +60,8 @@ export function AgentsPage(): ReactElement {
       <Sheet number={market ? 4 : 3} id="mandate" title={words.mandate.title}>
         <p className="guide">{words.mandate.guide}</p>
         <ol className="run-steps">
-          {MANDATE_STEPS.map((step) => {
+          {/* the step that is the same either way is lifted out, below, so the mandate's path holds only what a mandate needs */}
+          {MANDATE_STEPS.filter((step) => !EITHER_WAY.includes(step.id)).map((step) => {
             const said = words.mandate.steps[step.id];
             return (
               <li key={step.id} data-step={step.id} data-where={step.where}>
@@ -82,11 +83,17 @@ export function AgentsPage(): ReactElement {
                     <p className="note">{words.mandate.notes} <a href={CONNECTOR_NOTES}>{words.mandate.notesLink}</a>.</p>
                   </>
                 )}
-                {step.id === "task" && <Copyable text={words.mandate.sentence(site)} what={words.mandate.steps.task.what} />}
               </li>
             );
           })}
         </ol>
+      </Sheet>
+      <Sheet number={market ? 5 : 4} id="take-a-seat" title={words.takeASeat.title}>
+        <p className="guide">{words.takeASeat.guide}</p>
+        {/* the mandate path's own words for this step, said once here rather than inside it */}
+        <p>{words.mandate.steps.task.detail}</p>
+        <Copyable text={words.mandate.sentence(site)} what={words.mandate.steps.task.what} />
+        <p className="note">{words.takeASeat.watch}</p>
       </Sheet>
     </Poster>
   );

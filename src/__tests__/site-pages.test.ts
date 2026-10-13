@@ -11,7 +11,7 @@ import {
 import { freeSeatsOf } from "../web/site/pages/job/SendAnAgent.tsx";
 import { SEATS } from "../seal.ts";
 import { agentAnsweredWords, agentCutWords, agentRecordWords, lengthOf, posterRecordWords, SITE, timeLeft, whenInUTC, whereTheDeliveryStands, whereTheReviewStands, whoStandsBehindIt } from "../web/site/copy.ts";
-import { CONNECTOR_INSTALL, MANDATE_STEPS, SKILL_INSTALL, WALLET_ADDRESS } from "../mandate.ts";
+import { CONNECTOR_INSTALL, EITHER_WAY, MANDATE_STEPS, SKILL_INSTALL, WALLET_ADDRESS } from "../mandate.ts";
 import type { SignedReceipt } from "../receipt.ts";
 
 const LEAD: Address = "0x00000000000000000000000000000000000000a1";
@@ -959,7 +959,10 @@ describe("the page for bringing an agent", () => {
   test("the mandate is the five steps, in the order the wallet and the connector take them, each line one press away", () => {
     const html = draw({ page: "agents" });
     const steps = [...html.matchAll(/data-step="(\w+)" data-where="(\w+)"/g)].map(([, id, where]) => ({ id, where }));
-    expect(steps).toEqual(MANDATE_STEPS.map((step) => ({ id: step.id, where: step.where })));
+    // the path keeps the wallet's and the connector's order, less the step that is the same either way
+    const mandateOnly = MANDATE_STEPS.filter((step) => !EITHER_WAY.includes(step.id));
+    expect(steps).toEqual(mandateOnly.map((step) => ({ id: step.id, where: step.where })));
+    expect(EITHER_WAY.length).toBeGreaterThan(0);
     for (const line of [SKILL_INSTALL, CONNECTOR_INSTALL]) expect(html).toContain(line);
     // the sentence the owner gives their agent names this site, so it can be given as it is
     expect(html).toContain(SITE.agents.mandate.sentence(SITE_ADDRESS));
@@ -967,6 +970,17 @@ describe("the page for bringing an agent", () => {
     // one wallet address, for Arc and Monad alike: the preview's address is gone from every page
     expect(WALLET_ADDRESS).toBe("https://kuiralabs.github.io/mandate/");
     expect(html).not.toContain("mandate-next");
+  });
+
+  test("taking a seat is said once, after both ways of giving an agent money, not inside the mandate's path", () => {
+    const html = draw({ page: "agents" });
+    // the sentence belongs to neither way: a key of its own and a mandate both end here
+    expect(html.indexOf('id="take-a-seat"')).toBeGreaterThan(html.indexOf('id="mandate"'));
+    expect(html.indexOf('id="take-a-seat"')).toBeGreaterThan(html.indexOf('id="agent-key"'));
+    expect(html).toContain(SITE.agents.takeASeat.title);
+    // and it is said once, so neither way looks as if it needed the other
+    expect(html.split(SITE.agents.mandate.sentence(SITE_ADDRESS)).length - 1).toBe(1);
+    for (const step of EITHER_WAY) expect(html).not.toContain(`data-step="${step}"`);
   });
 });
 

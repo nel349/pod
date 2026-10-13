@@ -268,9 +268,32 @@ export class Browser {
     await Bun.write(path, Buffer.from(shot.data, "base64"));
   }
 
+  /**
+   * Stop it, and never wait on it forever.
+   *
+   * A browser that does not answer its first signal used to hang the teardown until the whole lane
+   * timed out at two minutes, which is how a loaded runner turned into a red lane with every test in
+   * it passing. It gets a few seconds to go, then it is killed outright.
+   */
   async stop(): Promise<void> {
     try { this.socket.close(); } catch { /* already gone */ }
     this.process.kill();
-    await this.process.exited;
+    if (await hasGone(this.process.exited)) return;
+    this.process.kill("SIGKILL");
+    await hasGone(this.process.exited);
+  }
+}
+
+/** How long a browser has to go after a signal, before it is killed outright and then given up on. */
+const A_BROWSER_HAS_TO_GO_IN_MS = 5_000;
+
+/** Whether it went in that time. Never throws: a teardown that fails is still a teardown that ends. */
+async function hasGone(exited: Promise<unknown>): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const tooLate = new Promise<false>((resolve) => { timer = setTimeout(() => resolve(false), A_BROWSER_HAS_TO_GO_IN_MS); });
+  try {
+    return await Promise.race([exited.then(() => true).catch(() => true), tooLate]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 }

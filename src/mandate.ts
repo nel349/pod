@@ -96,6 +96,14 @@ export type StepId = "wallet" | "connect" | "grant" | "task" | "watch";
  * wallet and the connected agent both come before the grant, because a grant needs money behind it
  * and an agent to grant to, and the grant comes before the agent is told to start.
  */
+/**
+ * The one step that is the same whichever way an agent got its money, a key of its own or a mandate.
+ * A page that offers both ways says it once, after them, rather than inside the mandate's path, where
+ * it reads as something only a mandate needs. The five steps and their order are unchanged: a page
+ * that splits them keeps them in this order.
+ */
+export const EITHER_WAY: readonly StepId[] = ["task"];
+
 export const MANDATE_STEPS: readonly { readonly id: StepId; readonly where: Where }[] = [
   { id: "wallet", where: "phone" },
   { id: "connect", where: "laptop" },
