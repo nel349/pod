@@ -70,7 +70,7 @@ export function PostJobPage({ market }: { readonly market: MarketConfig }): Reac
           <LinesStep lines="brief" />
           <LinesStep lines="exam" />
           <ChecksStep view={checksView} />
-          <TermsStep coin={market.coin} />
+          <TermsStep coin={market.coin} faucetGives={market.faucetGives} />
           <PayStep
             market={market}
             payment={{

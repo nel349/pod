@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { A_RATE_IS_KEPT_FOR_MS, ratesFromCoinGecko } from "../prices.ts";
-import { coinsForDollars, priceInWei } from "../web/post/state/form.ts";
+import { coinsForDollars, isBeyondAFaucet, priceInWei } from "../web/post/state/form.ts";
 import { MONAD_TESTNET } from "../registry.ts";
 import { COPY } from "../web/post/state/copy.ts";
 
@@ -75,6 +75,30 @@ describe("the prices a poster is offered", () => {
     expect(COPY.terms.priceInDollars(25)).toBe("$25");
     // the coin amount is exactly what is charged, so nothing in front of it says otherwise
     expect(COPY.terms.priceInCoins("1,000", "MON")).toBe("1,000 MON");
+  });
+
+  test("what the dollars leave out on a test network is said: the coin is handed out, and only so much of it", () => {
+    const says = COPY.terms.testMoney("MON", 5);
+    expect(says).toContain("test money");
+    expect(says).toContain("about 5 MON a day");
+    // the dollar sizes are not called wrong, they are placed: what the work is worth, not what a wallet here holds
+    expect(says).toContain("real network");
+    expect(says).toContain(COPY.terms.anotherAmount);
+  });
+
+  test("an amount beyond a faucet is named as such, with the amount and what a faucet gives", () => {
+    expect(isBeyondAFaucet("400", 5)).toBe(true);
+    expect(isBeyondAFaucet("5", 5)).toBe(false);
+    expect(isBeyondAFaucet("1", 5)).toBe(false);
+    // a chain with no faucet is not a test one, and nothing is said about it
+    expect(isBeyondAFaucet("400", undefined)).toBe(false);
+    // half written, or not a number at all: the page says nothing rather than guessing
+    expect(isBeyondAFaucet("", 5)).toBe(false);
+    expect(isBeyondAFaucet("0.", 5)).toBe(false);
+    expect(isBeyondAFaucet("lots", 5)).toBe(false);
+    const says = COPY.terms.beyondAFaucet("400", "MON", 5);
+    expect(says).toContain("400 MON");
+    expect(says).toContain("about 5 MON a day");
   });
 
   test("a rate that cannot be had is said, and the page asks in the coin", () => {

@@ -64,7 +64,7 @@ export function PayFirstPage({ market, writing }: { readonly market: MarketConfi
             <IdeaStep />
             <LinesStep lines="brief" />
             <LinesStep lines="exam" />
-            <TermsStep coin={market.coin} isPaid={paying.kept !== undefined} canTell={market.lastWord?.tellsByMail === true} />
+            <TermsStep coin={market.coin} faucetGives={market.faucetGives} isPaid={paying.kept !== undefined} canTell={market.lastWord?.tellsByMail === true} />
             <PayFirstStep
               market={market}
               view={{

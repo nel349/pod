@@ -246,6 +246,8 @@ button.add:hover { background: var(--ink); color: var(--yellow); text-decoration
 .price-choice .in-dollars { font: 900 32px/1 var(--shout); }
 .price-choice .in-coins { font: 400 13px/1.2 var(--type); }
 .price-choice .buys { font: 400 13px/1.2 var(--type); opacity: 0.75; }
+/* an amount no faucet wallet can pay is a mistake about to be made, so it is said in the colour of a refusal */
+.beyond-a-faucet { color: var(--pink); font-weight: 500; }
 .price-choice:hover:not(:disabled) { background: var(--ink); color: var(--paper); }
 .price-choice.picked { background: var(--ink); color: var(--yellow); }
 .price-choice.picked .buys { opacity: 0.9; }

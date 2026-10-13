@@ -36,6 +36,12 @@ export const MONAD_TESTNET = {
   /** where anybody can be sent testnet MON, linked from a wallet that is new and empty */
   faucet: "https://faucet.monad.xyz",
   /**
+   * About what that faucet hands one wallet in a day, as it stood on 2026-10-13. It is here because a
+   * price is only a price if somebody can pay it: test money is rationed, so an amount larger than
+   * this can be paid by a wallet that was funded on purpose and by nobody else.
+   */
+  faucetGives: 5,
+  /**
    * How a wallet has to treat the public endpoint above, measured on 2026-10-06 with throwaway
    * wallets. Asked to send for a wallet the instant its money landed, it refuses ("Signer had
    * insufficient balance") and goes on refusing that wallet: still, after five minutes of quiet. A

@@ -14,6 +14,7 @@ import type { Role } from "./job.ts";
 export const STANDARD: readonly string[] = [
   "Build what was meant, and build it for real. Where the job names something real (a wallet, a payment, a mint, signing in, saving, a real service), the delivered work really does it. A mock-up is not a delivery, and a button never looks as if it did something it does not.",
   "Supply what the work needs. Where the job asks for something real and names nothing to do it with, the pod makes it: a mint with no contract named means the pod writes the contract, puts it on a test network with its own money, and builds the work against it.",
+  "Price what the work charges so somebody can really pay it. On a test network the coin is handed out by a faucet, a few at a time, so charge an amount a faucet wallet can pay, say on the page what the price would be on a real network, and say both in your account.",
   "Say what you put where. With the work comes a plain account of everything made outside the repository: each contract or service, its address, who holds it today, and how the poster takes it over or makes their own.",
   "Ask your owner for what only a person can supply: an API key, test money from a faucet, anything that takes an account. Stop, say exactly what you need and why, and go on when you have it. Never build as if you had something you were not given.",
   "What you could not make real, say in a note to the pod before the work is put forward, so the lead and the poster know. Never leave them to find it out on the delivered page.",

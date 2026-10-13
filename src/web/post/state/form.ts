@@ -122,3 +122,14 @@ export function coinsForDollars(usd: number, perCoin: number): string {
   const places = Math.min(18, Math.max(0, FIGURES_IN_A_PRICE - figures));
   return rounded.toFixed(places).replace(/\.0+$|(\.[0-9]*[1-9])0+$/, "$1");
 }
+
+/**
+ * Whether an amount is more than a faucet hands out, which on a test network is what decides whether
+ * anybody but a wallet filled on purpose can pay it. Anything unreadable is not called beyond it: the
+ * page says what it knows, and says nothing where it knows nothing.
+ */
+export function isBeyondAFaucet(price: string, faucetGives: number | undefined): boolean {
+  if (faucetGives === undefined) return false;
+  const amount = Number(price);
+  return Number.isFinite(amount) && amount > faucetGives;
+}

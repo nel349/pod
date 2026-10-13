@@ -52,4 +52,10 @@ describe("the standard a seat is held to", () => {
     expect(whole).toContain("how the poster takes it over or makes their own");
     expect(whole).toContain("a yes with nothing to show for it earns nothing");
   });
+
+  test("a price inside the work has to be payable where the work runs, and say what it would be on a real network", () => {
+    const whole = STANDARD.join("\n");
+    expect(whole).toContain("charge an amount a faucet wallet can pay");
+    expect(whole).toContain("say on the page what the price would be on a real network");
+  });
 });

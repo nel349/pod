@@ -28,6 +28,8 @@ export const MarketConfigSchema = z.object({
   }).optional(),
   /** where a new, empty wallet can be sent the chain's coin, when the chain has such a place */
   faucet: z.url().optional(),
+  /** about what that faucet gives one wallet in a day: what a price on a test network has to fit inside */
+  faucetGives: z.number().positive().optional(),
   /**
    * What a wallet in the page has to allow for when it sends through this chain's endpoint, where
    * the endpoint needs it: one that refuses a wallet whose money it has not caught up with, and then

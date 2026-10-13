@@ -144,6 +144,15 @@ export const COPY = {
     priceInCoins: (amount: string, coin: string) => `${amount} ${coin}`,
     /** where the day's price came from, said beside the choices */
     rateSays: (from: string, coin: string) => `The dollars are today's ${coin} price from ${from}, near enough. What you pay is the ${coin} amount shown, exactly.`,
+    /**
+     * What the dollars leave out on a test network: the coin is not bought, it is handed out, and a
+     * faucet hands out little. Said wherever the chain has a faucet, which is what makes it a test one.
+     */
+    testMoney: (coin: string, gives: number) =>
+      `This is a test network, so the ${coin} is test money: a faucet gives a wallet about ${gives} ${coin} a day. The sizes above are what the work would be worth on a real network. Unless your wallet was filled on purpose, put what it can really pay in Another amount.`,
+    /** said when the amount chosen is more than a faucet hands out, which is what makes it unpayable here */
+    beyondAFaucet: (amount: string, coin: string, gives: number) =>
+      `${amount} ${coin} is more than a faucet gives, which is about ${gives} ${coin} a day. Only a wallet filled on purpose can pay it.`,
     /** without a rate the page asks in the coin, as it always did, and says why there are no dollars */
     noRate: (coin: string) => `Today's ${coin} price could not be read, so this asks in ${coin}.`,
     anotherAmount: "Another amount",

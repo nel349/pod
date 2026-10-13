@@ -2,7 +2,7 @@ import type { ReactElement } from "react";
 import { useFormContext, useWatch } from "react-hook-form";
 import { MODE_NAMES } from "../../../job.ts";
 import { useCoinInDollars, type Rate } from "../hooks/index.ts";
-import { coinsForDollars, COPY, type PostForm } from "../state/index.ts";
+import { coinsForDollars, COPY, isBeyondAFaucet, type PostForm } from "../state/index.ts";
 import { holdEnter } from "./holdEnter.ts";
 import { Step } from "./Step.tsx";
 
@@ -43,14 +43,17 @@ function PriceChoices({ rate, coin }: { readonly rate: Rate; readonly coin: stri
  * What they pay, how long the builders have, and where the job will live on the wall. Once paid for,
  * the price and the time are what the chain holds, so they are shown and no longer changed.
  */
-export function TermsStep({ coin, isPaid = false, canTell = false }: {
+export function TermsStep({ coin, faucetGives, isPaid = false, canTell = false }: {
   readonly coin: string;
+  /** about what a faucet gives a wallet in a day, where the chain has one: a price here has to fit inside it */
+  readonly faucetGives?: number;
   readonly isPaid?: boolean;
   /** this server tells a poster by mail when their job is delivered, so an address is worth asking for */
   readonly canTell?: boolean;
 }): ReactElement {
   const { register, control } = useFormContext<PostForm>();
   const mode = useWatch({ control, name: "mode" });
+  const price = useWatch({ control, name: "price" });
   // today's price, from this server, which reads it from a free endpoint. Nothing waits for it
   const rate = useCoinInDollars();
   return (
@@ -71,6 +74,11 @@ export function TermsStep({ coin, isPaid = false, canTell = false }: {
         </fieldset>
       </div>
       {!isPaid && <p id="price-says" className="note">{rate ? COPY.terms.rateSays(rate.from, coin) : COPY.terms.noRate(coin)}</p>}
+      {/* the dollars say what the work is worth; on a test network they say nothing about what a wallet here can pay */}
+      {!isPaid && faucetGives !== undefined && <p id="test-money" className="note">{COPY.terms.testMoney(coin, faucetGives)}</p>}
+      {!isPaid && faucetGives !== undefined && isBeyondAFaucet(price, faucetGives) && (
+        <p id="beyond-a-faucet" className="note beyond-a-faucet" role="status">{COPY.terms.beyondAFaucet(price, coin, faucetGives)}</p>
+      )}
       <p id="mode-says" className="note mode-says" role="status">{COPY.terms.modeSays[mode]}</p>
       {isPaid && <p className="note paid-fixed">{COPY.terms.paidFixed}</p>}
       <label className="field">
