@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { LONGEST_NOTE } from "../note.ts";
 import { verdictFrom } from "../reference/index.ts";
 import { noteOf } from "../reference/protocol.ts";
-import { whatItSaid, whatWasRunForTests } from "../reference/roles/judgements.ts";
+import { sourcesInForTests, whatItSaid, whatWasRunForTests } from "../reference/roles/judgements.ts";
 import { SERVE_THE_SITE } from "../job.ts";
 import { briefFor } from "../reference/Seated.ts";
 import type { ListedJob } from "../door/index.ts";
@@ -124,5 +127,87 @@ describe("the brief a seat's model reads", () => {
     expect(brief).toContain("The poster answered: The visitor's own.");
     expect(brief).toContain("Not answered, so assumed: Six.");
     expect(briefFor(listed)).not.toContain("The pod asked the person");
+  });
+});
+
+/**
+ * What a judging seat is shown of the work.
+ *
+ * On job 23 the security seat refused a delivery it had found no fault in, because it never saw the
+ * page with the buttons on it: two dozen sprites were read as text, filled the budget, and the files
+ * were read in the order they are named, so index.html came last of all.
+ */
+describe("the files a judging seat reads", () => {
+  const aDelivery = async (files: Record<string, string | Uint8Array>): Promise<string> => {
+    const folder = await mkdtemp(join(tmpdir(), "pod-sources-"));
+    for (const [name, body] of Object.entries(files)) {
+      const path = join(folder, name);
+      await mkdir(dirname(path), { recursive: true });
+      await writeFile(path, body);
+    }
+    try {
+      return await sourcesInForTests(folder);
+    } finally {
+      await rm(folder, { recursive: true, force: true });
+    }
+  };
+  /** A picture: a zero byte in it, which is what tells a picture from a page. */
+  const aPicture = (kb: number): Uint8Array => Uint8Array.from({ length: kb * 1024 }, (_, at) => (at % 7 === 0 ? 0 : 137));
+
+  test("the front page comes first, whatever the other files are called", async () => {
+    const shown = await aDelivery({
+      "site/cards/bulbasaur.html": "<p>bulbasaur</p>",
+      "site/index.html": "<p>the front page</p>",
+      "site/zebra.html": "<p>zebra</p>",
+    });
+    expect(shown.indexOf("site/index.html")).toBeLessThan(shown.indexOf("site/cards/bulbasaur.html"));
+    expect(shown).toContain("the front page");
+  });
+
+  test("a picture is named and its size given, never read as text", async () => {
+    const shown = await aDelivery({ "site/index.html": "<p>hello</p>", "site/img/pikachu.png": aPicture(12) });
+    expect(shown).toContain("hello");
+    expect(shown).toContain("site/img/pikachu.png (12 KB, not text)");
+    // the bytes themselves never reach the model, as mojibake or otherwise
+    expect(shown).not.toContain("\u0089\u0089");
+  });
+
+  test("pictures cannot crowd out the pages: a work of many sprites still shows every page", async () => {
+    const files: Record<string, string | Uint8Array> = { "site/index.html": "<p>the front page</p>" };
+    for (let at = 0; at < 24; at++) {
+      files[`site/cards/card-${at}.html`] = `<p>card ${at}</p>`;
+      files[`site/img/card-${at}.png`] = aPicture(150);
+    }
+    const shown = await aDelivery(files);
+    expect(shown).toContain("the front page");
+    for (let at = 0; at < 24; at++) expect(shown, `card ${at}`).toContain(`<p>card ${at}</p>`);
+  });
+
+  test("what is left out is named with its size, so a seat can say what it did not read", async () => {
+    const shown = await aDelivery({ "site/index.html": "<p>hello</p>", "site/huge.js": "x".repeat(80_000) });
+    expect(shown).toContain("Not shown to you, so you have not read them");
+    expect(shown).toContain("site/huge.js (78 KB)");
+    expect(shown).not.toContain("xxxxxxxxxx".repeat(100));
+  });
+
+  test("what a machine made is named, not read: a compiler's output never crowds out the work", async () => {
+    const shown = await aDelivery({
+      "site/index.html": "<p>the front page</p>",
+      "contract/src/Thing.sol": "contract Thing {}",
+      "contract/out/Thing.sol/Thing.json": `{"bytecode":"${"6080604052".repeat(4000)}"}`,
+      "node_modules/left-pad/index.js": "module.exports = () => {};",
+    });
+    expect(shown).toContain("the front page");
+    expect(shown).toContain("contract Thing {}");
+    expect(shown).toContain("Not read, because a machine made them and nobody wrote them here");
+    expect(shown).toContain("contract/out");
+    expect(shown).toContain("node_modules");
+    // and none of what they hold reaches the model, nor does it spend the room the work needs
+    expect(shown).not.toContain("6080604052");
+    expect(shown).not.toContain("left-pad/index.js");
+  });
+
+  test("a candidate with no files says so rather than saying nothing", async () => {
+    expect(await aDelivery({})).toBe("(nothing: the candidate has no files)");
   });
 });

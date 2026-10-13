@@ -21,10 +21,29 @@ import { DUTIES, STANDARD } from "../../standard.ts";
 import type { Judgement, Waiting } from "./Judge.ts";
 
 /**
- * How much of the work is shown to the model: enough for a service or a website of a few dozen pages,
- * not a repository dump. A judge that is not shown a file cannot stand behind it, and says so.
+ * How much of the work is shown to the model.
+ *
+ * Enough for a real website of a few dozen pages, each carrying its own styles, which is what a pod
+ * delivers: job 23 was 25 pages and 380,000 characters of them. Under that, a seat is handed part of
+ * a delivery and can only refuse it for what it was not shown, which is what happened there. Over
+ * it, every judging call carries a book. A judge that is still not shown a file says which one.
  */
-const MOST_SOURCE_SHOWN = 300_000;
+const MOST_SOURCE_SHOWN = 500_000;
+/**
+ * The front page, which is what a visitor opens and so the one file no judge should ever miss. On
+ * job 23 the security seat never saw it: the files were read in the order they are named, so two
+ * dozen card pages came first, and the budget was gone before index.html.
+ */
+const THE_FRONT_PAGE = "index.html";
+/** A file too big to be worth its room, whatever it holds: shown as a name and a size, like a picture. */
+const LONGEST_FILE_SHOWN = 60_000;
+/**
+ * Folders nobody wrote by hand, which would spend a judge's budget on what a machine made: the
+ * repository's own database, which holds every version of every file, what a package manager
+ * fetched, and what a compiler left behind. They are not read, and the seat is told which of them
+ * were there, so it can say so rather than appear to have read them.
+ */
+const NOT_THE_WORK = [".git", "node_modules", "out", "dist", "build", "coverage", "target", ".next", ".cache", "cache"];
 /** How long a judging seat waits for its model */
 const MODEL_MAY_TAKE_MS = 3 * 60_000;
 /** How much of what a reviewer says it will look at goes into its note */
@@ -232,7 +251,7 @@ const LONGEST_CHECK_PRINTED = 240;
  * any promise that it passed. It says what it did and no more: a check it could not see, and anything
  * a check cannot do, such as pressing a button in a browser, it did not do, and says so.
  */
-export { whatWasRun as whatWasRunForTests };
+export { whatWasRun as whatWasRunForTests, sourcesIn as sourcesInForTests };
 
 function whatWasRun(
   started: string,
@@ -265,20 +284,74 @@ async function askTheModel(seated: Seated, prompt: readonly string[]): Promise<V
   return verdictFrom(await seated.model(prompt.join("\n"), AbortSignal.timeout(MODEL_MAY_TAKE_MS)));
 }
 
-/** Every file of the work, as the model reads it, up to a limit it says it reached. */
+/**
+ * Every file of the work, as the model reads it, and a plain list of the ones it is not shown.
+ *
+ * Three rules, each learned from a delivery that defeated the version before it:
+ *
+ * - a picture is not read as text. Two dozen sprites read as UTF-8 filled the whole budget with
+ *   mojibake on job 23, and the pages they belong to were dropped to make room for them.
+ * - the front page goes first, then the rest in the order they are named. A budget spent in
+ *   alphabetical order spends itself on whatever happens to sort early.
+ * - what is left out is named, with its size, rather than counted. A seat that cannot see a file
+ *   has to be able to say which file, and the poster has to be able to read that and judge it.
+ */
 async function sourcesIn(folder: string): Promise<string> {
   const parts: string[] = [];
+  const leftOut: string[] = [];
   let shown = 0;
-  for (const path of await filesUnder(folder)) {
-    const text = await readFile(path, "utf8");
-    if (shown + text.length > MOST_SOURCE_SHOWN) {
-      parts.push(`(more files follow, not shown: the work is larger than ${MOST_SOURCE_SHOWN} characters)`);
-      break;
+  const made = await madeByAMachineIn(folder);
+  for (const path of inReadingOrder(folder, await filesUnder(folder))) {
+    const name = relative(folder, path);
+    const raw = await readFile(path);
+    const text = raw.toString("utf8");
+    if (!isText(raw)) {
+      leftOut.push(`${name} (${sizeOf(raw.length)}, not text)`);
+      continue;
+    }
+    if (text.length > LONGEST_FILE_SHOWN || shown + text.length > MOST_SOURCE_SHOWN) {
+      leftOut.push(`${name} (${sizeOf(raw.length)})`);
+      continue;
     }
     shown += text.length;
-    parts.push(`### ${relative(folder, path)}`, "```", text, "```");
+    parts.push(`### ${name}`, "```", text, "```");
+  }
+  if (leftOut.length > 0) {
+    parts.push(`### Not shown to you, so you have not read them: ${leftOut.join(", ")}`);
+  }
+  if (made.length > 0) {
+    parts.push(`### Not read, because a machine made them and nobody wrote them here: ${made.join(", ")}`);
   }
   return parts.length > 0 ? parts.join("\n") : "(nothing: the candidate has no files)";
+}
+
+/** Which of the folders a machine makes are in this work, named so the seat can say it did not read them. */
+async function madeByAMachineIn(folder: string, within = ""): Promise<readonly string[]> {
+  const found: string[] = [];
+  for (const name of (await readdir(folder)).sort()) {
+    const path = join(folder, name);
+    if (!(await lstat(path)).isDirectory()) continue;
+    if (NOT_THE_WORK.includes(name)) found.push(join(within, name));
+    else found.push(...(await madeByAMachineIn(path, join(within, name))));
+  }
+  return found;
+}
+
+/** The front page first, since it is what a visitor opens, then every other file in the order it is named. */
+function inReadingOrder(folder: string, paths: readonly string[]): readonly string[] {
+  const front = paths.filter((path) => relative(folder, path).split("/").at(-1) === THE_FRONT_PAGE)
+    .sort((one, other) => relative(folder, one).length - relative(folder, other).length);
+  return [...front, ...paths.filter((path) => !front.includes(path))];
+}
+
+/** Whether a file is text at all: anything holding a zero byte is a picture, an archive or a binary. */
+function isText(raw: Buffer): boolean {
+  return !raw.includes(0);
+}
+
+/** A size a person reads, for the list of what a seat was not shown. */
+function sizeOf(bytes: number): string {
+  return bytes < 1024 ? `${bytes} bytes` : `${Math.round(bytes / 1024)} KB`;
 }
 
 /**
@@ -291,6 +364,7 @@ async function filesUnder(folder: string): Promise<readonly string[]> {
   for (const name of (await readdir(folder)).sort()) {
     const path = join(folder, name);
     const what = await lstat(path);
+    if (what.isDirectory() && NOT_THE_WORK.includes(name)) continue;
     if (what.isDirectory()) found.push(...(await filesUnder(path)));
     else if (what.isFile()) found.push(path);
   }
