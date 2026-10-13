@@ -202,34 +202,50 @@ export const qaRunning: Judgement = async (seated, files) => {
     await readableToTheBox(checks);
     await readableToTheBox(files);
     const toRun: CheckToRun[] = visible.map((check) => ({ says: check.says, command: check.run, hidden: false }));
+    const started = startFor(seated.listed.kind);
     const graded = await grade({
-      artefact: files, start: startFor(seated.listed.kind), checks, toRun, image: seated.image,
+      artefact: files, start: started, checks, toRun, image: seated.image,
       allowedHosts: seated.listed.allowedHosts.map((allowed) => allowed.host),
     });
     const failed = graded.checks.filter((check) => check.exitCode !== 0);
     if (graded.passed && failed.length === 0) {
-      return { approve: true, why: `every visible check passes: ${graded.checks.map((check) => check.says).join("; ")}`, account: whatWasRun(graded.checks) };
+      return { approve: true, why: `every visible check passes: ${graded.checks.map((check) => check.says).join("; ")}`, account: whatWasRun(started, graded.target, graded.checks) };
     }
     return {
       approve: false,
       why: failed.map((check) => `"${check.says}" failed: ${whatItSaid(check.output) ?? `exit ${check.exitCode}`}`).join("; ")
         || "the work did not start",
-      account: whatWasRun(graded.checks),
+      account: whatWasRun(started, graded.target, graded.checks),
     };
   } finally {
     await rm(checks, { recursive: true, force: true });
   }
 };
 
+/** How much of what one check printed goes into QA's account: enough to show it really ran */
+const LONGEST_CHECK_PRINTED = 240;
+
 /**
- * QA's account: each check it ran against the work, started for real in a sealed box, and how each
- * ended. It says what it did and no more: a check it could not see, and anything a check cannot do,
- * such as pressing a button in a browser, it did not do, and says so.
+ * QA's account: each check it ran against the work, started for real in a sealed box, with what only
+ * a seat that ran it can give. The command, the address it was pointed at, how long it took, what it
+ * exited with and what it printed: a line of it that names the work's own words is worth more than
+ * any promise that it passed. It says what it did and no more: a check it could not see, and anything
+ * a check cannot do, such as pressing a button in a browser, it did not do, and says so.
  */
-function whatWasRun(checks: readonly { readonly says: string; readonly exitCode: number; readonly output: string }[]): string {
+export { whatWasRun as whatWasRunForTests };
+
+function whatWasRun(
+  started: string,
+  target: string,
+  checks: readonly { readonly says: string; readonly command: string; readonly exitCode: number; readonly output: string; readonly seconds: number }[],
+): string {
   return [
-    "Started the work in a sealed box and ran each check the poster's lines were given, from a second box:",
-    ...checks.map((check) => `- "${check.says}": ${check.exitCode === 0 ? "passed" : `failed, ${whatItSaid(check.output) ?? `exit ${check.exitCode}`}`}`),
+    `Started the work for real in a sealed box with \`${started}\`, and ran each check the poster's lines were given from a second box, with TARGET=${target}:`,
+    ...checks.map((check) => [
+      `- "${check.says}"`,
+      `  ran: ${check.command}, ${check.seconds.toFixed(1)}s, exit ${check.exitCode} (${check.exitCode === 0 ? "passed" : "failed"})`,
+      `  it printed: ${(check.output.trim() || "nothing").replaceAll("\n", " | ").slice(0, LONGEST_CHECK_PRINTED)}`,
+    ].join("\n")),
     "Not done by this seat: the checks sealed until the verdict, and anything a check does not do, such as opening the pages in a browser and pressing what they offer.",
   ].join("\n");
 }

@@ -10,7 +10,7 @@ Built for Monad Metropolis, track 04. Work starts 16 September 2026; every commi
 
 **Live at https://vps-39a35c60.vps.ovh.us**, on Monad testnet.
 
-**Where this stands.** On 12 October 2026 (UTC) the third jobs contract replaced the second, and later the same day the fourth replaced the third: the poster has the last word, and inside the pod the lead names which seats earned their pay. Jobs 1 to 19 ran on the first two contracts, where the checks alone decided who was paid, and everything this page says of them is still true of them. Jobs 20 and 21 ran on the third: 21 was built, delivered, accepted by its poster and claimed. Nothing has run on the fourth yet, so what it adds is proved here by tests and by a rehearsal, not by a job on the chain; each row says which.
+**Where this stands.** On 12 October 2026 (UTC) the third jobs contract replaced the second, and later the same day the fourth replaced the third: the poster has the last word, and inside the pod the lead names which seats earned their pay. Jobs 1 to 19 ran on the first two contracts, where the checks alone decided who was paid, and everything this page says of them is still true of them. Jobs 20 and 21 ran on the third: 21 was built, delivered, accepted by its poster and claimed. Job 22 ran on the fourth, the first to: a pod built a coffee cart's page, its lead named who earned their pay and kept one seat from it, and its poster refused the work although the checks passed.
 
 ![How a job runs, from the idea to the money](docs/architecture.svg)
 

@@ -53,8 +53,8 @@ async function report(over: Partial<Receipt> = {}): Promise<GradeReport> {
     score: receipt.verdict === "passed" ? 100 : 0,
     tag: "pod.tests",
     rounds: [
-      { checks: [], passed: true, artefactLog: "", seconds: 2 },
-      { checks: [], passed: true, artefactLog: "", seconds: 3 },
+      { checks: [], passed: true, target: "http://pod-art-1:3000", artefactLog: "", seconds: 2 },
+      { checks: [], passed: true, target: "http://pod-art-1:3000", artefactLog: "", seconds: 3 },
     ],
   };
 }

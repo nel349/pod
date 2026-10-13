@@ -182,10 +182,13 @@ describe.skipIf(!available)("a website, where the lead names who is paid", () =>
         expect(asked[role]?.some((prompt) => prompt.includes(DUTIES[role]))).toBe(true);
       }
       // the reviewer was shown what the other seats said, and the lead what each seat's account was and what its seat is for
-      expect(asked.reviewer?.some((prompt) => prompt.includes("### The qa seat says") && prompt.includes("Started the work in a sealed box"))).toBe(true);
+      // and what QA sent it is an account with evidence in it: the command it ran and what the check printed
+      expect(asked.reviewer?.some((prompt) => prompt.includes("### The qa seat says") && /ran: node check-1\.mjs, [0-9.]+s, exit 0 \(passed\)/.test(prompt) && prompt.includes("it printed:"))).toBe(true);
       expect(asked.lead?.some((prompt) => prompt.includes("## security 1") && prompt.includes("APPROVE it is safe") === false && prompt.includes("Approved: it is safe"))).toBe(true);
       // QA's account says what it ran, and what it did not do
-      expect(notes.some((note) => note.role === "qa" && note.says.includes('- "The front page shows the cards": passed') && note.says.includes("Not done by this seat"))).toBe(true);
+      expect(notes.some((note) => note.role === "qa" && note.says.includes('- "The front page shows the cards"')
+        && /ran: node check-1\.mjs, [0-9.]+s, exit 0 \(passed\)/.test(note.says) && note.says.includes("it printed:")
+        && note.says.includes("Not done by this seat"))).toBe(true);
 
       await until("the website going live", said, async () => (await pod$.store.read(JOB))?.live !== undefined);
       const delivered = await pod$.store.read(JOB);

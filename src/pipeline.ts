@@ -77,6 +77,8 @@ async function aRound(job: GradeJob): Promise<GradeOutcome> {
     return {
       checks: job.toRun.map((check) => ({ ...check, exitCode: WORK_NEVER_STARTED, output: error.message, seconds: 0 })),
       passed: false,
+      // the work never answered, so no check was ever pointed at it
+      target: "",
       artefactLog: error.message,
       seconds: (Date.now() - started) / 1000,
     };

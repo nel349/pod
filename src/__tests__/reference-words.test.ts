@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { LONGEST_NOTE } from "../note.ts";
 import { verdictFrom } from "../reference/index.ts";
 import { noteOf } from "../reference/protocol.ts";
-import { whatItSaid } from "../reference/roles/judgements.ts";
+import { whatItSaid, whatWasRunForTests } from "../reference/roles/judgements.ts";
+import { SERVE_THE_SITE } from "../job.ts";
 import { briefFor } from "../reference/Seated.ts";
 import type { ListedJob } from "../door/index.ts";
 
@@ -33,6 +34,38 @@ describe("a model's verdict", () => {
     expect(verdictFrom("It looks fine to me").approve).toBe(false);
     expect(verdictFrom("Approved, mostly").approve).toBe(false);
     expect(verdictFrom("").approve).toBe(false);
+  });
+});
+
+describe("what QA's account says", () => {
+  /** the shape QA writes after really running the checks, with what the grader hands back */
+  const anAccount = (): string => whatWasRunForTests(SERVE_THE_SITE, "http://pod-art-7f3:3000", [
+    { says: "The page names the cart and lists at least six drinks, each with a price", command: "node check-1.mjs", exitCode: 0, output: "the front page names Corner Cart and lists 8 drinks with prices\n", seconds: 0.42 },
+    { says: "The page says the opening hours for each day of the week", command: "node check-2.mjs", exitCode: 1, output: "Saturday is missing from the hours\n", seconds: 0.31 },
+  ]);
+
+  test("it says how the work was started, where the checks reached it, and for each one the command, the time, the exit and what it printed", () => {
+    const account = anAccount();
+    // what only a seat that really ran them can give: the lead cut a seat for leaving these out
+    expect(account).toContain(SERVE_THE_SITE);
+    expect(account).toContain("TARGET=http://pod-art-7f3:3000");
+    expect(account).toContain("ran: node check-1.mjs, 0.4s, exit 0 (passed)");
+    expect(account).toContain("ran: node check-2.mjs, 0.3s, exit 1 (failed)");
+    expect(account).toContain("it printed: the front page names Corner Cart and lists 8 drinks with prices");
+    expect(account).toContain("it printed: Saturday is missing from the hours");
+    // and it still says what it did not do, so nobody reads it as more than it is
+    expect(account).toContain("Not done by this seat");
+  });
+
+  test("a check that printed nothing says so rather than leaving a gap, and a flood is cut", () => {
+    const quiet = whatWasRunForTests("node server.js", "http://pod-art-1:3000", [
+      { says: "it answers", command: "node check-1.mjs", exitCode: 0, output: "   ", seconds: 0.1 },
+    ]);
+    expect(quiet).toContain("it printed: nothing");
+    const flood = whatWasRunForTests("node server.js", "http://pod-art-1:3000", [
+      { says: "it answers", command: "node check-1.mjs", exitCode: 0, output: "x".repeat(5_000), seconds: 0.1 },
+    ]);
+    expect(flood.length).toBeLessThan(1_000);
   });
 });
 

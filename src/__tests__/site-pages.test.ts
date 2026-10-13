@@ -504,6 +504,8 @@ describe("a job delivered to a poster who has the last word", () => {
     expect(view.delivery?.paidOnAcceptance).toBe("18000000000000000000");
     expect(view.delivery?.keptOnRefusal).toBe("4500000000000000000");
     expect(view.seats.find((seat) => seat.role === "security")?.isKeptFromPay).toBe(true);
+    // and the page says beside its share where that money goes, so the figure is not read as money it gets
+    expect(SITE.job.behind.payGoesBack).toContain("goes back to whoever posted the job");
     expect(view.seats.find((seat) => seat.role === "reviewer")?.isKeptFromPay).toBeUndefined();
     expect(whoStandsBehindIt(view.delivery!)).toBe("Its builder put it forward, and the whole pod stands behind it. The lead read what each seat said it did and named who earned their pay. Security was not named, so its share goes back to whoever posted the job.");
     expect(whoStandsBehindIt({ behind: [...SEATS], notBehind: [], keptFromPay: ["reviewer", "qa"] }))

@@ -562,6 +562,8 @@ export const SITE = {
       stands: "stands behind it",
       doesNot: "did not stand behind it",
       keptFromPay: "The lead did not name it for pay",
+      /** said beside the share of a seat the lead did not name, so the figure is not read as money it gets */
+      payGoesBack: "not paid: it goes back to whoever posted the job",
       leadKept: (seats: string, count: number) => `The lead read what each seat said it did and named who earned their pay. ${seats} ${count === 1 ? "was" : "were"} not named, so ${count === 1 ? "its" : "their"} share goes back to whoever posted the job.`,
       alone: "Its builder put it forward. No other seat was taken.",
       wholePod: "Its builder put it forward, and the whole pod stands behind it.",

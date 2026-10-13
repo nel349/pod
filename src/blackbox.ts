@@ -80,6 +80,8 @@ export function lastSaid(output: string): string | undefined {
 export interface GradeOutcome {
   readonly checks: readonly CheckOutcome[];
   readonly passed: boolean;
+  /** where every check was pointed at the work, which is the address its own box answered on */
+  readonly target: string;
   /** what the artefact printed while it ran, which is where an undeclared call shows up */
   readonly artefactLog: string;
   readonly seconds: number;
@@ -147,6 +149,8 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
   const id = randomUUID().slice(0, 8);
   const network = `pod-net-${id}`;
   const artefactName = `pod-art-${id}`;
+  // where the checks reach it: its box by name, on the one port every job answers on
+  const target = `http://${artefactName}:${PORT}`;
   const started = Date.now();
   const label = `${GRADING_LABEL}=${id}`;
 
@@ -186,7 +190,7 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
         "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
         "--read-only", "--tmpfs", "/tmp:rw,size=64m",
         "-v", `${request.checks}:/checks:ro`,
-        "-e", `TARGET=http://${artefactName}:${PORT}`,
+        "-e", `TARGET=${target}`,
         request.image,
         "sh", "-c", checkScript(check.command, checkSeconds),
       ], checkSeconds + CHECK_KILL_GRACE_SECONDS + DOCKER_ANSWER_SECONDS, checkName);
@@ -206,6 +210,7 @@ export async function grade(request: GradeRequest): Promise<GradeOutcome> {
     return {
       checks: outcomes,
       passed: outcomes.every((o) => o.exitCode === 0),
+      target,
       artefactLog: log.out,
       seconds: (Date.now() - started) / 1000,
     };

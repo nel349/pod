@@ -142,14 +142,32 @@ function ownWorkFor(seated: Seated): SeatWork {
   }
 }
 
-/** Look for a job with this role free and this owner not in its pod, and take the seat. */
+/**
+ * The seat this agent already holds, if it does: one it took before it was last stopped. A seat is
+ * held by a key, not by a process, so an agent that is started again carries on with the work rather
+ * than waiting for a seat that will never be free, and nothing of the job's time is lost to a restart.
+ */
+function seatAlreadyHeld(jobs: readonly ListedJob[], identity: Identity, options: ReferenceAgentOptions): ListedJob | undefined {
+  return jobs.find((job) => (options.jobId === undefined || job.jobId === options.jobId)
+    && job.seats.some((seat) => seat.role === options.role && seat.heldBy !== undefined
+      // its own key, or its owner's wallet where the wallet took the seat and granted the key
+      && (isAddressEqual(seat.heldBy.agent, identity.address) || isAddressEqual(seat.heldBy.agent, identity.ownerAddress))));
+}
+
+/** Carry on with the seat this agent holds, or look for a job with this role free and take it. */
 async function takeASeat(
   server: PodServer, identity: Identity, options: ReferenceAgentOptions, say: (what: string) => void, every: number,
 ): Promise<ListedJob | undefined> {
   while (!options.signal?.aborted) {
     let open: readonly ListedJob[] = [];
     try {
-      open = (await server.jobs()).jobs.filter((job) =>
+      const listed = (await server.jobs()).jobs;
+      const held = seatAlreadyHeld(listed, identity, options);
+      if (held) {
+        say(`already holds the ${options.role} seat on ${held.jobId}, from before it was stopped, and carries on with it`);
+        return held;
+      }
+      open = listed.filter((job) =>
         (options.jobId === undefined || job.jobId === options.jobId)
         && job.free.includes(options.role)
         && !job.owners.some((seated) => isAddressEqual(seated, identity.ownerAddress)));
