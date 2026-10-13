@@ -13,7 +13,7 @@ import { Step } from "./Step.tsx";
  * and the coin amount is what is paid: picking one writes that amount into the price. Without today's
  * price there are no dollars to show, and the page asks in the coin, as it always did.
  */
-function PriceChoices({ rate, coin, isPaid }: { readonly rate: Rate; readonly coin: string; readonly isPaid: boolean }): ReactElement {
+function PriceChoices({ rate, coin }: { readonly rate: Rate; readonly coin: string }): ReactElement {
   const { control, setValue } = useFormContext<PostForm>();
   const price = useWatch({ control, name: "price" });
   return (
@@ -27,7 +27,6 @@ function PriceChoices({ rate, coin, isPaid }: { readonly rate: Rate; readonly co
             id={`price-${choice.usd}`}
             className={price === amount ? "price-choice picked" : "price-choice"}
             aria-pressed={price === amount}
-            disabled={isPaid}
             onClick={() => setValue("price", amount, { shouldValidate: true, shouldDirty: true })}
           >
             <span className="in-dollars">{COPY.terms.priceInDollars(choice.usd)}</span>
@@ -56,7 +55,7 @@ export function TermsStep({ coin, isPaid = false, canTell = false }: {
   const rate = useCoinInDollars();
   return (
     <Step name="terms" title={COPY.terms.title}>
-      {rate && !isPaid && <PriceChoices rate={rate} coin={coin} isPaid={isPaid} />}
+      {rate && !isPaid && <PriceChoices rate={rate} coin={coin} />}
       <div className="terms">
         <label className="field">
           {rate && !isPaid ? COPY.terms.anotherAmount : COPY.terms.price}

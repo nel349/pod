@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { A_RATE_IS_KEPT_FOR_MS, ratesFromCoinGecko } from "../prices.ts";
-import { coinsForDollars } from "../web/post/state/form.ts";
+import { coinsForDollars, priceInWei } from "../web/post/state/form.ts";
 import { MONAD_TESTNET } from "../registry.ts";
 import { COPY } from "../web/post/state/copy.ts";
 
@@ -57,8 +57,15 @@ describe("the prices a poster is offered", () => {
     expect(COPY.terms.priceChoices.map((choice) => coinsForDollars(choice.usd, 0.0242))).toEqual(["410", "1000", "4100"]);
     // and a coin worth dollars, where the same prices are a handful of them
     expect(COPY.terms.priceChoices.map((choice) => coinsForDollars(choice.usd, 2.5))).toEqual(["4", "10", "40"]);
-    // every one is an amount the posting form takes as a price
-    for (const choice of COPY.terms.priceChoices) expect(coinsForDollars(choice.usd, 0.0242)).toMatch(/^[0-9]+(\.[0-9]+)?$/);
+    // and whatever one coin is worth, every price offered is an amount the form and the chain take:
+    // a plain number, never a power of ten, and never nothing
+    for (const perCoin of [0.0242, 0.5, 2.5, 123.456, 0.0000001, 1_000_000]) {
+      for (const choice of COPY.terms.priceChoices) {
+        const amount = coinsForDollars(choice.usd, perCoin);
+        expect(amount, `$${choice.usd} at ${perCoin}`).toMatch(/^[0-9]+(\.[0-9]+)?$/);
+        expect(priceInWei(amount), `$${choice.usd} at ${perCoin}`).toBeGreaterThan(0n);
+      }
+    }
   });
 
   test("three prices, in dollars, each saying what it buys", () => {
@@ -66,13 +73,14 @@ describe("the prices a poster is offered", () => {
     expect(COPY.terms.priceChoices.map((choice) => choice.usd)).toEqual([10, 25, 100]);
     for (const choice of COPY.terms.priceChoices) expect(choice.buys.length).toBeGreaterThan(2);
     expect(COPY.terms.priceInDollars(25)).toBe("$25");
-    expect(COPY.terms.priceInCoins("1,000", "MON")).toBe("about 1,000 MON");
+    // the coin amount is exactly what is charged, so nothing in front of it says otherwise
+    expect(COPY.terms.priceInCoins("1,000", "MON")).toBe("1,000 MON");
   });
 
   test("a rate that cannot be had is said, and the page asks in the coin", () => {
     expect(COPY.terms.noRate("MON")).toContain("asks in MON");
     expect(COPY.terms.rateSays("CoinGecko", "MON")).toContain("CoinGecko");
-    expect(COPY.terms.rateSays("CoinGecko", "MON")).toContain("You pay the MON amount shown");
+    expect(COPY.terms.rateSays("CoinGecko", "MON")).toContain("What you pay is the MON amount shown, exactly");
     expect(COPY.terms.anotherAmount).toBe("Another amount");
   });
 });

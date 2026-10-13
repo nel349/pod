@@ -201,13 +201,13 @@ export async function handle(request: Request, store: JobStore, { site, market, 
     return jobList ? await jobList.handle() : Response.json({ why: "there is no job list on this server: it answers to no contract" }, { status: 404 });
   }
 
-  // the posting page itself is a bundled app served by `serve`; this is what it reads first
   // what the coin is worth, asked by the posting page on its own: it changes, and the market does not
   if (pathname === ROUTES.price) {
     const rate = await market?.rates?.now();
     return rate ? Response.json(rate, { headers: NO_STORE }) : Response.json({ why: "the coin's price in dollars could not be read" }, { status: 503, headers: NO_STORE });
   }
 
+  // the posting page itself is a bundled app served by `serve`; this is what it reads first
   if (pathname === ROUTES.market) {
     if (!market) return Response.json({ why: "posting is not open on this server: it has no contract to post to" }, { status: 404 });
     return Response.json(market.page);

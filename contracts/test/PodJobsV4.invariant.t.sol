@@ -232,6 +232,23 @@ contract PodJobsV4Handler is Test {
         } catch {}
     }
 
+    /// @dev The lead concludes while keeping one seat from the pay: it names every seat behind the
+    ///      work but the first. Its own action because a random mask almost always names them all or
+    ///      names nobody, and the money a cut moves is the thing these invariants are here to watch.
+    function concludeKeepingPayFromOne(uint256 seed) external {
+        uint256 id = _job(seed);
+        if (jobs.seatCount(id, PodJobsV4.Role.Lead) == 0) return;
+        uint256 behind = _behind(id);
+        if (behind == 0) return;
+        address lead = jobs.seatAt(id, PodJobsV4.Role.Lead, 0).agent;
+        vm.prank(lead);
+        // every bit but the lowest: the seat that bit stands for is behind the work and goes unpaid
+        try jobs.conclude(id, _commitOf(id), behind & (behind - 1), keccak256(abi.encode("one seat kept", id))) {
+            reached["concluded"]++;
+            reached["concluded naming fewer"]++;
+        } catch {}
+    }
+
     /// @dev somebody who is not the job's lead tries to conclude its review, which never works
     function concludeAsSomebodyElse(uint256 seed, uint256 agentSeed, uint256 named) external {
         uint256 id = _job(seed);
@@ -441,7 +458,13 @@ contract PodJobsV4InvariantTest is PodJobsV4Fixture {
         handler = new PodJobsV4Handler(jobs, validator, writer, writerKey);
         targetContract(address(handler));
         // only what somebody can do, not the handler's own bookkeeping
-        bytes4[] memory actions = new bytes4[](37);
+        bytes4[] memory actions = new bytes4[](43);
+        actions[41] = PodJobsV4Handler.concludeKeepingPayFromOne.selector;
+        actions[42] = PodJobsV4Handler.concludeKeepingPayFromOne.selector;
+        actions[37] = PodJobsV4Handler.post.selector;
+        actions[38] = PodJobsV4Handler.approveChecks.selector;
+        actions[39] = PodJobsV4Handler.fillAndLock.selector;
+        actions[40] = PodJobsV4Handler.conclude.selector;
         actions[0] = PodJobsV4Handler.post.selector;
         actions[1] = PodJobsV4Handler.topUp.selector;
         actions[2] = PodJobsV4Handler.reserveWriting.selector;
@@ -688,6 +711,10 @@ contract PodJobsV4InvariantTest is PodJobsV4Fixture {
     ///         without an account, and no seat was ever named that was not behind the work.
     /// forge-config: default.invariant.runs = 64
     /// forge-config: default.invariant.depth = 300
+    /// @dev These are counters of what went wrong, so they are zero on a campaign that went nowhere
+    ///      as surely as on one where everything held. Random sequences reach a conclusion, and an
+    ///      ending with pay kept from a seat, in some campaigns and not others, which is why what
+    ///      proves those paths are reached is the walk in order below, and not these.
     function invariant_everyEndingPaysExactlyWhoEarnedIt_andWhatIsKeptGoesToThePoster() public view {
         assertEq(handler.reached("an ending paid a wrong amount"), 0);
         assertEq(handler.reached("earns is not what is paid"), 0);

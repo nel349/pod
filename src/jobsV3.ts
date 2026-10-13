@@ -15,7 +15,7 @@
  * Like the others, it adds no rules of its own: the contract decides.
  */
 import { parseAbi, type Address, type Hex } from "viem";
-import { MOST_BLOCKS_A_LOG_READ_COVERS, type Contract } from "./jobs.ts";
+import { answersTo, MOST_BLOCKS_A_LOG_READ_COVERS, type Contract } from "./jobs.ts";
 import type { ContractV2, VerdictOnChain } from "./jobsV2.ts";
 
 export const podJobsV3Abi = parseAbi([
@@ -119,9 +119,8 @@ async function call(at: Contract, functionName: "accept" | "refuse" | "settleUna
  * Whether the poster has the last word on this contract: asked of the contract itself, which answers
  * how long a poster has only if it is one that gives them the time.
  */
-export async function hasTheLastWord(at: ContractV2): Promise<boolean> {
-  return at.publicClient.readContract({ address: at.address, abi: podJobsV3Abi, functionName: "answerTime" })
-    .then(() => true, () => false);
+export function hasTheLastWord(at: ContractV2): Promise<boolean> {
+  return answersTo(at.publicClient.readContract({ address: at.address, abi: podJobsV3Abi, functionName: "answerTime" }));
 }
 
 /**
@@ -129,9 +128,8 @@ export async function hasTheLastWord(at: ContractV2): Promise<boolean> {
  * contract itself, which says what share of a job's window a review is only if a builder puts its
  * own work forward there.
  */
-export async function isPutForwardByItsBuilder(at: ContractV2): Promise<boolean> {
-  return at.publicClient.readContract({ address: at.address, abi: podJobsV3Abi, functionName: "REVIEW_SHARE_PERCENT" })
-    .then(() => true, () => false);
+export function isPutForwardByItsBuilder(at: ContractV2): Promise<boolean> {
+  return answersTo(at.publicClient.readContract({ address: at.address, abi: podJobsV3Abi, functionName: "REVIEW_SHARE_PERCENT" }));
 }
 
 /** How long a review is, in percent of the job's window. */

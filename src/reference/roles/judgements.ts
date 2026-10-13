@@ -189,7 +189,11 @@ export const qaRunning: Judgement = async (seated, files) => {
   const visible = seated.listed.visibleChecks.filter((check): check is typeof check & { file: string; url: string } =>
     check.url !== undefined && check.file !== undefined);
   if (visible.length === 0) {
-    return { approve: true, why: "this job has no visible checks to run; the sealed ones decide it at the verdict" };
+    return {
+      approve: true,
+      why: "this job has no visible checks to run; the sealed ones decide it at the verdict",
+      account: "Every line this poster wrote is kept from the pod until the verdict, so this seat was shown no check to run. It ran none and claims none. The sealed checks are run by the grader, on the same work, before the poster sees it.",
+    };
   }
   const checks = await mkdtemp(join(tmpdir(), "pod-qa-checks-"));
   try {

@@ -10,7 +10,7 @@
  * Like the others, it adds no rules of its own: the contract decides.
  */
 import { keccak256, parseAbi, toHex, type Address, type Hex } from "viem";
-import { roleNumber, type Contract } from "./jobs.ts";
+import { answersTo, roleNumber, type Contract } from "./jobs.ts";
 import type { Role } from "./job.ts";
 import type { ContractV2 } from "./jobsV2.ts";
 
@@ -88,9 +88,8 @@ async function sent(at: Contract, hash: Hex): Promise<Hex> {
  * Whether the lead names who is paid on this contract: asked of the contract itself, which says
  * whether a job's review was concluded only if a lead can conclude one there.
  */
-export async function doesTheLeadNameWhoIsPaid(at: ContractV2): Promise<boolean> {
-  return at.publicClient.readContract({ address: at.address, abi: podJobsV4Abi, functionName: "concluded", args: [0n] })
-    .then(() => true, () => false);
+export function doesTheLeadNameWhoIsPaid(at: ContractV2): Promise<boolean> {
+  return answersTo(at.publicClient.readContract({ address: at.address, abi: podJobsV4Abi, functionName: "concluded", args: [0n] }));
 }
 
 /** Stand behind the commit put forward, as a reviewer, QA or security seat, binding the account written of it. */

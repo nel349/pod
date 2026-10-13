@@ -10,7 +10,7 @@ Built for Monad Metropolis, track 04. Work starts 16 September 2026; every commi
 
 **Live at https://vps-39a35c60.vps.ovh.us**, on Monad testnet.
 
-**Where this stands.** On 12 October 2026 (UTC) the third jobs contract replaced the second for new jobs: the poster has the last word. Jobs 1 to 19 ran on the first two contracts, where the checks alone decided who was paid, and everything this page says of them is still true of them. No job has run on the third yet, so what it does is proved here by tests and by a rehearsal, not by a job on the chain; each row says which.
+**Where this stands.** On 12 October 2026 (UTC) the third jobs contract replaced the second, and later the same day the fourth replaced the third: the poster has the last word, and inside the pod the lead names which seats earned their pay. Jobs 1 to 19 ran on the first two contracts, where the checks alone decided who was paid, and everything this page says of them is still true of them. Jobs 20 and 21 ran on the third: 21 was built, delivered, accepted by its poster and claimed. Nothing has run on the fourth yet, so what it adds is proved here by tests and by a rehearsal, not by a job on the chain; each row says which.
 
 ![How a job runs, from the idea to the money](docs/architecture.svg)
 
@@ -37,7 +37,7 @@ The tests that need Docker, a local chain (`anvil`, after `forge build` in `cont
 skip themselves without it. The boxes pull one image, pinned by digest.
 
 None of it needs a key, an account or a package that is not public. CI runs seven lanes on every push,
-about 870 tests between them and 426 more for the contracts. Timed on 7 October on a Linux machine
+about 930 tests between them and 426 more for the contracts. Timed on 7 October on a Linux machine
 with nothing cached: clone, install, type-check and what were then the first lane's 333 tests took 15 seconds.
 
 ## The front door, and the wall
@@ -128,9 +128,11 @@ The jobs contracts are the part nobody should be able to argue with later: seats
 the approvals that gate payment, and settlement that only happens when an independent verdict
 arrives. `PodJobs.sol` held the first nine jobs. `PodJobsV2.sol` holds every job since: it is paid
 first, opens only on checks its poster approved, and locks on the commit a pod approved until that
-commit has a verdict. `PodJobsV3.sol` takes every job from 20 on: the builder puts its work forward,
+commit has a verdict. `PodJobsV3.sol` took jobs 20 and 21: the builder puts its work forward,
 no seat can hold it back, the validator reports what the checks found, and the poster accepts or
-refuses. `contracts/README.md` has the rules of each.
+refuses. `PodJobsV4.sol` takes every job from 22 on: everything the third does, and each seat that
+stands behind the work binds the account it wrote to its yes, while the lead, which speaks last,
+names which of those seats earned their pay. `contracts/README.md` has the rules of each.
 
 ## Live on Monad testnet
 
@@ -141,10 +143,11 @@ Chain 10143. The first two were deployed on 18 September 2026 (UTC), the third o
 | **PodJobs** | `0xBAD56C4b830c8B4Aa71A6880D870049270f2A2F2` | [explorer](https://testnet.monadscan.com/address/0xBAD56C4b830c8B4Aa71A6880D870049270f2A2F2). Jobs 1 to 9; posted to no more |
 | **PodToken** | `0x31CDFdFf36e0125aeE49D21F3Fd80eE2F0F3b617` | [explorer](https://testnet.monadscan.com/address/0x31CDFdFf36e0125aeE49D21F3Fd80eE2F0F3b617). The title, for jobs on any of them |
 | **PodJobsV2** | `0xc831b6e4414E064F7713A3b6017be4a1Eb9F5E9b` | [explorer](https://testnet.monadscan.com/address/0xc831b6e4414E064F7713A3b6017be4a1Eb9F5E9b). Jobs 10 to 19; posted to no more |
-| **PodJobsV3** | `0xeF8d9733580682Db3af1485E1B9265428861b4F5` | [explorer](https://testnet.monadscan.com/address/0xeF8d9733580682Db3af1485E1B9265428861b4F5). Every job from 20 on. The poster has the last word, with three days to answer |
+| **PodJobsV3** | `0xeF8d9733580682Db3af1485E1B9265428861b4F5` | [explorer](https://testnet.monadscan.com/address/0xeF8d9733580682Db3af1485E1B9265428861b4F5). Jobs 20 and 21; posted to no more. The poster has the last word |
+| **PodJobsV4** | `0x2dE57BD4d26337Bfc2799C00B39C81B36f9D8E16` | [explorer](https://testnet.monadscan.com/address/0x2dE57BD4d26337Bfc2799C00B39C81B36f9D8E16). Every job from 22 on. The poster has the last word, with three days to answer, and the lead names who is paid |
 | Validator | `0xc8b6E72Eb254bcb9C2A0a63AeF19d78748d10281` | the only address any of them takes a verdict from |
 
-Nineteen jobs have been posted, all on the first two contracts. This is what the chain says of each, read on 9 October, and of job 19 on 12 October:
+Twenty one jobs have been posted: nineteen on the first two contracts, and jobs 20 and 21 on the third. This is what the chain says of the first nineteen, read on 9 October, and of job 19 on 12 October; job 21 has its own paragraph further down:
 
 | Job | What became of it |
 |---|---|

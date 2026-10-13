@@ -141,9 +141,9 @@ export const COPY = {
     ],
     /** a price in dollars, with what it is in the chain's coin: that amount is what is paid */
     priceInDollars: (usd: number) => `$${usd}`,
-    priceInCoins: (amount: string, coin: string) => `about ${amount} ${coin}`,
+    priceInCoins: (amount: string, coin: string) => `${amount} ${coin}`,
     /** where the day's price came from, said beside the choices */
-    rateSays: (from: string, coin: string) => `Prices in dollars, at today's ${coin} price from ${from}. You pay the ${coin} amount shown.`,
+    rateSays: (from: string, coin: string) => `The dollars are today's ${coin} price from ${from}, near enough. What you pay is the ${coin} amount shown, exactly.`,
     /** without a rate the page asks in the coin, as it always did, and says why there are no dollars */
     noRate: (coin: string) => `Today's ${coin} price could not be read, so this asks in ${coin}.`,
     anotherAmount: "Another amount",

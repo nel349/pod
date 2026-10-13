@@ -66,13 +66,51 @@ export function seatsBehind(record: Pick<JobRecord, "approvals" | "tile">): read
 /**
  * The seats behind a delivery that its lead kept from the pay, where a lead names who is paid: they
  * said yes and answer for it, and are paid nothing. None on a contract that pays every seat behind the work.
+ *
+ * A role with one seat, which is every role but the reviewer and every job posted here, is named by
+ * its role alone. Where a role has several, a seat is named by its place in the contract's row for
+ * that role, which the grader wrote down beside its approval.
  */
 export function seatsKeptFromPay(record: Pick<JobRecord, "approvals" | "tile">): readonly Role[] {
   return seatsBehind(record).filter((role) => record.approvals.some((one) => one.role === role && one.isKeptFromPay === true
     && record.tile.pod.some((seat) => seat.role === role && seat.agent.toLowerCase() === one.agent.toLowerCase())));
 }
 
-/** What accepting pays: the share of every seat that is paid for the work, and of no other. */
+/**
+ * What each seat of a role is paid: the role's share, divided where a job has several seats of it,
+ * as the contract divides a reviewer's share between the reviewer seats.
+ */
+function perSeat(price: bigint, role: Role, record: Pick<JobRecord, "tile">): bigint {
+  const seats = record.tile.pod.filter((seat) => seat.role === role).length;
+  return seats > 1 ? shareOf(price, role) / BigInt(seats) : shareOf(price, role);
+}
+
+/**
+ * What accepting pays, seat by seat: every seat that stood behind the work and was not kept from the
+ * pay by its lead. Counted per seat and not per role, so one kept reviewer seat does not take the
+ * pay of another that earned it.
+ */
+export function paidOnAcceptanceOf(record: Pick<JobRecord, "approvals" | "tile">, price: bigint): bigint {
+  return eachPaidSeat(record, price).reduce((paid, pay) => paid + pay, 0n);
+}
+
+/** What a refusal of work whose checks passed leaves the pod: a quarter of each paid seat's pay, as the contract takes it seat by seat. */
+export function keptOnRefusalOf(record: Pick<JobRecord, "approvals" | "tile">, price: bigint, checksPassed: boolean): bigint {
+  if (!checksPassed) return 0n;
+  return eachPaidSeat(record, price).reduce((kept, pay) => kept + (pay * BigInt(REFUSAL_SHARE_PERCENT)) / 100n, 0n);
+}
+
+/** What each seat that is paid for this work is paid, one entry a seat, in the contract's own arithmetic. */
+function eachPaidSeat(record: Pick<JobRecord, "approvals" | "tile">, price: bigint): readonly bigint[] {
+  return record.approvals.flatMap((approval) => {
+    const role = SEATS.find((one) => one === approval.role);
+    if (!role || approval.isKeptFromPay) return [];
+    const holds = record.tile.pod.some((seat) => seat.role === role && seat.agent.toLowerCase() === approval.agent.toLowerCase());
+    return holds ? [perSeat(price, role, record)] : [];
+  });
+}
+
+/** What accepting pays, by role: for a reader that has only the roles, as a job of one seat a role always does. */
 export function paidOnAcceptance(price: bigint, behind: readonly Role[]): bigint {
   return behind.reduce((paid, role) => paid + shareOf(price, role), 0n);
 }
@@ -97,15 +135,15 @@ export function deliveryOf(record: JobRecord): DeliveryView | undefined {
   const behind = seatsBehind(record);
   const keptFromPay = seatsKeptFromPay(record);
   // a yes, and the quarter a refusal leaves, go to the seats behind the work that its lead did not keep from the pay
-  const paid = behind.filter((role) => !keptFromPay.includes(role));
+  const paidOn = paidOnAcceptanceOf(record, record.tile.price);
   return {
     answer, answerBy, checksPassed,
     behind: [...behind],
     ...(keptFromPay.length > 0 ? { keptFromPay: [...keptFromPay] } : {}),
     notBehind: SEATS.filter((role) => !behind.includes(role) && record.tile.pod.some((seat) => seat.role === role)),
-    paidOnAcceptance: paidOnAcceptance(record.tile.price, paid).toString(),
+    paidOnAcceptance: paidOn.toString(),
     // what was kept is the chain's word once there is one; before that, what the contract would keep
-    keptOnRefusal: ended?.keptByThePod ?? keptOnRefusal(record.tile.price, paid, checksPassed).toString(),
+    keptOnRefusal: ended?.keptByThePod ?? keptOnRefusalOf(record, record.tile.price, checksPassed).toString(),
     ...(ended ? { answeredAt: ended.at } : {}),
     ...(ended?.hash ? { hash: ended.hash } : {}),
   };

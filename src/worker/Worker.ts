@@ -624,17 +624,24 @@ export class Worker {
       // each seat behind it with the time the contract recorded: a builder when it put the commit
       // forward, another seat when it approved. One longer ago than was read back says so, rather
       // than a time being made up for it
-      const approvals = approved.map((seat) => {
+      // the contract keeps a row of seats for each role, and this walks the same rows, so a seat's
+      // place in its row is its place on the contract: two seats of one role are told apart by it,
+      // which searching by address could not do when one agent holds both
+      const taken = SEATS.flatMap((role) => seats.filter((seat) => seat.role === role).map((seat, index) => ({ ...seat, index })));
+      const approvals = taken.filter((seat) => seat.approved).map((seat) => {
         const when = seat.role === "builder" && putForward && isAddressEqual(putForward.builder, seat.agent)
           ? putForward
           : found.find((approval) => approval.role === seat.role && isAddressEqual(approval.agent, seat.agent));
-        return { role: seat.role, agent: seat.agent, commit, at: when ? isoOf(when.at) : `before ${isoOf(lookedBackTo)}` };
+        return { role: seat.role, agent: seat.agent, seat: seat.index, commit, at: when ? isoOf(when.at) : `before ${isoOf(lookedBackTo)}` };
       });
+      // what the lead said of each seat, where a lead names who is paid. A chain that will not answer
+      // leaves the page with less to show: it never throws away a grading that is already done
       const withTheLeadsWord = isPutForward && this.options.leadNamesWhoIsPaid
         ? await Promise.all(approvals.map(async (approval) => {
-          // a role's seats are numbered in the order they were taken, which is the order the contract lists them in
-          const index = seats.filter((seat) => seat.role === approval.role).findIndex((seat) => isAddressEqual(seat.agent, approval.agent));
-          const [account, earns] = await Promise.all([readAccount(jobs, onChainId, approval.role, index), readEarns(jobs, onChainId, approval.role, index)]);
+          const [account, earns] = await Promise.all([
+            readAccount(jobs, onChainId, approval.role, approval.seat).catch(() => undefined),
+            readEarns(jobs, onChainId, approval.role, approval.seat).catch(() => true),
+          ]);
           return { ...approval, ...(account ? { account } : {}), ...(earns ? {} : { isKeptFromPay: true }) };
         }))
         : approvals;

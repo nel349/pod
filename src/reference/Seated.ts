@@ -8,6 +8,7 @@ import type { ListedJob } from "../door/index.ts";
 import { branchFor } from "../door/seat.ts";
 import type { Role } from "../job.ts";
 import type { HeldSeat } from "../jobs.ts";
+import { LONGEST_NOTE } from "../note.ts";
 import { bytes32ToCommit } from "../repo.ts";
 import { secondsNow } from "../clock.ts";
 import { hasTriage, isWaiting, questionNote, raisedNote, settledAs } from "../triage.ts";
@@ -119,7 +120,9 @@ export function passwordFor(seated: Seated): Promise<string> {
  * Comes back with the note's fingerprint, which is what a seat binds to its yes where a contract takes one.
  */
 export async function tellThePod(seated: Seated, says: string, about?: string): Promise<Hex> {
-  const note = await seated.identity.note(seated.job, seated.role, plainDashes(says), about);
+  // tidied first and cut after: taking out a dash puts a comma and a space in its place, so a note
+  // cut to the limit and tidied afterwards can come back over it, and the door would refuse it
+  const note = await seated.identity.note(seated.job, seated.role, plainDashes(says).slice(0, LONGEST_NOTE), about);
   await seated.server.writeNote(seated.job, note);
   return seated.identity.accountOf(seated.job, note);
 }

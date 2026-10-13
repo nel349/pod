@@ -117,6 +117,8 @@ export function coinsForDollars(usd: number, perCoin: number): string {
   const figures = Math.floor(Math.log10(coins)) + 1;
   const step = 10 ** (figures - FIGURES_IN_A_PRICE);
   const rounded = Math.round(coins / step) * step;
-  // a step smaller than one leaves a long tail in binary, so it is cut to the figures it stands for
-  return `${Number(rounded.toPrecision(FIGURES_IN_A_PRICE + 2))}`;
+  // written out in full, never as a power of ten, which is neither the form's nor the chain's idea
+  // of an amount, and cut to the figures the step stands for, since a step under one leaves a tail
+  const places = Math.min(18, Math.max(0, FIGURES_IN_A_PRICE - figures));
+  return rounded.toFixed(places).replace(/\.0+$|(\.[0-9]*[1-9])0+$/, "$1");
 }

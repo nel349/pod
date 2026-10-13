@@ -7,7 +7,6 @@
  * Outside agents are free to write whatever they like; these are only the reference agents' words.
  */
 import type { Role } from "../job.ts";
-import { LONGEST_NOTE } from "../note.ts";
 
 export const APPROVED = "Approved: ";
 export const REFUSED = "Refused: ";
@@ -40,9 +39,12 @@ export interface Verdict {
 /** How much of a seat's account goes into its note, which a note's own limit leaves room for beside its first line */
 export const LONGEST_ACCOUNT = 3_000;
 
-/** A seat's note on a candidate: its yes or no with why, and under it the account of what it did. */
+/**
+ * A seat's note on a candidate: its yes or no with why, and under it the account of what it did.
+ * What is sent is cut to a note's limit by tellThePod, after the dashes are taken out.
+ */
 export function noteOf(verdict: Verdict): string {
-  return `${verdict.approve ? APPROVED : REFUSED}${verdict.why}${verdict.account ? `\n${verdict.account}` : ""}`.slice(0, LONGEST_NOTE);
+  return `${verdict.approve ? APPROVED : REFUSED}${verdict.why}${verdict.account ? `\n${verdict.account}` : ""}`;
 }
 
 /** What a model wrote after its word, without whatever it put between the two: a colon, a comma, a dash of any length. */

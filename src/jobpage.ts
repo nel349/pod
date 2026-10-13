@@ -19,6 +19,8 @@ export interface Approval {
   readonly agent: string;
   readonly commit: string;
   readonly at: string;
+  /** its place in its role's row on the contract, from 0: what tells two seats of one role apart */
+  readonly seat?: number;
   /** the fingerprint of the account the seat bound to its yes on the contract, where a contract takes one */
   readonly account?: string;
   /** the lead concluded the review and did not name this seat: it stood behind the work and is kept from the pay */

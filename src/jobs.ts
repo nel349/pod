@@ -8,7 +8,7 @@
  * The role names are the ones the rest of the project uses. The contract's enum order is an
  * implementation detail of Solidity and is converted in exactly one place, below.
  */
-import { parseAbi, type Address, type Hex, type PublicClient, type WalletClient } from "viem";
+import { ContractFunctionExecutionError, parseAbi, type Address, type Hex, type PublicClient, type WalletClient } from "viem";
 import type { Role } from "./job.ts";
 import { SEATS } from "./seal.ts";
 
@@ -153,6 +153,25 @@ export async function readSeatsTaken(at: Omit<Contract, "wallet">, jobId: bigint
  * The widest range of blocks Monad's public node reads events from in one go. Every reading of events
  * here goes in slices this wide, whatever the chain, so what works on a local chain works on Monad.
  */
+/**
+ * Whether a contract has a call at all, asked by making it: it answers, or it refuses because there
+ * is no such call on it. Only the chain's refusal means no; a node that could not be reached, timed
+ * out or answered with an error is not an answer at all, and is thrown on rather than read as a no.
+ *
+ * It is how one contract is told from another, and a server that read a blip as a no would run
+ * against the wrong rules for as long as it was up. Any reason but the chain's own is loud.
+ */
+export async function answersTo(asking: Promise<unknown>): Promise<boolean> {
+  try {
+    await asking;
+    return true;
+  } catch (error) {
+    // viem wraps what the chain said, whether it reverted or answered nothing at all, in this one error
+    if (error instanceof ContractFunctionExecutionError) return false;
+    throw error;
+  }
+}
+
 export const MOST_BLOCKS_A_LOG_READ_COVERS = 100n;
 
 /** How far back the approvals of a commit are looked for: about two hours of Monad's blocks */

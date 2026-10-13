@@ -190,7 +190,8 @@ export class JobList {
         free: isLocked ? [] : [...new Set(seats.filter((seat) => !seat.heldBy).map((seat) => seat.role))]
           // the lead judges the work, so where the contract has it sit down first, its seat goes the
           // moment work is put forward. The contract is the one that refuses it, with LeadComesFirst
-          .filter((role) => !(role === "lead" && this.options.leadComesFirst && onChain.commit !== zeroHash)),
+          // and only on the contract jobs are posted to now: an older one lets a lead sit down late
+          .filter((role) => !(role === "lead" && this.options.leadComesFirst && isAddressEqual(chain.jobs, keeper.chain.jobs) && onChain.commit !== zeroHash)),
       });
     }
     return { version: JOB_LIST_VERSION, guide: ROUTES.guide, market: ROUTES.market, jobs: listed };

@@ -87,7 +87,10 @@ export async function confirmTheContracts(input: {
   if (isAddressEqual(third, jobs) || isAddressEqual(third, second) || (earlier && isAddressEqual(third, earlier))) {
     throw new Error(`${THIRD_JOBS_SETTING} names ${third}, which another setting names too: it is the contract jobs were posted to between the second and the one they are posted to now`);
   }
-  if (!(await writerOf(publicClient, third, THIRD_JOBS_SETTING)) || !(await hasTheLastWord(at(third)))) {
+  if (!(await writerOf(publicClient, third, THIRD_JOBS_SETTING))) {
+    throw new Error(`${THIRD_JOBS_SETTING} names ${third}, which does not prepare jobs: it has to be the contract that replaced ${second}`);
+  }
+  if (!(await hasTheLastWord(at(third)))) {
     throw new Error(`${THIRD_JOBS_SETTING} names ${third}, on which the poster does not have the last word: it has to be the contract that replaced ${second}`);
   }
   if (await doesTheLeadNameWhoIsPaid(at(third))) {

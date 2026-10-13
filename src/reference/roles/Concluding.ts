@@ -17,8 +17,9 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isAddressEqual } from "viem";
+import { isAddressEqual, type Hex } from "viem";
 import { NAMED_BY_THE_LEAD, type NamedByTheLead, type NamedSeat } from "../../jobsV4.ts";
+import { SEATS } from "../../seal.ts";
 import type { HeldSeat } from "../../jobs.ts";
 import type { Note } from "../../note.ts";
 import { shortCommit } from "../../repo.ts";
@@ -53,6 +54,8 @@ const nameOf = (seat: NamedSeat): string => `${seat.role} ${seat.index + 1}`;
 export class Concluding implements SeatWork {
   private readonly verdicts = new Map<string, Verdict>();
   private readonly told = new Set<string>();
+  /** the conclusion written for a candidate, kept so a send that failed is tried again and not written afresh */
+  private readonly concluded = new Map<string, { readonly named: readonly NamedSeat[]; readonly account: Hex; readonly said: string }>();
   private readonly refused = new Set<string>();
   /** candidates this lead has said it is waiting on the other seats for, so it is said once */
   private readonly saidWaiting = new Set<string>();
@@ -94,25 +97,46 @@ export class Concluding implements SeatWork {
     }
     if ((await candidateOf(seated)) !== candidate) return;
 
-    const weighed = await this.weigh(candidate, seats, others.filter((seat) => seat.approved));
+    const written = this.concluded.get(candidate) ?? await this.writeTheConclusion(candidate, verdict, seats, others.filter((seat) => seat.approved));
+    this.concluded.set(candidate, written);
+    // only the sending is tried again: what was found and what was written of it stand
+    await seated.identity.conclude(seated.job, candidate, written.named, written.account);
+    seated.say(`concluded the review of ${shortCommit(candidate)}: ${written.said}`);
+  }
+
+  /**
+   * What the lead finds of each seat, written to the pod as one note: its fingerprint is what the
+   * conclusion binds. Done once for a candidate, however often the sending has to be tried again.
+   */
+  private async writeTheConclusion(
+    candidate: string, verdict: Verdict, seats: readonly HeldSeat[], behind: readonly (HeldSeat & { role: NamedByTheLead })[],
+  ): Promise<{ readonly named: readonly NamedSeat[]; readonly account: Hex; readonly said: string }> {
+    const { seated } = this;
+    const weighed = await this.weigh(candidate, seats, behind);
     const findings = await this.findingsOn(candidate, verdict, weighed);
-    const named = findings.filter((finding) => finding.earned).map((finding) => finding.seat);
     const account = await tellThePod(seated, [
       `${CONCLUDED}${verdict.why}`,
       ...findings.map((finding) => `${nameOf(finding.seat)}: ${finding.earned ? EARNED : KEPT}, ${finding.why}`),
       ...(findings.length === 0 ? ["No other seat stands behind this work, so nobody else is named."] : []),
     ].join("\n"), candidate);
-    await seated.identity.conclude(seated.job, candidate, named, account);
-    seated.say(`concluded the review of ${shortCommit(candidate)}: ${findings.length === 0 ? "no other seat behind it" : findings.map((finding) => `${nameOf(finding.seat)} ${finding.earned ? "earned its pay" : "is kept from the pay"}`).join(", ")}`);
+    return {
+      named: findings.filter((finding) => finding.earned).map((finding) => finding.seat),
+      account,
+      said: findings.length === 0
+        ? "no other seat behind it"
+        : findings.map((finding) => `${nameOf(finding.seat)} ${finding.earned ? "earned its pay" : "is kept from the pay"}`).join(", "),
+    };
   }
 
   /** Each seat behind the work with the account it published, when the fingerprint it bound is one of its notes on this candidate. */
   private async weigh(candidate: string, seats: readonly HeldSeat[], behind: readonly (HeldSeat & { role: NamedByTheLead })[]): Promise<readonly Weighed[]> {
     const { seated } = this;
     const notes = await seated.server.notes(seated.job, seated.identity.address, await passwordFor(seated));
+    // the contract keeps a row of seats for each role: a seat's place in its row is what names it,
+    // and two seats of one role held by one agent are told apart by it where an address could not
+    const places = new Map(SEATS.flatMap((role) => seats.filter((seat) => seat.role === role).map((seat, index) => [seat, index] as const)));
     return Promise.all(behind.map(async (held) => {
-      // a role's seats are numbered in the order they were taken, which is the order the contract lists them in
-      const index = seats.filter((seat) => seat.role === held.role).findIndex((seat) => isAddressEqual(seat.agent, held.agent));
+      const index = places.get(held) ?? 0;
       const bound = await seated.identity.accountBound(seated.job, held.role, index);
       const published = notes.find((note: Note) => note.about === candidate && note.role === held.role && isAddressEqual(note.agent, held.agent)
         && seated.identity.accountOf(seated.job, note).toLowerCase() === bound?.toLowerCase());

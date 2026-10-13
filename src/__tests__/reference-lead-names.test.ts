@@ -4,13 +4,14 @@ import { privateKeyToAccount } from "viem/accounts";
 import type { Model } from "../broker.ts";
 import { netlify } from "../hosting/index.ts";
 import { SERVE_THE_SITE, type Role, type Spec } from "../job.ts";
-import { readJob, readSeats, seatDeposit, seatPay } from "../jobs.ts";
+import { readJob, readSeats, roleNumber, seatDeposit, seatPay } from "../jobs.ts";
 import { accept, readAgentRecord } from "../jobsV3.ts";
-import { accountOf, readAccount, readConcluded, readCutRecord, readEarns } from "../jobsV4.ts";
+import { accountOf, earnedSeats, NAMED_BY_THE_LEAD, podJobsV4Abi, readAccount, readConcluded, readCutRecord, readEarns, seatBit } from "../jobsV4.ts";
 import { noteMessage } from "../messages.ts";
 import { runReferenceAgent, type Finished } from "../reference/index.ts";
 import { IMAGE } from "../sandbox.ts";
 import { SEATS } from "../seal.ts";
+import { DUTIES, STANDARD } from "../standard.ts";
 import { isCodePublic } from "../store.ts";
 import { Worker } from "../worker/index.ts";
 import { ANVIL_KEYS, anvilAvailable } from "./support/anvil.ts";
@@ -83,6 +84,25 @@ async function until(what: string, said: readonly string[], done: () => Promise<
   throw new Error(`never ${what}. What was said:\n${said.join("\n")}`);
 }
 
+describe.skipIf(!available)("the seats a lead names", () => {
+  test("the bit this code sends for a seat is the bit the contract reads it as", async () => {
+    const pod$ = running!;
+    const reading = { address: pod$.jobs, publicClient: pod$.anvil.publicClient };
+    for (const role of NAMED_BY_THE_LEAD) {
+      for (let index = 0; index < 5; index++) {
+        const onChain = await pod$.anvil.publicClient.readContract({
+          address: pod$.jobs, abi: podJobsV4Abi, functionName: "seatBit", args: [roleNumber(role), BigInt(index)],
+        });
+        expect(onChain, `${role} ${index + 1}`).toBe(seatBit(role, index));
+      }
+    }
+    // and the number sent for several seats is those bits together, which is what the contract takes
+    expect(earnedSeats([{ role: "reviewer", index: 0 }, { role: "security", index: 0 }]))
+      .toBe(seatBit("reviewer", 0) | seatBit("security", 0));
+    expect(reading.address).toBe(pod$.jobs);
+  }, 60_000);
+});
+
 describe.skipIf(!available)("a website, where the lead names who is paid", () => {
   test("each seat binds its account, the lead names who earned their pay, and the poster's yes pays exactly those", async () => {
     const pod$ = running!;
@@ -138,7 +158,7 @@ describe.skipIf(!available)("a website, where the lead names who is paid", () =>
       // the lead spoke last: it concluded the review, which is its yes, and nobody's yes came after it
       expect(await readConcluded(reading, pod$.onChainId)).toBe(true);
       expect(said.some((line) => line.startsWith("[lead] concluded the review of "))).toBe(true);
-      expect(said.some((line) => line.startsWith("[reviewer] said what it will look at on this job: "))).toBe(true);
+      expect(said.some((line) => line.startsWith("[reviewer] said what it will look at on this job: ")), said.filter((line) => line.startsWith("[reviewer]")).join("\n")).toBe(true);
       expect((await readSeats(reading, pod$.onChainId)).every((seat) => seat.approved)).toBe(true);
       // what the lead named, as the contract has it: the reviewer and QA earned their pay, security did not
       expect(await readEarns(reading, pod$.onChainId, "reviewer", 0)).toBe(true);
@@ -155,6 +175,11 @@ describe.skipIf(!available)("a website, where the lead names who is paid", () =>
           .map((note) => accountOf(noteMessage({ jobId: JOB, onChainId: String(pod$.onChainId), jobs: pod$.jobs, role, about: note.about, says: note.says, at: note.at })));
         expect(bound).toBeString();
         expect(published).toContain(bound!);
+      }
+      // every seat that thinks with a model was given the standard, word for word from the one place it is written
+      for (const role of ["lead", "reviewer", "security"] as const) {
+        for (const sentence of STANDARD) expect(asked[role]?.some((prompt) => prompt.includes(sentence)), `${role}: ${sentence.slice(0, 40)}`).toBe(true);
+        expect(asked[role]?.some((prompt) => prompt.includes(DUTIES[role]))).toBe(true);
       }
       // the reviewer was shown what the other seats said, and the lead what each seat's account was and what its seat is for
       expect(asked.reviewer?.some((prompt) => prompt.includes("### The qa seat says") && prompt.includes("Started the work in a sealed box"))).toBe(true);
