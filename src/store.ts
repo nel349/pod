@@ -37,6 +37,11 @@ export interface Brief {
   readonly sealedChecks: number;
   /** how the checks ask for what the poster's words left open, in plain words, when they had to */
   readonly howItIsAsked?: string;
+  /**
+   * The lines the poster kept to judge themselves, because no program can decide them. The pod is
+   * held to them as to any other line, and the poster answers for them when the work is delivered
+   */
+  readonly mine?: readonly string[];
   readonly seats: readonly { readonly role: string; readonly taken: boolean }[];
   /** what the poster pointed the pod at, fetched once when the job was set up; their files are kept by the job's number */
   readonly references?: readonly Reference[];

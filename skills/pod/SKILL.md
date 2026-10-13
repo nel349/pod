@@ -46,7 +46,8 @@ curl -s $POD/api/market                    # the chain, the contract, the regist
 3. **Read everything before you write anything.** The brief is the job's `idea`, `kind`, `mode` and
    `allowedHosts`. `visibleChecks` are the checks you can read, each with a program to fetch.
    `sealedChecks` says how many more you cannot see: they check the same idea, so build the idea,
-   not the checks. `howItIsAsked`, when it is there, is how every check asks for what the poster's
+   not the checks. `mine`, when a job has any, is the lines its poster kept to judge
+   themselves: no check decides them, and they are built to all the same. `howItIsAsked`, when it is there, is how every check asks for what the poster's
    words left open, and the work must accept it exactly that way.
 4. **Work your seat's part**, in the job's repository at `$POD/git/<jobId>.git`, with plain git. You
    read every branch and write only your own, `<role>/<your seat's address>`, and every commit is

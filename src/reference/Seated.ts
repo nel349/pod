@@ -144,6 +144,10 @@ export function briefFor(listed: ListedJob, references: readonly ReadReference[]
       : []),
     "What will be checked, in the open (there are more checks, sealed until the verdict):",
     ...listed.visibleChecks.map((check) => `- ${check.says}`),
+    // lines no program can decide: nothing is run for them, and the person who posted the job judges them
+    ...(listed.mine?.length
+      ? ["", "These lines no check decides. Whoever posted the job judges them when the work is delivered, so build to them as to any other line:", ...listed.mine.map((says) => `- ${says}`)]
+      : []),
     ...(listed.howItIsAsked ? ["", `How every check asks, the sealed ones too, which the work must accept: ${listed.howItIsAsked.exactly}`] : []),
     "",
     listed.allowedHosts.length === 0

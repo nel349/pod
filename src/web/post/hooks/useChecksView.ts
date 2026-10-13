@@ -20,9 +20,11 @@ export function useChecksView(input: {
   readonly writing: CheckWritingState;
   readonly request: DraftRequest;
   readonly refusal: string | undefined;
+  /** the lines the poster has kept to judge themselves, which stand in for their checks */
+  readonly mine: readonly string[];
   readonly onWrite: () => void;
 }): ChecksView {
-  const { writing, request, refusal, onWrite } = input;
+  const { writing, request, refusal, mine, onWrite } = input;
   const seconds = useElapsed(writing.startedAt);
   const fresh = isFresh(writing.written, request);
   const checks = writing.written?.checks ?? [];
@@ -31,7 +33,7 @@ export function useChecksView(input: {
     line: writingLine({ stage: writing.stage, seconds, error: writing.error, refusal }),
     checks,
     howItIsAsked: writing.written?.howItIsAsked?.plainly,
-    verdict: writing.written && !isBusy ? verdictOn(checks, fresh) : undefined,
+    verdict: writing.written && !isBusy ? verdictOn(checks, fresh, mine) : undefined,
     isFresh: fresh,
     isBusy,
     hasWritten: writing.written !== undefined,

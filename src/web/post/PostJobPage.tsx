@@ -19,7 +19,7 @@ import {
 } from "./hooks/index.ts";
 import { useWalletPresent } from "../shared/index.ts";
 import {
-  BLANK_FORM, formOfPaidJob, freshSalt, isFresh, PostFormSchema, priceInWei, progressOf, toWriteRequest,
+  BLANK_FORM, formOfPaidJob, freshSalt, isFresh, minedBy, PostFormSchema, priceInWei, progressOf, toWriteRequest,
   type DraftForm, type PostForm, type StepName,
 } from "./state/index.ts";
 
@@ -38,7 +38,9 @@ export function PostJobPage({ market }: { readonly market: MarketConfig }): Reac
   const [salt] = useState(freshSalt);
   const writing = useCheckWriting(draftBack ?? {});
   const writeTheChecks = useWriteTheChecks(writing, request);
-  const checksView = useChecksView({ writing, request, refusal: writeTheChecks.refusal, onWrite: writeTheChecks.write });
+  // the lines this poster has kept to judge themselves: they stand in for the checks that could not be written
+  const mine = minedBy(draft);
+  const checksView = useChecksView({ writing, request, refusal: writeTheChecks.refusal, mine, onWrite: writeTheChecks.write });
   const { sealed, error: sealError } = useSealedJob(draft, writing.written, salt);
   const hasWallet = useWalletPresent();
   const { post, steps, payment, published } = usePostJob(market, kept);
@@ -53,10 +55,10 @@ export function PostJobPage({ market }: { readonly market: MarketConfig }): Reac
     setDraftBack(undefined);
   };
 
-  const areChecksReady = isFresh(writing.written, request) && readyToSeal(writing.written?.checks ?? []);
+  const areChecksReady = isFresh(writing.written, request) && readyToSeal(writing.written?.checks ?? [], mine);
   const progress = progressOf({ form: draft, areChecksReady, isPosted: status.kind === "posted" });
   // the seal flashes once for each set of checks that comes back proven: the set's start is its name
-  const flash = writing.written && readyToSeal(writing.written.checks) ? writing.written.writtenAt : 0;
+  const flash = writing.written && readyToSeal(writing.written.checks, mine) ? writing.written.writtenAt : 0;
   const working: StepName | undefined = writing.stage ? "checks" : status.kind === "posting" ? "pay" : undefined;
 
   return (

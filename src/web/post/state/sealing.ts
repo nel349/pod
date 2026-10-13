@@ -8,7 +8,7 @@ import type { HowItIsAsked, Spec } from "../../../job.ts";
 import { readyToSeal, type Written } from "../../../checkwriting/written.ts";
 import { sealWritten } from "../../../checkwriting/sealWritten.ts";
 import { COPY } from "./copy.ts";
-import { priceInWei, requestKey, type DraftRequest, type PostForm } from "./form.ts";
+import { minedBy, priceInWei, requestKey, type DraftRequest, type PostForm } from "./form.ts";
 
 /** how many random bytes go into a salt: enough that nobody guesses it */
 const SALT_BYTES = 16;
@@ -40,10 +40,11 @@ export const isFresh = (written: WrittenFor | undefined, request: DraftRequest):
  * Checks written for an earlier version of the request are checks for a job they no longer want, so
  * they stop the payment exactly as missing checks would.
  */
-export function whatIsMissing(written: WrittenFor | undefined, request: DraftRequest): string | undefined {
+export function whatIsMissing(written: WrittenFor | undefined, request: DraftRequest, mine: readonly string[] = []): string | undefined {
   if (!written) return COPY.problems.notWritten;
   if (!isFresh(written, request)) return COPY.problems.stale;
-  if (!readyToSeal(written.checks)) return COPY.problems.notProven;
+  // a line the poster kept to judge themselves stands in for its check, and never for all of them
+  if (!readyToSeal(written.checks, mine)) return COPY.problems.notProven;
   return undefined;
 }
 
@@ -51,7 +52,10 @@ export function whatIsMissing(written: WrittenFor | undefined, request: DraftReq
 export async function sealJob(form: PostForm, checks: readonly Written[], salt: string, howItIsAsked?: HowItIsAsked): Promise<SealedJob> {
   const price = priceInWei(form.price);
   if (price === undefined) throw new Error(COPY.problems.price);
-  return sealWritten({ idea: form.idea, kind: form.kind, mode: form.mode, price, checks, ...(howItIsAsked ? { howItIsAsked } : {}), salt });
+  return sealWritten({
+    idea: form.idea, kind: form.kind, mode: form.mode, price, checks,
+    ...(howItIsAsked ? { howItIsAsked } : {}), mine: minedBy(form), salt,
+  });
 }
 
 /** A salt nobody can guess, so a short idea cannot be found by guessing its hash. One per page. */

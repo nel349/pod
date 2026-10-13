@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IMAGE, readableToTheBox } from "../sandbox.ts";
 import {
-  CheckWriting, isChargedFor, isProven, isStillWriting, ProvenChecks, readyToSeal, refusalOf, writeChecks, WritingFailed, WritingSchema, type Written, type WriteRequest,
+  canBeMineToJudge, CheckWriting, isChargedFor, isProven, isStillWriting, mineToJudge, ProvenChecks, readyToSeal, refusalOf, writeChecks, WritingFailed, WritingSchema, type Written, type WriteRequest,
 } from "../checkwriting/index.ts";
 import { digestOf } from "../job.ts";
 import { handle, type Market } from "../server.ts";
@@ -395,4 +395,52 @@ fs.writeFileSync(process.env.POD_SAY, JSON.stringify({ decision: "shipped", why:
     expect(readyToSeal([written({ loads: true, nothing: true }), written({ loads: false, nothing: true })]), "one broken check holds the whole set back").toBe(false);
     expect(checkStandingOf(written({ loads: false, nothing: true }))).toEqual({ isReady: false, why: COPY.checks.notUsable.broken });
   }, 300_000);
+});
+
+/**
+ * A line no program can decide used to stop a whole posting: "It reads well on a phone" was refused
+ * by the writer and the approve button stayed dark, although that is exactly the kind of line its
+ * poster judges at the end anyway. A poster may now keep such a line as theirs to judge.
+ */
+describe("a line the poster keeps to judge themselves", () => {
+  const cannot = (says: string, secret = false): Written => ({ checkable: false, says, secret, why: "no program can decide how a page reads" });
+  /** A sentence that became a check and held in every trial it was given. */
+  const goodCheck = (says: string): Written => ({
+    checkable: true, says, secret: false, asks: "fetches the page", expects: "it says to take a coat",
+    file: "check-1.mjs", source: "process.exit(0);",
+    proof: { loads: true, nothing: true, working: true, nearMiss: true },
+    saw: { nothing: "nothing was built" },
+  });
+  const untold = (says: string): Written => ({ checkable: false, says, secret: true, why: "the builders are never told this", untold: true });
+
+  test("only a line the builders are told, that no program can decide, may be kept", () => {
+    expect(canBeMineToJudge(cannot("It reads well on a phone"))).toBe(true);
+    // a line kept from the builders is not the poster's to judge: nothing checks it and nobody was told it
+    expect(canBeMineToJudge(cannot("It reads well on a phone", true))).toBe(false);
+    expect(canBeMineToJudge(untold("A misspelled city still gets an answer"))).toBe(false);
+  });
+
+  test("a kept line stands in for its check, and the job can be sealed", () => {
+    const written = [goodCheck("It says take a coat when it rains"), cannot("It reads well on a phone")];
+    expect(readyToSeal(written)).toBe(false);
+    expect(readyToSeal(written, ["It reads well on a phone"])).toBe(true);
+    expect(mineToJudge(written, ["It reads well on a phone"])).toEqual(["It reads well on a phone"]);
+  });
+
+  test("a job still needs something a program decides, so a poster cannot judge every line themselves", () => {
+    const written = [cannot("It reads well on a phone"), cannot("The pictures suit the words")];
+    const both = ["It reads well on a phone", "The pictures suit the words"];
+    expect(readyToSeal(written, both)).toBe(false);
+  });
+
+  test("what is kept from the builders, or refused for asking the untold, is never the poster's to keep", () => {
+    const written = [goodCheck("It says take a coat when it rains"), untold("A misspelled city still gets an answer")];
+    expect(readyToSeal(written, ["A misspelled city still gets an answer"])).toBe(false);
+    expect(mineToJudge(written, ["A misspelled city still gets an answer"])).toEqual([]);
+  });
+
+  test("the lines are sealed in the order they were written, so a page and a server seal the same job", () => {
+    const written = [cannot("second"), goodCheck("a check"), cannot("first")];
+    expect(mineToJudge(written, ["first", "second"])).toEqual(["second", "first"]);
+  });
 });

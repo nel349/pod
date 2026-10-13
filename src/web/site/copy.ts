@@ -606,6 +606,12 @@ export const SITE = {
       ? `${total === 1 ? "Its one check" : `All ${total} checks`} passed${hidden > 0 ? `, ${hidden === 1 ? "the one" : "the ones"} hidden from the pod included` : ""}.`
       : `${passed} of ${total} checks passed.`,
     checksRunBy: "Run again on the exact version delivered, by a runner that is not in the pod.",
+    /** the lines their poster kept to judge themselves, shown beside the checks that decide the rest */
+    mine: {
+      title: "Yours to judge",
+      outcome: "no check",
+      says: "No program can decide these, so none was written for them. The pod was told them with the rest and is held to them, and whoever posted the job says whether the work answers them.",
+    },
     hiddenCheck: "hidden from the pod",
     /** before a failed check's own last word, which is the check's and not ours */
     checkSaid: "The check said:",

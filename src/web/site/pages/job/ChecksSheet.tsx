@@ -35,6 +35,21 @@ export function ChecksSheet({ job }: { readonly job: JobView }): ReactElement {
           );
         })}
       </ul>
+      {/* lines no check decides: the pod is held to them, and whoever posted the job answers for them */}
+      {job.mine && job.mine.length > 0 && (
+        <div id="mine-to-judge" className="mine-to-judge">
+          <p className="mine-title">{SITE.job.mine.title}</p>
+          <ul className="checks">
+            {job.mine.map((says) => (
+              <li key={says} className="yours">
+                <span className="outcome">{SITE.job.mine.outcome}</span>
+                <span className="says">{says}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="note">{SITE.job.mine.says}</p>
+        </div>
+      )}
       {isCounted && <p className="note">{SITE.job.checksRunBy}</p>}
       {job.sealedChecks > 0 && <p className="note">{SITE.job.sealedCount(job.sealedChecks)}</p>}
       {canFetch && <p className="note fetch"><a href={job.checksPath}>{SITE.job.fetchChecks}</a>{SITE.job.fetchChecksRest}</p>}

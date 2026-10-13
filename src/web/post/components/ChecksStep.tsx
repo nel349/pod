@@ -1,12 +1,23 @@
 import type { ReactElement } from "react";
+import { useFormContext, useWatch } from "react-hook-form";
 import type { ChecksView } from "../hooks/useChecksView.ts";
-import { COPY } from "../state/index.ts";
+import { COPY, type PostForm } from "../state/index.ts";
 import { Step } from "./Step.tsx";
 import { WrittenCheck } from "./WrittenCheck.tsx";
 
 /** Having the checks written, watching them be tried, and reading what came back. Draws; decides nothing. */
 export function ChecksStep({ view }: { readonly view: ChecksView }): ReactElement {
   const { line, checks, verdict, howItIsAsked } = view;
+  const { control, setValue } = useFormContext<PostForm>();
+  const brief = useWatch({ control, name: "brief" }) ?? [];
+  /** The line of the brief a check was written for, so a press lands on the poster's own words. */
+  const briefLineOf = (says: string): number => brief.findIndex((line) => (line?.says ?? "").trim() === says.trim());
+  const keeping = (says: string): { readonly isMine: boolean; readonly keep: () => void; readonly giveBack: () => void } | undefined => {
+    const at = briefLineOf(says);
+    if (at < 0) return undefined;
+    const set = (mine: boolean): void => setValue(`brief.${at}.mine`, mine, { shouldValidate: true, shouldDirty: true });
+    return { isMine: brief[at]?.mine === true, keep: () => set(true), giveBack: () => set(false) };
+  };
   return (
     <Step name="checks" title={COPY.checks.title} guide={COPY.checks.guide}>
       <div className="write-row">
@@ -22,7 +33,9 @@ export function ChecksStep({ view }: { readonly view: ChecksView }): ReactElemen
       {checks.length > 0 && (
         <ol id="written" className={view.isFresh ? "written" : "written stale"}>
           {/* a sentence appears once in a request, so it names its check for as long as the list is shown */}
-          {checks.map((check) => <WrittenCheck key={`${check.secret ? "exam" : "brief"}:${check.says}`} check={check} />)}
+          {checks.map((check) => (
+            <WrittenCheck key={`${check.secret ? "exam" : "brief"}:${check.says}`} check={check} mine={keeping(check.says)} />
+          ))}
         </ol>
       )}
       {checks.length > 0 && howItIsAsked && (

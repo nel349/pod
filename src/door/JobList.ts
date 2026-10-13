@@ -84,6 +84,12 @@ export const ListedJobSchema = z.object({
   references: z.array(z.object({ name: z.string(), type: z.string(), bytes: z.number(), digest: z.string(), url: z.string() })).optional(),
   /** how many checks are sealed until the verdict. Counted, never shown */
   sealedChecks: z.number().int().nonnegative(),
+  /**
+   * Lines the poster kept to judge themselves, because no program can decide them. Build to them as
+   * to any other line: no check stands for them, and the poster answers for them when the work is
+   * delivered. Absent where every line became a check
+   */
+  mine: z.array(z.string()).optional(),
   seats: z.array(ListedSeatSchema),
   /** the owners already in the pod. One owner to a job, so an owner here has nothing left to take */
   owners: z.array(AddressSchema),
@@ -185,6 +191,7 @@ export class JobList {
           ? { references: record.brief.references.map(({ name, type, bytes, digest }) => ({ name, type, bytes, digest, url: referencePath(jobId, name) })) }
           : {}),
         sealedChecks: spec.checks.length - shown.checks.length,
+        ...(shown.mine?.length ? { mine: [...shown.mine] } : {}),
         seats,
         owners: [...new Set(held.map((seat) => seat.owner))],
         free: isLocked ? [] : [...new Set(seats.filter((seat) => !seat.heldBy).map((seat) => seat.role))]

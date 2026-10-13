@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { firstLine } from "../../../errors.ts";
-import { PostFormSchema, sealJob, toWriteRequest, whatIsMissing, type DraftForm, type SealedJob, type WrittenFor } from "../state/index.ts";
+import { minedBy, PostFormSchema, sealJob, toWriteRequest, whatIsMissing, type DraftForm, type SealedJob, type WrittenFor } from "../state/index.ts";
 import { QUERY_KEYS } from "./queryKeys.ts";
 
 export interface SealedState {
@@ -20,11 +20,13 @@ export interface SealedState {
  */
 export function useSealedJob(draft: DraftForm, written: WrittenFor | undefined, salt: string): SealedState {
   const form = PostFormSchema.safeParse(draft);
-  const readyToSeal = form.success && written !== undefined && !whatIsMissing(written, toWriteRequest(draft))
+  // the lines the poster keeps to judge themselves go into the seal, so they are part of its key too
+  const mine = minedBy(draft);
+  const readyToSeal = form.success && written !== undefined && !whatIsMissing(written, toWriteRequest(draft), mine)
     ? { form: form.data, checks: written.checks, howItIsAsked: written.howItIsAsked }
     : undefined;
   const sealing = useQuery({
-    queryKey: QUERY_KEYS.sealed([draft.idea, draft.kind, draft.mode, draft.price, written?.key, written?.writtenAt, salt]),
+    queryKey: QUERY_KEYS.sealed([draft.idea, draft.kind, draft.mode, draft.price, written?.key, written?.writtenAt, mine.join("|"), salt]),
     queryFn: () => (readyToSeal
       ? sealJob(readyToSeal.form, readyToSeal.checks, salt, readyToSeal.howItIsAsked)
       : Promise.reject(new Error("nothing to seal yet"))),

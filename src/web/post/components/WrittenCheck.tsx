@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import type { Written } from "../../../checkwriting/written.ts";
+import { canBeMineToJudge, type Written } from "../../../checkwriting/written.ts";
 import { COPY, checkStandingOf } from "../state/index.ts";
 
 /**
@@ -7,15 +7,34 @@ import { COPY, checkStandingOf } from "../state/index.ts";
  * a good answer is, what it cannot look at, and whether it can be used. The check's own code is there
  * for whoever wants it, and nobody has to read it.
  */
-export function WrittenCheck({ check }: { readonly check: Written }): ReactElement {
+export function WrittenCheck({ check, mine }: {
+  readonly check: Written;
+  /** a line no program can decide, which its poster may keep to judge themselves: how it stands, and the press that changes it */
+  readonly mine?: { readonly isMine: boolean; readonly keep: () => void; readonly giveBack: () => void };
+}): ReactElement {
   const which = <p className="which">{check.secret ? COPY.checks.exam : COPY.checks.brief}</p>;
   const says = <p className="says">{check.says}</p>;
 
   if (!check.checkable) {
+    // a line the builders are told, that no program can decide, is one its poster may answer for themselves
+    const canBeTheirs = canBeMineToJudge(check) && mine !== undefined;
     return (
-      <li className="written-check cannot">
+      <li className={mine?.isMine ? "written-check cannot mine" : "written-check cannot"}>
         {which}{says}
         <p className="cannot-why">{check.untold ? COPY.checks.untold(check.why) : COPY.checks.cannot(check.why)}</p>
+        {canBeTheirs && (mine.isMine
+          ? (
+            <p className="mine-says">
+              {COPY.checks.mine.kept}
+              <button type="button" className="quiet" onClick={mine.giveBack}>{COPY.checks.mine.giveBack}</button>
+            </p>
+          )
+          : (
+            <p className="mine-says">
+              {COPY.checks.mine.offer}
+              <button type="button" className="quiet" onClick={mine.keep}>{COPY.checks.mine.keep}</button>
+            </p>
+          ))}
       </li>
     );
   }

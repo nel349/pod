@@ -30,9 +30,11 @@ export interface Verdict {
 }
 
 /** What the poster is told about a set of checks once it is back. */
-export function verdictOn(checks: readonly Written[], isFresh: boolean): Verdict {
+export function verdictOn(checks: readonly Written[], isFresh: boolean, mine: readonly string[] = []): Verdict {
   if (!isFresh) return { state: "stale", ...COPY.checks.verdict.stale };
-  const shaky = checks.filter((check) => !isProven(check)).length;
+  // a line its poster kept to judge is not short of anything: it is answered by them rather than by a check
+  const kept = new Set(mine);
+  const shaky = checks.filter((check) => !isProven(check) && !kept.has(check.says)).length;
   return shaky === 0
     ? { state: "ready", ...COPY.checks.verdict.ready(checks.length) }
     : { state: "short", ...COPY.checks.verdict.short(shaky, checks.length) };

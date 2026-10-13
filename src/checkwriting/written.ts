@@ -110,7 +110,31 @@ export function isProven(check: Written): check is TriedCheck {
   return check.checkable && check.proof.loads !== false && check.proof.nothing && check.proof.working !== false && check.proof.nearMiss !== false;
 }
 
-/** Whether every sentence became a check that held in its trial. */
-export function readyToSeal(checks: readonly Written[]): boolean {
-  return checks.length > 0 && checks.every(isProven);
+/**
+ * Whether a sentence is one its poster may keep to judge themselves.
+ *
+ * Only a line no program could decide, only one the builders are told, since a line kept from them
+ * that nobody checks is a trap, and never one refused for asking something they were never told.
+ */
+export function canBeMineToJudge(check: Written): boolean {
+  return !check.checkable && !check.secret && check.untold !== true;
+}
+
+/**
+ * Whether the set is ready to be sealed: every sentence either became a check that held in its trial,
+ * or is one the poster has kept to judge themselves.
+ *
+ * At least one has to be a check. A job whose every line is the poster's own to judge buys nothing
+ * anybody else can repeat, and the grader would have nothing to run.
+ */
+export function readyToSeal(checks: readonly Written[], mine: readonly string[] = []): boolean {
+  if (checks.length === 0 || !checks.some(isProven)) return false;
+  const kept = new Set(mine);
+  return checks.every((check) => isProven(check) || (canBeMineToJudge(check) && kept.has(check.says)));
+}
+
+/** The lines the poster kept to judge, in the order their sentences were written, so page and server agree. */
+export function mineToJudge(checks: readonly Written[], mine: readonly string[] = []): readonly string[] {
+  const kept = new Set(mine);
+  return checks.filter((check) => !isProven(check) && canBeMineToJudge(check) && kept.has(check.says)).map((check) => check.says);
 }

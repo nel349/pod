@@ -160,6 +160,13 @@ export interface Spec {
   readonly allowed: readonly Allowed[];
   /** how the checks ask for what the poster's words left open, when they had to. Absent when nothing was */
   readonly howItIsAsked?: HowItIsAsked;
+  /**
+   * Lines the poster kept to judge themselves, because no program can decide them: how a page reads,
+   * whether a picture suits. The builders are told them with the rest and are held to them, no check
+   * stands for them, and the poster says at the end whether the work answers them. Absent, as on every
+   * job sealed before this, where every line became a check.
+   */
+  readonly mine?: readonly string[];
   /** a number nobody can guess, so the hash cannot be brute forced from a short idea */
   readonly salt: string;
 }

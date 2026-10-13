@@ -193,6 +193,20 @@ describe("one job, opened", () => {
     expect(html).not.toContain("Fetch the checks");
   });
 
+  test("the lines its poster kept to judge are shown beside the checks, and said to be nobody else's to decide", () => {
+    const html = job(running({
+      brief: {
+        asked: "a site that rates my excuses", endsAt: "2026-10-02T12:00:00.000Z", sealedChecks: 1, seats: [],
+        mine: ["It reads well on a phone"],
+      },
+    }));
+    expect(html).toContain(SITE.job.mine.title);
+    expect(html).toContain("It reads well on a phone");
+    expect(html).toContain(SITE.job.mine.says);
+    // a job with none of them says nothing about it at all
+    expect(job(running())).not.toContain(SITE.job.mine.title);
+  });
+
   test("every seat is shown with its share of the price, open or taken, and who approved", () => {
     const html = job(record());
     expect(html).toContain("4 MON");

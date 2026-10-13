@@ -69,6 +69,8 @@ export const JobViewSchema = z.object({
   questions: z.array(QuestionSchema).optional(),
   /** how many checks nobody but the grader may read until the verdict */
   sealedChecks: z.number().int(),
+  /** the lines their poster kept to judge themselves, which no check decides */
+  mine: z.array(z.string()).optional(),
   /** the checks anybody may read now: the visible ones while the job runs, all of them after */
   checks: z.array(CheckSaidSchema),
   checksPath: z.string(),
@@ -159,6 +161,7 @@ export function jobView(record: JobRecord, notes: readonly Note[], chainSays: Ch
     ...(asksItsPoster ? { asksItsPoster: true } : {}),
     ...(questions.length > 0 ? { questions: [...questions] } : {}),
     sealedChecks: isSealed ? record.brief?.sealedChecks ?? record.checksSaid.filter((check) => check.hidden).length : 0,
+    ...(record.brief?.mine?.length ? { mine: [...record.brief.mine] } : {}),
     checks: isSealed ? record.checksSaid.filter((check) => !check.hidden) : [...record.checksSaid],
     checksPath: checksPath(tile.jobId),
     seats: seatsOf(record, chainSays.agentRecords),

@@ -141,6 +141,7 @@ export async function openJob(store: JobStore, job: OpenJob): Promise<JobRecord>
       ...(shown.howItIsAsked ? { howItIsAsked: shown.howItIsAsked.plainly } : {}),
       endsAt: job.endsAt.toISOString(),
       sealedChecks: job.spec.checks.length - shown.checks.length,
+      ...(shown.mine?.length ? { mine: [...shown.mine] } : {}),
       seats: job.seats.map((seat) => ({ role: seat.role, taken: seat.seat !== undefined })),
     },
   };

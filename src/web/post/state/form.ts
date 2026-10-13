@@ -17,8 +17,14 @@ import { COPY } from "./copy.ts";
 /** how many words of the idea a suggested address keeps */
 const WORDS_IN_A_NAME = 6;
 
-/** A line in the brief or the exam, as the form holds it: possibly still empty. */
-const LineSchema = z.object({ says: z.string() });
+/**
+ * A line in the brief or the exam, as the form holds it: possibly still empty.
+ *
+ * `mine` is set on a line the poster keeps to judge themselves, which only happens once the writer
+ * has said no program can decide it. It is theirs, not the writer's: a line they mark stays marked
+ * while they reword it, and means nothing until a writing says that line cannot be checked.
+ */
+const LineSchema = z.object({ says: z.string(), mine: z.boolean().optional() });
 
 export const PostFormSchema = z.object({
   idea: WriteRequestSchema.shape.idea,
@@ -132,4 +138,9 @@ export function isBeyondAFaucet(price: string, faucetGives: number | undefined):
   if (faucetGives === undefined) return false;
   const amount = Number(price);
   return Number.isFinite(amount) && amount > faucetGives;
+}
+
+/** The sentences the poster has kept to judge themselves, from the brief: the exam is never theirs to judge. */
+export function minedBy(form: Pick<PostForm, "brief"> | { readonly brief?: readonly ({ readonly says?: string; readonly mine?: boolean } | undefined)[] }): readonly string[] {
+  return (form.brief ?? []).flatMap((line) => (line?.mine === true && line.says ? [line.says.trim()] : []));
 }

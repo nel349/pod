@@ -119,6 +119,13 @@ export const COPY = {
       told: "You did not say this. The checks need it, so the builders are told it too. If it is not what you meant, change a line and have them written again.",
     },
     showSource: "Show the check's code",
+    /** a line no program can decide, which its poster may keep to judge for themselves */
+    mine: {
+      offer: "No program can decide this one. You can keep it as yours to judge: the builders are told it and held to it, no check stands for it, and you say at the end whether the work answers it. ",
+      keep: "Keep it as mine to judge",
+      kept: "Yours to judge. The builders are told it, no check decides it, and you answer for it when the work is delivered. ",
+      giveBack: "Have it checked instead",
+    },
     /** a short line to shout, and a sentence to read under it */
     verdict: {
       ready: (count: number) => ({ shout: count === 1 ? "The check is ready" : `All ${count} checks are ready`, says: "The pod's work is run against these, and nothing else." }),
@@ -126,7 +133,7 @@ export const COPY = {
         shout: `${shaky} of ${count} cannot be used`,
         says: `Write them again. If ${shaky === 1 ? "that line" : "a line"} still cannot be checked, say it more exactly above.`,
       }),
-      stale: { shout: "Out of date", says: "You have changed what you asked for since these were written. Write the checks again." },
+    stale: { shout: "Out of date", says: "You have changed what you asked for since these were written. Write the checks again." },
     },
   },
 
