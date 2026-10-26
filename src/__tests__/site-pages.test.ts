@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
 import type { Address } from "viem";
 import type { Tile } from "../gallery.ts";
 import { publicRecord, type JobRecord } from "../store.ts";
@@ -801,6 +802,16 @@ describe("a job delivered to a poster who has the last word", () => {
     // and before a result is public, the record a page is drawn from carries none of it
     const sealed = publicRecord({ ...withAnswers, chain: { ...ON_CHAIN } }, NOW);
     expect(JSON.stringify(sealed.checksSaid)).not.toContain("INV-204");
+  });
+
+  test("what the page promises of a check's print is what the check writer is told to print", async () => {
+    const writer = await readFile(new URL("../../agents/checkwriter.js", import.meta.url), "utf8");
+    // the page shows a check's print as what the work answered, so a check has to print the exchange, not a verdict
+    expect(writer).toContain("the address it");
+    expect(writer).toContain("asked and what it sent");
+    expect(writer).toContain("the answer it got back");
+    // and its last line is still its own word for what it saw, which is what a failure is explained by
+    expect(writer).toContain("last of all one short line");
   });
 
   test("a check that failed says why in its own last word, once its result is public and never before", () => {
