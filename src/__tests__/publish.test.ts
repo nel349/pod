@@ -1,4 +1,4 @@
-import { lastSaid, LONGEST_CHECK_SAID } from "../blackbox.ts";
+import { lastSaid, LONGEST_CHECK_ANSWERED, LONGEST_CHECK_SAID, THE_REST_IS_CUT, whatTheWorkAnswered } from "../blackbox.ts";
 import { describe, expect, test } from "bun:test";
 import { privateKeyToAccount } from "viem/accounts";
 import { mkdtemp } from "node:fs/promises";
@@ -109,10 +109,32 @@ describe("what the wall is told about a graded job", () => {
     const ran = (command: string, exitCode: number, output: string) => ({ says: "", command, hidden: false, exitCode, output, seconds: 1 });
     const rounds = [{ ...failing.rounds[0]!, checks: [ran("node loads.mjs", 0, "it loads\n"), ran("node weak.mjs", 1, `starting\n\n  ${"x".repeat(400)}\n`)] }, failing.rounds[1]!];
     const record = recordFor(await job({ report: { ...failing, rounds } }));
-    expect(record.checksSaid[0]).toEqual({ says: "the page answers", hidden: false, exitCode: 0 });
+    expect(record.checksSaid[0]).toEqual({ says: "the page answers", hidden: false, exitCode: 0, answered: "it loads" });
     expect(record.checksSaid[1]?.said).toBe("x".repeat(LONGEST_CHECK_SAID));
     expect(lastSaid("\n \n")).toBeUndefined();
     expect(lastSaid("one\nCard page not found\n\n")).toBe("Card page not found");
+  });
+
+  test("every check keeps what the work answered it, pass or fail, so a delivery that is no website can still be read", async () => {
+    const asked = await report({
+      verdict: "passed",
+      checks: [
+        { says: "it finds the money leaks", command: "node check-1.mjs", exitCode: 0, seconds: 0.4, hidden: false },
+        { says: "it says nothing at all", command: "node check-2.mjs", exitCode: 0, seconds: 0.4, hidden: false },
+      ],
+    });
+    const ran = (command: string, output: string) => ({ says: "", command, hidden: false, exitCode: 0, output, seconds: 1 });
+    const transcript = 'POST /audit [12 entries]\n{"leaks":[{"id":"INV-204","customer":"Harrow","balance":-1850}]}';
+    const rounds = [{ ...asked.rounds[0]!, checks: [ran("node check-1.mjs", `${transcript}\n`), ran("node check-2.mjs", "  \n")] }, asked.rounds[1]!];
+    const record = recordFor(await job({ report: { ...asked, rounds } }));
+    expect(record.checksSaid[0]?.answered).toBe(transcript);
+    // a check that printed nothing has nothing to show, and the page is not given an empty box
+    expect(record.checksSaid[1]?.answered).toBeUndefined();
+    // and a check that printed a great deal is cut, and says where
+    const much = whatTheWorkAnswered("y".repeat(LONGEST_CHECK_ANSWERED + 500));
+    expect(much?.startsWith("y".repeat(LONGEST_CHECK_ANSWERED))).toBe(true);
+    expect(much).toContain(THE_REST_IS_CUT);
+    expect(whatTheWorkAnswered("\n  \n")).toBeUndefined();
   });
 });
 

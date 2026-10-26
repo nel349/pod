@@ -47,9 +47,37 @@ export function noteOf(verdict: Verdict): string {
   return `${verdict.approve ? APPROVED : REFUSED}${verdict.why}${verdict.account ? `\n${verdict.account}` : ""}`;
 }
 
-/** What a model wrote after its word, without whatever it put between the two: a colon, a comma, a dash of any length. */
+/**
+ * The marks a model dresses its answer in, which say nothing: emphasis, a heading, a quoted line. A
+ * seat that wrote `**APPROVE.**` said approve, and its yes is not thrown away over two asterisks.
+ * Quotation marks are not here: a line that quotes the word, rather than saying it, is not a yes.
+ */
+const DRESSING = "*_`#>";
+
+/**
+ * What a model wrote after its word, without whatever it put between the two: a colon, a comma, a
+ * dash of any length, or the emphasis closing the word. Dressing that opens the reason's own first
+ * word is left alone, so `**APPROVE.** \`server.js\` is safe` keeps the backtick it needs.
+ */
 export function afterTheWord(said: string): string {
-  return said.replace(/^[\s:,.\-\u2013\u2014]+/, "").trim();
+  let rest = said;
+  for (;;) {
+    const plain = rest.replace(/^[\s:,.\-\u2013\u2014]+/, "");
+    const closing = new RegExp(`^([${DRESSING}]+)(\\s|$)`).exec(plain);
+    if (!closing?.[1]) return plain.trim();
+    rest = plain.slice(closing[1].length);
+  }
+}
+
+/**
+ * The same line with no dressing around its first word, in front of it or closing it: `__REFUSE__`
+ * is the word refuse, and an underscore is a word character, so closing emphasis has to go as well
+ * or the word is never found.
+ */
+export function undressed(line: string): string {
+  return line
+    .replace(new RegExp(`^[\\s${DRESSING}]+`), "")
+    .replace(new RegExp(`^(approve|refuse)[${DRESSING}]+`, "i"), "$1 ");
 }
 
 /**
@@ -59,7 +87,7 @@ export function afterTheWord(said: string): string {
  */
 export function verdictFrom(answer: string): Verdict {
   const [firstLine, ...rest] = answer.trim().split("\n");
-  const first = firstLine?.trim() ?? "";
+  const first = undressed(firstLine?.trim() ?? "");
   const account = rest.join("\n").trim().slice(0, LONGEST_ACCOUNT);
   const withAccount = (verdict: Verdict): Verdict => (account ? { ...verdict, account } : verdict);
   // whatever the model put between its word and its reason, a colon, a dash of any length, is not the reason

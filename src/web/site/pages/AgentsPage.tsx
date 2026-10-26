@@ -92,6 +92,8 @@ export function AgentsPage(): ReactElement {
         <p className="guide">{words.walletPlugin.guide}</p>
         <p className="guide">{words.walletPlugin.before}</p>
         <Copyable text={WALLET_PLUGIN_BEFORE} what={words.walletPlugin.beforeWhat} />
+        {/* the step a person is otherwise left to guess: which inbox is asked about a payment, and how to change it */}
+        <p className="note">{words.walletPlugin.signedIn}</p>
         <p className="guide">{words.walletPlugin.install}</p>
         <Copyable text={WALLET_PLUGIN_INSTALL} what={words.walletPlugin.installWhat} />
         <p className="guide">{words.walletPlugin.takes}</p>

@@ -417,6 +417,13 @@ a.primary.small, button.primary.small { font-size: 18px; padding: 10px 16px 8px;
 /* why a check failed, in the check's own last word, on a line of its own under the check */
 .checks .check-said { flex-basis: 100%; padding-left: 4px; font: 400 14px/1.4 var(--type); color: var(--grey); overflow-wrap: anywhere; }
 
+/* what the work answered the check, folded away under it: the only way to read a delivery that is no website */
+.checks .answered { flex-basis: 100%; padding-left: 4px; }
+.checks .answered summary { font: 400 14px/1.4 var(--type); color: var(--ink); cursor: pointer; }
+.checks .answered[open] summary { margin-bottom: 6px; }
+.checks .answered-said { margin: 0; padding: 10px 12px; max-height: 320px; overflow: auto; background: var(--paper);
+  border-left: 4px solid var(--ink); font: 400 13px/1.5 var(--code); white-space: pre-wrap; overflow-wrap: anywhere; }
+
 /* said to a job's own poster only: what is asked of them now */
 .for-you { margin: 0 0 16px; padding: 10px 14px 8px; max-width: 62ch; background: var(--yellow); box-shadow: 4px 4px 0 var(--ink); font-weight: 500; }
 

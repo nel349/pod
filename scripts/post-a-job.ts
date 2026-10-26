@@ -56,6 +56,8 @@ const form: PostForm = PostFormSchema.parse({
   brief: [{ says: "When it is raining, it tells me to take a coat" }],
   exam: [{ says: "When it is dry, it tells me I do not need one" }],
   price: values.price, mode: DEFAULT_MODE, name: values.name,
+  // what the page sends when a poster leaves them alone: no address to tell, nothing to work from
+  tell: "", references: "",
 });
 
 const market = MarketConfigSchema.parse(await (await fetch(new URL(ROUTES.market, server))).json());

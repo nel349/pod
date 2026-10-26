@@ -35,8 +35,15 @@ const MOST_SOURCE_SHOWN = 500_000;
  * dozen card pages came first, and the budget was gone before index.html.
  */
 const THE_FRONT_PAGE = "index.html";
-/** A file too big to be worth its room, whatever it holds: shown as a name and a size, like a picture. */
+/**
+ * How much of one file is handed over whole. A longer one is not withheld, which would leave a seat
+ * with nothing to judge and no choice but to refuse: its beginning and its end are shown, the middle
+ * is cut, and the cut is named so the seat can say what it did not read. Job 27 was refused by three
+ * seats over one 66 KB page that no judge was allowed to see.
+ */
 const LONGEST_FILE_SHOWN = 60_000;
+/** How much of a cut file's end is kept, so a judge reads how it finishes and not only how it opens. */
+const END_OF_A_CUT_FILE = 10_000;
 /**
  * Folders nobody wrote by hand, which would spend a judge's budget on what a machine made: the
  * repository's own database, which holds every version of every file, what a package manager
@@ -285,6 +292,17 @@ async function askTheModel(seated: Seated, prompt: readonly string[]): Promise<V
 }
 
 /**
+ * A long file's beginning and its end, with the middle cut and the cut named in the file's own words,
+ * so a judge reads most of it and knows exactly what it has not read.
+ */
+function cutMiddle(text: string, longest: number = LONGEST_FILE_SHOWN, end: number = END_OF_A_CUT_FILE): string {
+  const head = text.slice(0, longest - end);
+  const tail = text.slice(text.length - end);
+  const cut = text.length - head.length - tail.length;
+  return `${head}\n… ${sizeOf(cut)} of the middle of this file is not shown to you, so you have not read it …\n${tail}`;
+}
+
+/**
  * Every file of the work, as the model reads it, and a plain list of the ones it is not shown.
  *
  * Three rules, each learned from a delivery that defeated the version before it:
@@ -295,26 +313,39 @@ async function askTheModel(seated: Seated, prompt: readonly string[]): Promise<V
  *   alphabetical order spends itself on whatever happens to sort early.
  * - what is left out is named, with its size, rather than counted. A seat that cannot see a file
  *   has to be able to say which file, and the poster has to be able to read that and judge it.
+ * - nothing is cut while there is room for all of it. A per-file cap cut 7 KB out of job 27's one
+ *   66 KB page although the whole delivery was a tenth of what a judging call carries, and two seats
+ *   refused over the part they were not shown. The cap applies only where the work does not fit.
+ * - a file too long for the room left is shown in part rather than withheld, because a judge handed
+ *   nothing can only refuse. Both ends are shown and the cut is named, in the heading and in the
+ *   file, so part of a file is never read as the whole of it.
  */
 async function sourcesIn(folder: string): Promise<string> {
   const parts: string[] = [];
   const leftOut: string[] = [];
   let shown = 0;
   const made = await madeByAMachineIn(folder);
+  const written: { readonly name: string; readonly bytes: number; readonly text: string }[] = [];
   for (const path of inReadingOrder(folder, await filesUnder(folder))) {
     const name = relative(folder, path);
     const raw = await readFile(path);
-    const text = raw.toString("utf8");
     if (!isText(raw)) {
       leftOut.push(`${name} (${sizeOf(raw.length)}, not text)`);
       continue;
     }
-    if (text.length > LONGEST_FILE_SHOWN || shown + text.length > MOST_SOURCE_SHOWN) {
-      leftOut.push(`${name} (${sizeOf(raw.length)})`);
+    written.push({ name, bytes: raw.length, text: raw.toString("utf8") });
+  }
+  // a work that fits is handed over whole: the cap is for a work that does not, not for every long file
+  const fitsWhole = written.reduce((all, file) => all + file.text.length, 0) <= MOST_SOURCE_SHOWN;
+  for (const { name, bytes, text } of written) {
+    const piece = !fitsWhole && text.length > LONGEST_FILE_SHOWN ? cutMiddle(text) : text;
+    if (shown + piece.length > MOST_SOURCE_SHOWN) {
+      leftOut.push(`${name} (${sizeOf(bytes)})`);
       continue;
     }
-    shown += text.length;
-    parts.push(`### ${name}`, "```", text, "```");
+    shown += piece.length;
+    // a cut file says so in its own heading, so a seat never reads part of a file as the whole of it
+    parts.push(`### ${name}${piece === text ? "" : ` (${sizeOf(bytes)} in all, shown in part)`}`, "```", piece, "```");
   }
   if (leftOut.length > 0) {
     parts.push(`### Not shown to you, so you have not read them: ${leftOut.join(", ")}`);

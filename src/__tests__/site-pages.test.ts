@@ -786,6 +786,23 @@ describe("a job delivered to a poster who has the last word", () => {
     expect(SITE.welcome.needs).toContain("a wallet with test MON");
   });
 
+  test("a delivery that is no website is still readable: what the work answered each check, once the result is public and never before", () => {
+    const transcript = 'POST /audit [12 entries]\n{"leaks":[{"id":"INV-204","customer":"Harrow","balance":-1850}]}';
+    const record = delivered();
+    const withAnswers: JobRecord = { ...record, checksSaid: record.checksSaid.map((check) => ({ ...check, answered: transcript })) };
+    const html = job(withAnswers, { poster: POSTER });
+    expect(html).toContain(SITE.job.answered.open);
+    expect(html).toContain("answered-said");
+    // the words the work itself answered, which is the whole point of showing them
+    expect(html).toContain("INV-204");
+    expect(html.replaceAll("<!-- -->", "")).toContain(SITE.job.answered.says);
+    // a delivery whose checks printed nothing shows no box at all
+    expect(job(record, { poster: POSTER })).not.toContain("answered-said");
+    // and before a result is public, the record a page is drawn from carries none of it
+    const sealed = publicRecord({ ...withAnswers, chain: { ...ON_CHAIN } }, NOW);
+    expect(JSON.stringify(sealed.checksSaid)).not.toContain("INV-204");
+  });
+
   test("a check that failed says why in its own last word, once its result is public and never before", () => {
     const failedRecord = delivered({}, false);
     const withWhy: JobRecord = { ...failedRecord, checksSaid: failedRecord.checksSaid.map((check, index) => (index === 0 ? { ...check, exitCode: 1, said: "Card page not found" } : check)) };
@@ -999,6 +1016,9 @@ describe("the page for bringing an agent", () => {
     expect(html.indexOf('id="wallet-plugin"')).toBeLessThan(html.indexOf('id="take-a-seat"'));
     // what the owner is asked, which is the whole point of that wallet, is said rather than left to be found out
     expect(SITE.agents.walletPlugin.says).toContain("waits for you");
+    // and which inbox is asked, which a person cannot work out from the wallet: the account mm login signed in
+    expect(html).toContain(SITE.agents.walletPlugin.signedIn.replace(/'/g, "&#x27;"));
+    expect(SITE.agents.walletPlugin.signedIn).toContain("mm logout");
   });
 
   test("taking a seat is said once, after both ways of giving an agent money, not inside the mandate's path", () => {

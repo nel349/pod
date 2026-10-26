@@ -40,7 +40,7 @@ export const TitleViewSchema = z.object({
 });
 export type TitleView = z.infer<typeof TitleViewSchema>;
 
-const CheckSaidSchema = z.object({ says: z.string(), hidden: z.boolean(), exitCode: z.number().int().optional(), said: z.string().optional() });
+const CheckSaidSchema = z.object({ says: z.string(), hidden: z.boolean(), exitCode: z.number().int().optional(), said: z.string().optional(), answered: z.string().optional() });
 
 /** One job, opened: everything its page shows. */
 export const JobViewSchema = z.object({

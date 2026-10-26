@@ -71,6 +71,26 @@ export interface CheckOutcome {
 /** The longest a check's own last word is kept: the line that explains a failure, and no more. */
 export const LONGEST_CHECK_SAID = 200;
 
+/**
+ * The longest of a check's printed words kept beside the result, so a poster who was sold a service
+ * rather than a page can read what the delivery really answered instead of taking a tick on trust.
+ * Enough for a request and the answer to it; a check that prints more is cut, and says so.
+ */
+export const LONGEST_CHECK_ANSWERED = 2_000;
+
+/** Where a cut transcript says it was cut, in the words a reader needs rather than a count of bytes. */
+export const THE_REST_IS_CUT = "… cut here: the rest is in the check's own run, which anybody can repeat";
+
+/**
+ * What a check printed while it ran, kept for a reader: its first words, which are the request it
+ * made and the answer it got, and nothing of a check that printed nothing.
+ */
+export function whatTheWorkAnswered(output: string, longest: number = LONGEST_CHECK_ANSWERED): string | undefined {
+  const said = output.trim();
+  if (!said) return undefined;
+  return said.length <= longest ? said : `${said.slice(0, longest).trimEnd()}\n${THE_REST_IS_CUT}`;
+}
+
 /** The last line a check printed, cut to a length: its own word for what it found, if it said anything. */
 export function lastSaid(output: string): string | undefined {
   const last = output.trim().split("\n").map((line) => line.trim()).filter(Boolean).pop();

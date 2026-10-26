@@ -20,6 +20,13 @@ describe("a model's verdict", () => {
     expect(verdictFrom("Approve — it answers the question")).toEqual({ approve: true, why: "it answers the question" });
     expect(verdictFrom("REFUSE - it never says take a coat").why).toBe("it never says take a coat");
     expect(verdictFrom("REFUSE")).toEqual({ approve: false, why: "it does not do what was asked" });
+    // a model that dresses its word up has still said it: emphasis, a heading or a quoted line is not a refusal
+    expect(verdictFrom("**APPROVE.** it opens no connection out")).toEqual({ approve: true, why: "it opens no connection out" });
+    expect(verdictFrom("__REFUSE__ it never answers /audit").why).toBe("it never answers /audit");
+    expect(verdictFrom("> APPROVE it answers exactly as asked").approve).toBe(true);
+    expect(verdictFrom("`APPROVE`")).toEqual({ approve: true, why: "it does what was asked" });
+    // the emphasis closing the word goes; the one opening the reason stays, because it is the reason
+    expect(verdictFrom("**APPROVE.** `server.js` opens no connection out").why).toBe("`server.js` opens no connection out");
   });
 
   test("what follows the first line is the seat's account, kept with its verdict and written under it in its note", () => {
@@ -36,6 +43,8 @@ describe("a model's verdict", () => {
   test("anything but a clear yes is a refusal", () => {
     expect(verdictFrom("It looks fine to me").approve).toBe(false);
     expect(verdictFrom("Approved, mostly").approve).toBe(false);
+    // the word quoted, rather than said, is still not a yes
+    expect(verdictFrom('"APPROVE" is what I would write if it worked').approve).toBe(false);
     expect(verdictFrom("").approve).toBe(false);
   });
 });
@@ -183,11 +192,41 @@ describe("the files a judging seat reads", () => {
     for (let at = 0; at < 24; at++) expect(shown, `card ${at}`).toContain(`<p>card ${at}</p>`);
   });
 
-  test("what is left out is named with its size, so a seat can say what it did not read", async () => {
-    const shown = await aDelivery({ "site/index.html": "<p>hello</p>", "site/huge.js": "x".repeat(80_000) });
+  test("one long page is handed over whole while there is room for it: nothing is cut to meet a cap", async () => {
+    const page = `THE-TOP-OF-THE-PAGE${"x".repeat(80_000)}THE-MIDDLE-OF-THE-PAGE${"x".repeat(10_000)}THE-BOTTOM-OF-THE-PAGE`;
+    const shown = await aDelivery({ "site/index.html": "<p>hello</p>", "site/report.html": page });
+    // job 27's two refusals were over 7 KB cut out of a delivery that was a tenth of what one call carries
+    expect(shown).toContain("THE-TOP-OF-THE-PAGE");
+    expect(shown).toContain("THE-MIDDLE-OF-THE-PAGE");
+    expect(shown).toContain("THE-BOTTOM-OF-THE-PAGE");
+    expect(shown).not.toContain("shown in part");
+    expect(shown).not.toContain("Not shown to you, so you have not read them");
+  });
+
+  test("where the work does not fit, a long file is shown in part, beginning and end, with the cut named in it", async () => {
+    const files: Record<string, string> = { "site/index.html": "<p>hello</p>" };
+    // more written work than one judging call carries, so the room has to be shared out
+    for (let at = 0; at < 8; at++) files[`site/part-${at}.js`] = `// part ${at}\n${"y".repeat(50_000)}`;
+    files["site/report.html"] = `THE-TOP-OF-THE-PAGE${"x".repeat(120_000)}THE-BOTTOM-OF-THE-PAGE`;
+    const shown = await aDelivery(files);
+    // both ends of it reach the judge, which is what a refusal for "I was not shown it" used to cost
+    expect(shown).toContain("THE-TOP-OF-THE-PAGE");
+    expect(shown).toContain("THE-BOTTOM-OF-THE-PAGE");
+    // and it is never read as the whole file: the heading says so, and so does the cut itself
+    expect(shown).toContain(`site/report.html (${Math.round((19 + 120_000 + 22) / 1024)} KB in all, shown in part)`);
+    expect(shown).toContain("of the middle of this file is not shown to you, so you have not read it");
+  });
+
+  test("when the room for the work is spent, a file is left out by name and size, so a seat can say what it did not read", async () => {
+    const files: Record<string, string> = { "site/index.html": "<p>hello</p>" };
+    // nine files of the longest a file is handed over whole: more than the room for one judging call
+    for (let at = 0; at < 9; at++) files[`site/part-${at}.js`] = `// part ${at}\n${"y".repeat(59_000)}`;
+    const shown = await aDelivery(files);
     expect(shown).toContain("Not shown to you, so you have not read them");
-    expect(shown).toContain("site/huge.js (78 KB)");
-    expect(shown).not.toContain("xxxxxxxxxx".repeat(100));
+    expect(shown).toContain(`site/part-8.js (${Math.round(("// part 8\n" + "y".repeat(59_000)).length / 1024)} KB)`);
+    // the ones that did fit are there whole, the front page first among them
+    expect(shown).toContain("<p>hello</p>");
+    expect(shown).toContain("// part 0");
   });
 
   test("what a machine made is named, not read: a compiler's output never crowds out the work", async () => {

@@ -8,7 +8,7 @@
  * Every field here is copied, never computed from a guess: the verdict is the receipt's verdict, the
  * commit is the receipt's commit, the time is the time the rounds actually took. If the pod has no
  */
-import { lastSaid } from "./blackbox.ts";
+import { lastSaid, whatTheWorkAnswered } from "./blackbox.ts";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Address, Hex } from "viem";
@@ -70,9 +70,12 @@ export function recordFor(job: PublishJob): JobRecord {
     seal: job.seal,
     tile: tileFor(job),
     checksSaid: receipt.checks.map((check) => {
+      const output = job.report.rounds[0]?.checks.find((run) => run.command === check.command)?.output ?? "";
       // why a check failed, in the check's own last word, from the first run: said to whoever reads the result
-      const said = check.exitCode === 0 ? undefined : lastSaid(job.report.rounds[0]?.checks.find((run) => run.command === check.command)?.output ?? "");
-      return { says: check.says, hidden: check.hidden, exitCode: check.exitCode, ...(said ? { said } : {}) };
+      const said = check.exitCode === 0 ? undefined : lastSaid(output);
+      // and what the work answered it, pass or fail, which for a service is the only way to read the delivery
+      const answered = whatTheWorkAnswered(output);
+      return { says: check.says, hidden: check.hidden, exitCode: check.exitCode, ...(said ? { said } : {}), ...(answered ? { answered } : {}) };
     }),
     approvals: job.approvals,
     signed: job.report.signed,

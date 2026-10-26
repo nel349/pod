@@ -56,6 +56,12 @@ export interface CheckSaid {
   readonly exitCode?: number;
   /** the last line a check that failed printed, which is its own word for why: kept beside the receipt, not in it */
   readonly said?: string;
+  /**
+   * What the check printed as it ran, cut to a length: for a service, the request it sent and the
+   * answer it got back. Kept beside the receipt rather than in it, and published with the verdict,
+   * so a delivery that is no website can still be read before it is accepted or refused.
+   */
+  readonly answered?: string;
 }
 
 /**

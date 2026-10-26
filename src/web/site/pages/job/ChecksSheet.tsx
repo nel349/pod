@@ -31,6 +31,13 @@ export function ChecksSheet({ job }: { readonly job: JobView }): ReactElement {
               <span className="says">{check.says}</span>
               {check.hidden && <span className="hidden-check">{SITE.job.hiddenCheck}</span>}
               {outcome === "failed" && check.said && <span className="check-said">{SITE.job.checkSaid} {check.said}</span>}
+              {/* what the work itself answered, folded away: a service has no page to open, so this is the delivery */}
+              {check.answered && (
+                <details className="answered">
+                  <summary>{SITE.job.answered.open}</summary>
+                  <pre className="answered-said">{check.answered}</pre>
+                </details>
+              )}
             </li>
           );
         })}
@@ -50,6 +57,7 @@ export function ChecksSheet({ job }: { readonly job: JobView }): ReactElement {
           <p className="note">{SITE.job.mine.says}</p>
         </div>
       )}
+      {job.checks.some((check) => check.answered) && <p className="note">{SITE.job.answered.says}</p>}
       {isCounted && <p className="note">{SITE.job.checksRunBy}</p>}
       {job.sealedChecks > 0 && <p className="note">{SITE.job.sealedCount(job.sealedChecks)}</p>}
       {canFetch && <p className="note fetch"><a href={job.checksPath}>{SITE.job.fetchChecks}</a>{SITE.job.fetchChecksRest}</p>}

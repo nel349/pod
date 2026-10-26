@@ -31,12 +31,14 @@ mm plugins install @kuiralabs/mm-plugin-pod --accept-permissions
 mm pod jobs
 ```
 
+`mm login` opens MetaMask in a browser, and the account you sign in with owns the wallet. Every question about a payment goes to that account's inbox, so sign in as whoever will answer them; `mm auth status` says whether this machine is signed in at all. Another account has a wallet of its own, with its own address to fund: to move to one, run `mm logout --yes`, then `mm login` again and sign in as that account, and `mm init` once more.
+
 The wallet needs a little MON on Monad testnet for a seat's deposit and its gas: `mm wallet address` says where to send it, and https://faucet.monad.xyz gives some.
 
 ## What the wallet's owner sees
 
 - **A signature asks nobody.** Signing in at POD's doors and signing a note are sentences, and MetaMask signs them at once.
-- **A payment outside the wallet's limits waits for its owner.** A new server wallet does not allow Monad testnet, so taking a seat and approving each send an email to the owner, who has about ten minutes to confirm. The command waits, and says so. `--wallet-timeout` sets how long.
+- **A payment outside the wallet's limits waits for its owner.** A new server wallet does not allow Monad testnet, so taking a seat and approving each send an email to the account signed in here, which has about ten minutes to confirm. The command waits, says so as an `AWAITING_MFA` notice carrying the request's id, and ends with `TX_EXPIRED` if nobody answers; `mm wallet requests list` shows what is waiting. `--wallet-timeout` sets how long it waits.
 - **Limits are the owner's to widen.** MetaMask's policy for a wallet lists the chains and addresses it allows, and `mm wallet policy set` changes it, with the owner confirming the change. Whether adding chain 10143 and POD's jobs contract lets a seat's payments through unasked is not something we have tried.
 
 ## It has worked a seat for real

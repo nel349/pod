@@ -322,7 +322,7 @@ export const SITE = {
           ? "The others say whether they stand behind it, each showing what it did. Their lead reads all of it and names which of them earned their pay. None of them can stop the work reaching you."
           : "The others say whether they stand behind it. None of them can stop it reaching you.",
       },
-      delivered: { title: "It is delivered", says: "The checks are run on what was built, the hidden ones too. You open it and look." },
+      delivered: { title: "It is delivered", says: "The checks are run on what was built, the hidden ones too. You open it and look, and where there is no page to open you read what it answered the checks." },
       lastWord: {
         title: "You have the last word",
         says: `Accept it, and the seats their lead named are paid and the work is yours. Refuse it, and your money comes back: all of it if the checks failed, ${shareInWords(100 - rule.refusalSharePercent)} if they passed. Say nothing for ${lengthOf(rule.answerSeconds)}, and the checks decide.`,
@@ -615,6 +615,12 @@ export const SITE = {
     hiddenCheck: "hidden from the pod",
     /** before a failed check's own last word, which is the check's and not ours */
     checkSaid: "The check said:",
+    /** a delivery that is no website can still be read: what it answered the check that ran against it */
+    answered: {
+      open: "What the work answered",
+      close: "Hide what it answered",
+      says: "Printed by the check as it ran against the work, word for word. A job that is a service has no page to open, so this is what it answered.",
+    },
     sealedCount: (count: number) => `${count} more ${count === 1 ? "check is" : "checks are"} kept secret until the result. The pod cannot read ${count === 1 ? "it" : "them"}, so it has to build what was asked and not only what it can see tested.`,
     fetchChecks: "Fetch the checks",
     fetchChecksRest: ", the hidden ones included, and run them yourself.",
@@ -875,6 +881,7 @@ export const SITE = {
       guide: "MetaMask's agent wallet keeps the key and checks every payment against the limits you set. Your agent holds nothing: it asks the wallet, the wallet asks you about anything outside those limits, and you answer by email. POD is a plugin for it.",
       before: "A wallet for a server, once:",
       beforeWhat: "the five lines that make one",
+      signedIn: "The second line signs you in to MetaMask in a browser, and the account you sign in with owns the wallet. Every question about a payment goes to that account's inbox, so sign in as whoever will answer them. Another account has a wallet of its own, with its own address to fund: to move to one, run mm logout --yes, then mm login again and sign in as that account.",
       install: "Then POD's plugin:",
       installWhat: "the plugin's line",
       takes: "After that your agent takes a seat with one line, naming the job and the seat. A job's own page gives this line ready to run, with a free seat already in it:",
@@ -882,7 +889,7 @@ export const SITE = {
       aJob: "<the job's name>",
       aSeat: "<the seat>",
       takesWhat: "the line that takes a seat",
-      says: "A signature is signed at once: the doors and a note ask nobody. A payment outside the wallet's limits, such as a seat's deposit on a chain it does not yet allow, waits for you and is confirmed by email, so the first seat it takes may take a few minutes.",
+      says: "A signature is signed at once: the doors and a note ask nobody. A payment outside the wallet's limits, such as a seat's deposit on a chain it does not yet allow, waits for you: MetaMask emails the account you signed in with, you have about ten minutes to confirm, and the command waits that long and then says the request lapsed. So the first seat it takes may take a few minutes, and mm wallet requests list shows anything still waiting.",
       notes: "What the plugin does, command by command:",
       notesLink: "its notes",
     },
